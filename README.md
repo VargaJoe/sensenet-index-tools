@@ -8,48 +8,51 @@ This project is maintained at: https://github.com/VargaJoe/sensenet-index-tools
 
 ## Requirements
 
-- .NET 7.0 or higher
+- .NET 8.0 or higher
 - Compatible with SenseNet Lucene.NET indexes
 
 ## Usage
 
 ```bash
 # Get the current LastActivityId value
-dotnet run -- get --path "<path-to-index>"
+dotnet run -- lastactivityid-get --path "<path-to-index>"
 
 # Set a new LastActivityId value
-dotnet run -- set --path "<path-to-index>" --id <new-value>
+dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value>
 
 # Initialize LastActivityId in a non-SenseNet index
-dotnet run -- init --path "<path-to-index>" --id <initial-value>
+dotnet run -- lastactivityid-init --path "<path-to-index>" --id <initial-value>
+
+# Set a new LastActivityId value with a custom backup location
+dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value> --backup-path "D:\Backups\LuceneIndices"
 ```
 
 ## Commands
 
-The tool provides three main commands:
+The tool provides three main commands for managing LastActivityId:
 
-### get
+### lastactivityid-get
 
 Retrieves the current LastActivityId from a Lucene index.
 
 ```bash
-dotnet run -- get --path "<path-to-index>"
+dotnet run -- lastactivityid-get --path "<path-to-index>"
 ```
 
-### set
+### lastactivityid-set
 
 Sets a new LastActivityId value in an existing Lucene index. By default, this creates a backup of the index before making changes.
 
 ```bash
-dotnet run -- set --path "<path-to-index>" --id <new-value> [--backup false]
+dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value> [--backup false] [--backup-path "<custom-backup-location>"]
 ```
 
-### init
+### lastactivityid-init
 
 Initializes a LastActivityId in a Lucene index that doesn't have one yet. This is useful for integrating non-SenseNet indexes with SenseNet's activity tracking.
 
 ```bash
-dotnet run -- init --path "<path-to-index>" --id <initial-value> [--backup false]
+dotnet run -- lastactivityid-init --path "<path-to-index>" --id <initial-value> [--backup false] [--backup-path "<custom-backup-location>"]
 ```
 
 ## Options
@@ -57,6 +60,7 @@ dotnet run -- init --path "<path-to-index>" --id <initial-value> [--backup false
 - `--path`: (Required) Path to the Lucene index directory
 - `--id`: (Required for set/init) The LastActivityId value to set
 - `--backup`: (Optional) Create a backup of the index before making changes (default: true)
+- `--backup-path`: (Optional) Custom path for storing backups. If not specified, backups will be stored in an 'IndexBackups' folder at the same level as the index parent folder
 
 ## Building the Project
 
@@ -67,7 +71,7 @@ dotnet build
 ## Running the Application
 
 ```bash
-dotnet run -- get --path "<path-to-index>"
+dotnet run -- lastactivityid-get --path "<path-to-index>"
 ```
 
 ## Creating a Release
@@ -76,7 +80,7 @@ dotnet run -- get --path "<path-to-index>"
 dotnet publish -c Release
 ```
 
-The output will be in the `bin/Release/net7.0/publish` directory.
+The output will be in the `bin/Release/net8.0/publish` directory.
 
 ## Repository
 
