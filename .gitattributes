@@ -1,0 +1,36 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# C# files
+*.cs text diff=csharp
+
+# Solutions and projects
+*.sln text eol=crlf
+*.csproj text eol=crlf
+*.vbproj text eol=crlf
+*.fsproj text eol=crlf
+*.dbproj text eol=crlf
+
+# XML config files
+*.props text eol=crlf
+*.targets text eol=crlf
+*.config text eol=crlf
+*.nuspec text eol=crlf
+
+# Exclude files from exporting
+.gitattributes export-ignore
+.gitignore export-ignore
+
+# Binary files - don't diff, don't fix line endings
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.7z binary
+*.ttf binary
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.dll binary
+*.exe binary
