@@ -3,16 +3,16 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-    <RootNamespace>SenseNet.LastActivityIdManager</RootNamespace>
+    <RootNamespace>SenseNet.IndexMaintenanceSuite</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyName>sn-lastactivityid-manager</AssemblyName>
-    <Title>LastActivityId Manager for SenseNet</Title>
+    <AssemblyName>sn-index-maintenance-suite</AssemblyName>
+    <Title>SenseNet Index Maintenance Suite</Title>
     <Authors>vargajoe</Authors>
-    <Description>A command-line tool for managing the LastActivityId value in SenseNet Lucene.NET indexes</Description>
-    <PackageProjectUrl>https://github.com/vargajoe/sn-lastactivityid-manager</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/vargajoe/sn-lastactivityid-manager</RepositoryUrl>
-    <PackageTags>sensenet;lucene;index;search</PackageTags>
+    <Description>A comprehensive toolkit for managing and maintaining SenseNet Lucene.NET indexes</Description>
+    <PackageProjectUrl>https://github.com/vargajoe/sensenet-index-tools</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/vargajoe/sensenet-index-tools</RepositoryUrl>
+    <PackageTags>sensenet;lucene;index;search;maintenance</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

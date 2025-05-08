@@ -24,10 +24,10 @@ var backupOption = new Option<bool>(
     description: "Create a backup of the index before making changes",
     getDefaultValue: () => true);
 
-var rootCommand = new RootCommand("Tool for managing LastActivityId in SenseNet Lucene indices");
-var getCommand = new Command("get", "Get current LastActivityId");
-var setCommand = new Command("set", "Set LastActivityId");
-var initCommand = new Command("init", "Initialize LastActivityId in a non-SenseNet Lucene index");
+var rootCommand = new RootCommand("SenseNet Index Maintenance Suite - Tools for managing SenseNet Lucene indices");
+var getCommand = new Command("lastactivityid-get", "Get current LastActivityId from index");
+var setCommand = new Command("lastactivityid-set", "Set LastActivityId in index");
+var initCommand = new Command("lastactivityid-init", "Initialize LastActivityId in a non-SenseNet Lucene index");
 
 getCommand.AddOption(pathOption);
 setCommand.AddOption(pathOption);
