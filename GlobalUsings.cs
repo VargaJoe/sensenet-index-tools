@@ -1,0 +1,11 @@
+global using System;
+global using System.Collections.Generic;
+global using System.CommandLine;
+global using System.Threading.Tasks;
+global using Lucene.Net.Store;
+global using Lucene.Net.Index;
+global using Lucene.Net.Analysis.Standard;
+global using System.Collections;
+global using SenseNet.Search;
+global using SenseNet.Search.Indexing;
+global using SenseNet.Search.Lucene29;

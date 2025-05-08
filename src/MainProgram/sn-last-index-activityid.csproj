@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>SenseNet.LastActivityIdManager</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>sn-lastactivityid-manager</AssemblyName>
+    <Title>LastActivityId Manager for SenseNet</Title>
+    <Authors>vargajoe</Authors>
+    <Description>A command-line tool for managing the LastActivityId value in SenseNet Lucene.NET indexes</Description>
+    <PackageProjectUrl>https://github.com/vargajoe/sn-lastactivityid-manager</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/vargajoe/sn-lastactivityid-manager</RepositoryUrl>
+    <PackageTags>sensenet;lucene;index;search</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+    <PackageReference Include="SenseNet.Search.Lucene29" Version="7.5.1" />
+    <PackageReference Include="SenseNet.Search.Lucene29.Local" Version="7.5.1" />
+    <PackageReference Include="SenseNet.ContentRepository" Version="7.8.1" />
+    <PackageReference Include="SenseNet.Search.Lucene29.Common" Version="7.5.1" />
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+  </ItemGroup>
+
+</Project>

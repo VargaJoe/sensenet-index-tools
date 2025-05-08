@@ -8,7 +8,7 @@ This project is maintained at: https://github.com/VargaJoe/sensenet-index-tools
 
 ## Requirements
 
-- .NET 7.0 or higher
+- .NET 8.0 or higher
 - Compatible with SenseNet Lucene.NET indexes
 
 ## Usage
@@ -76,7 +76,7 @@ dotnet run -- get --path "<path-to-index>"
 dotnet publish -c Release
 ```
 
-The output will be in the `bin/Release/net7.0/publish` directory.
+The output will be in the `bin/Release/net8.0/publish` directory.
 
 ## Repository
 
