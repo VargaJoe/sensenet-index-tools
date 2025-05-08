@@ -23,6 +23,10 @@ var backupOption = new Option<bool>(
     name: "--backup",
     description: "Create a backup of the index before making changes",
     getDefaultValue: () => true);
+    
+var backupPathOption = new Option<string?>(
+    name: "--backup-path",
+    description: "Custom path for storing backups. If not specified, backups will be stored in an 'IndexBackups' folder at the same level as the index parent folder");
 
 var rootCommand = new RootCommand("SenseNet Index Maintenance Suite - Tools for managing SenseNet Lucene indices");
 var getCommand = new Command("lastactivityid-get", "Get current LastActivityId from index");
@@ -33,9 +37,11 @@ getCommand.AddOption(pathOption);
 setCommand.AddOption(pathOption);
 setCommand.AddOption(idOption);
 setCommand.AddOption(backupOption);
+setCommand.AddOption(backupPathOption);
 initCommand.AddOption(pathOption);
 initCommand.AddOption(idOption);
 initCommand.AddOption(backupOption);
+initCommand.AddOption(backupPathOption);
 
 rootCommand.AddCommand(getCommand);
 rootCommand.AddCommand(setCommand);
@@ -121,7 +127,7 @@ getCommand.SetHandler(async (string path) =>
     }
 }, pathOption);
 
-setCommand.SetHandler(async (string path, long id, bool backup) =>
+setCommand.SetHandler(async (string path, long id, bool backup, string? backupPath) =>
 {
     try
     {
@@ -135,7 +141,7 @@ setCommand.SetHandler(async (string path, long id, bool backup) =>
         
         if (backup)
         {
-            CreateBackup(path);
+            CreateBackup(path, backupPath);
         }
 
         Console.WriteLine($"Opening index directory: {path}");
@@ -323,10 +329,10 @@ setCommand.SetHandler(async (string path, long id, bool backup) =>
         Console.Error.WriteLine($"Stack trace: {ex.StackTrace}");
         Environment.Exit(1);
     }
-}, pathOption, idOption, backupOption);
+}, pathOption, idOption, backupOption, backupPathOption);
 
 // New command specifically for initializing a non-SenseNet index
-initCommand.SetHandler(async (string path, long id, bool backup) =>
+initCommand.SetHandler(async (string path, long id, bool backup, string? backupPath) =>
 {
     try
     {
@@ -340,7 +346,7 @@ initCommand.SetHandler(async (string path, long id, bool backup) =>
 
         if (backup)
         {
-            CreateBackup(path);
+            CreateBackup(path, backupPath);
         }
 
         Console.WriteLine($"Opening index directory: {path}");
@@ -520,24 +526,40 @@ initCommand.SetHandler(async (string path, long id, bool backup) =>
         Console.Error.WriteLine($"Stack trace: {ex.StackTrace}");
         Environment.Exit(1);
     }
-}, pathOption, idOption, backupOption);
+}, pathOption, idOption, backupOption, backupPathOption);
 
 return await rootCommand.InvokeAsync(args);
 
 // Helper method to create a backup of the index
-void CreateBackup(string path)
+void CreateBackup(string path, string? backupPath = null)
 {
-    var dirName = Path.GetDirectoryName(path);
-    if (dirName == null)
-        dirName = ".";
-        
-    var backupPath = Path.Combine(dirName, "backup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"));
-    Console.WriteLine($"Creating backup at {backupPath}");
-    IODirectory.CreateDirectory(backupPath);
+    // Get the index directory name
+    var indexDirInfo = new DirectoryInfo(path);
+    var indexDirName = indexDirInfo.Name;
+    
+    // Create a "Backups" directory next to the index directory, not inside it
+    var parentDir = indexDirInfo.Parent?.FullName ?? ".";
+    var backupsRootDir = backupPath ?? Path.Combine(parentDir, "IndexBackups");
+    
+    // Make sure the backups root directory exists
+    if (!IODirectory.Exists(backupsRootDir))
+    {
+        IODirectory.CreateDirectory(backupsRootDir);
+    }
+    
+    // Create a backup directory with timestamp and index name
+    var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+    var backupPathFinal = Path.Combine(backupsRootDir, $"{indexDirName}_backup_{timestamp}");
+    
+    Console.WriteLine($"Creating backup at {backupPathFinal}");
+    IODirectory.CreateDirectory(backupPathFinal);
+    
+    // Copy all files from the index directory to the backup
     foreach (var file in IODirectory.GetFiles(path))
     {
-        File.Copy(file, Path.Combine(backupPath, Path.GetFileName(file)));
+        File.Copy(file, Path.Combine(backupPathFinal, Path.GetFileName(file)));
     }
+    
     Console.WriteLine("Backup completed successfully.");
 }
 
