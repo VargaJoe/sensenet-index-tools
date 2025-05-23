@@ -28,6 +28,5 @@ jobs:
       run: dotnet test --no-build --verbosity normal
       
     - name: Publish
-      if: github.event_name == "push" && (github.ref == "refs/heads/main" || github.ref == "refs/heads/develop")
-      
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
       run: dotnet publish sensenet-index-tools.sln -c Release -o ./publish
