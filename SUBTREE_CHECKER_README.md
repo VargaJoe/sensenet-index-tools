@@ -2,6 +2,10 @@
 
 This document provides guidance on using the `check-subtree` command from the SenseNet Index Maintenance Suite to verify synchronization between content in the SenseNet database and the Lucene search index.
 
+## Important Update - May 2025
+
+The subtree checker has been significantly improved with a fix for a critical issue that was causing content items to be incorrectly reported as missing from the index. The tool now uses multiple enhanced search strategies and thoroughly validates search results to ensure accurate reporting. For technical details, see [INDEX_CHECKER_FIX.md](INDEX_CHECKER_FIX.md).
+
 ## Quick Start
 
 ### Basic Command
@@ -19,6 +23,17 @@ For convenience, you can use the included PowerShell script:
 ```powershell
 ./CheckSubtree.ps1 -indexPath "D:\path\to\lucene\index" -connectionString "Data Source=server;Initial Catalog=sensenet;Integrated Security=True" -repositoryPath "/Root/Content/Path"
 ```
+
+## Command Options
+
+| Option | Description |
+|--------|-------------|
+| `--index-path` | **(Required)** Path to the Lucene index directory |
+| `--connection-string` | **(Required)** SQL Connection string to the SenseNet database |
+| `--repository-path` | **(Required)** Path in the content repository to check |
+| `--recursive` | Check all content items under the specified path (default: true) |
+| `--output` | Path to save the check report to a file |
+| `--detailed` | Generate a detailed report with comprehensive information (default: false) |
 
 ## Common Scenarios
 
@@ -66,13 +81,14 @@ Data Source=myserver;Initial Catalog=sensenet;User ID=username;Password=password
 The generated report includes:
 
 1. **Summary Statistics**: Overall counts and matching percentages
-2. **Mismatched Items List**: Details of all items that exist in the database but not in the index
-3. **Performance Metrics**: Time taken for the check operation
+2. **Content Type Distribution**: Breakdown of content by type and mismatch rates for each type
+3. **Mismatched Items List**: Details of all items that exist in the database but not in the index, including version state
+4. **Performance Metrics**: Time taken for the check operation
 
-Look for patterns in mismatches, such as:
-- All content under a specific path missing
-- Specific content types consistently missing
-- Recently created/modified content missing
+The detailed report provides insights into patterns of mismatches, such as:
+- Content types with high mismatch rates (indicating possible indexing configuration issues)
+- Version state analysis (published vs. draft versions missing from the index)
+- Path patterns where content is consistently missing
 
 ## Fixing Mismatches
 

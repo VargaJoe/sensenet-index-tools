@@ -172,9 +172,8 @@ namespace SenseNetIndexTools
                                 {
                                     Console.Write($"\rProcessed {processedCount}/{contentItems.Count} items...");
                                 }
-
                                 // Check if the item exists in the index
-                                bool foundInIndex = CheckItemInIndex(reader, item.NodeId, item.VersionId);
+                                bool foundInIndex = CheckItemInIndex(reader, item.NodeId, item.VersionId, item.Path);
                                 
                                 if (!foundInIndex)
                                 {
@@ -265,13 +264,12 @@ namespace SenseNetIndexTools
             
             // Sanitize path for SQL query
             string sanitizedPath = path.Replace("'", "''");
-            
-            // Build the SQL query
+              // Build the SQL query
             string sql;
             if (recursive)
             {
                 sql = @"
-                    SELECT N.NodeId, V.VersionId, N.Path, NT.Name as NodeTypeName 
+                    SELECT N.NodeId, V.Id as VersionId, N.Path, NT.Name as NodeTypeName 
                     FROM Nodes N
                     JOIN Versions V ON N.NodeId = V.NodeId
                     JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
@@ -281,7 +279,7 @@ namespace SenseNetIndexTools
             else
             {
                 sql = @"
-                    SELECT N.NodeId, V.VersionId, N.Path, NT.Name as NodeTypeName 
+                    SELECT N.NodeId, V.Id as VersionId, N.Path, NT.Name as NodeTypeName 
                     FROM Nodes N
                     JOIN Versions V ON N.NodeId = V.NodeId
                     JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
@@ -305,8 +303,7 @@ namespace SenseNetIndexTools
                     using (var reader = command.ExecuteReader())
                     {
                         while (reader.Read())
-                        {
-                            items.Add(new ContentItem
+                        {                            items.Add(new ContentItem
                             {
                                 NodeId = reader.GetInt32(reader.GetOrdinal("NodeId")),
                                 VersionId = reader.GetInt32(reader.GetOrdinal("VersionId")),
@@ -321,31 +318,79 @@ namespace SenseNetIndexTools
             return items;
         }
 
-        private static bool CheckItemInIndex(IndexReader reader, int nodeId, int versionId)
+        private static bool CheckItemInIndex(IndexReader reader, int nodeId, int versionId, string path = null)
         {
-            // First check by VersionId which is more specific
-            var versionTerm = new Term("VersionId", NumericUtils.IntToPrefixCoded(versionId));
-            var versionDocs = reader.TermDocs(versionTerm);
-            
-            if (versionDocs.Next())
+            // List of search methods to try
+            var searchMethods = new List<(string Method, Func<bool> Search)>
             {
-                return true;
-            }
+                // Method 1: Search by Path
+                ("Path", () => {
+                    var pathTerm = new Term("Path", path);
+                    var pathDocs = reader.TermDocs(pathTerm);
+                    return pathDocs.Next();
+                }),
+                
+                // Method 2: Search by VersionId
+                ("VersionId", () => {
+                    var versionTerm = new Term("VersionId", NumericUtils.IntToPrefixCoded(versionId));
+                    var versionDocs = reader.TermDocs(versionTerm);
+                    return versionDocs.Next();
+                }),
 
-            // If not found by version, check by NodeId as a fallback
-            var nodeTerm = new Term("NodeId", NumericUtils.IntToPrefixCoded(nodeId));
-            var nodeDocs = reader.TermDocs(nodeTerm);
+                // Method 3: Direct scan as last resort for small indexes
+                ("DirectScan", () => {
+                    if (reader.MaxDoc() > 10000) 
+                    {
+                        return false; // Skip for large indexes
+                    }
+                    
+                    Console.WriteLine($"Attempting direct scan for item with VersionId {versionId} (last resort)");
+                    
+                    for (int i = 0; i < reader.MaxDoc(); i++)
+                    {
+                        if (reader.IsDeleted(i)) continue;
+                        
+                        var doc = reader.Document(i);
+                        var fields = doc.GetFields();
+                        foreach (var field in fields)
+                        {
+                            if (field.Name == "VersionId" && field.StringValue() == NumericUtils.IntToPrefixCoded(versionId))
+                            {
+                                Console.WriteLine($"Found item in document #{i} by direct scan");
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                })
+            };
             
-            return nodeDocs.Next();
+            // Try each search method
+            foreach (var (method, search) in searchMethods)
+            {
+                try
+                {
+                    if (search())
+                    {
+                        Console.WriteLine($"Found item (VersionId={versionId}) using {method}");
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error during {method} search: {ex.Message}");
+                }
+            }
+            
+            Console.WriteLine($"MISSING: Item not found in index: VersionId={versionId}, Path={path}");
+            return false;
         }        private class ContentItem
         {
             public int NodeId { get; set; }
             public int VersionId { get; set; }
             public required string Path { get; set; }
             public required string NodeType { get; set; }
-        }
-
-        private class MismatchedItem
+        }            private class MismatchedItem
         {
             public int NodeId { get; set; }
             public int VersionId { get; set; }
@@ -357,16 +402,17 @@ namespace SenseNetIndexTools
             {
                 return $"NodeId: {NodeId}, VersionId: {VersionId}, Path: {Path}, NodeType: {NodeType}, Reason: {Reason}";
             }
-        }        private class CheckReport
+        }private class CheckReport
         {
             public DateTime StartTime { get; set; }
             public DateTime EndTime { get; set; }
             public required string RepositoryPath { get; set; }
             public bool Recursive { get; set; }
             public int DatabaseItemsCount { get; set; }
-            public int IndexDocCount { get; set; }
-            public int MatchedItemsCount { get; set; }
+            public int IndexDocCount { get; set; }            public int MatchedItemsCount { get; set; }
             public List<MismatchedItem> MismatchedItems { get; set; } = new List<MismatchedItem>();
+            public Dictionary<string, int> ContentTypeStats { get; set; } = new Dictionary<string, int>();
+            public Dictionary<string, int> MismatchesByType { get; set; } = new Dictionary<string, int>();
             public required string Summary { get; set; }
             public required string DetailedReport { get; set; }
         }

@@ -35,6 +35,7 @@ if ([string]::IsNullOrEmpty($outputPath)) {
 # Build command arguments
 $commandArgs = @(
     "run", 
+    "--project", "src/MainProgram/sn-index-maintenance-suite.csproj",
     "--", 
     "check-subtree", 
     "--index-path", $indexPath, 

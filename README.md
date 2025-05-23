@@ -2,6 +2,10 @@
 
 A comprehensive toolkit for managing and maintaining SenseNet Lucene.NET indexes. This suite includes tools for managing the LastActivityId value in SenseNet indexes, validating index integrity, and checking content synchronization between the database and index.
 
+## Recent Updates
+
+**May 2025**: Fixed a critical issue in the `check-subtree` command that was incorrectly reporting content items as missing from the index. The key fix was updating the field names from "NodeId" to "Id" and "VersionId" to "Version_" to match SenseNet's actual index structure. See [INDEX_CHECKER_FIX.md](INDEX_CHECKER_FIX.md) for details.
+
 ## Repository
 
 This project is maintained at: https://github.com/VargaJoe/sensenet-index-tools
@@ -35,7 +39,14 @@ dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "
 # Check specific path without recursion and save detailed report
 dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path/To/Check" --recursive false --detailed --output "report.md"
 ```
-dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value> --backup-path "D:\Backups\LuceneIndices"
+
+## PowerShell Helper Scripts
+
+For convenience, PowerShell helper scripts are included in the root directory:
+
+```powershell
+# Run the subtree checker with the PowerShell script
+./CheckSubtree.ps1 -indexPath "D:\path\to\index" -connectionString "Data Source=server;Initial Catalog=sensenet;Integrated Security=True" -repositoryPath "/Root/Content" -detailed $true -openReport
 ```
 
 ## Commands
@@ -73,16 +84,17 @@ dotnet run -- lastactivityid-init --path "<path-to-index>" --id <initial-value> 
 - `--backup`: (Optional) Create a backup of the index before making changes (default: true)
 - `--backup-path`: (Optional) Custom path for storing backups. If not specified, backups will be stored in an 'IndexBackups' folder at the same level as the index parent folder
 
-## Building the Project
+## Building and Testing
 
 ```bash
+# Build the project
 dotnet build
-```
 
-## Running the Application
-
-```bash
+# Run the application
 dotnet run -- lastactivityid-get --path "<path-to-index>"
+
+# Run the subtree checker test
+dotnet run --project src/TestSubtreeChecker/TestSubtreeChecker.csproj
 ```
 
 ## Creating a Release

@@ -6,6 +6,15 @@ This document outlines potential enhancements and new features for the SenseNet 
 
 This project is maintained at: https://github.com/VargaJoe/sensenet-index-tools
 
+## Recent Accomplishments
+
+### May 2025: Fixed Critical Issue in Subtree Checker
+- Fixed fundamental issue in the `check-subtree` command that was incorrectly reporting content items as missing from the index
+- Implemented thorough document validation instead of relying solely on term matches
+- Added direct index scanning as a fallback for small indexes
+- Enhanced error handling to prevent false negatives
+- Added detailed logging for better diagnostic capabilities
+
 ## Current Functionality
 
 The suite currently supports:
@@ -14,7 +23,12 @@ The suite currently supports:
 - Initializing a LastActivityId in a non-SenseNet Lucene index (`init` command)
 - Automatic backup creation before making changes
 - Validating index structure and integrity (`validate` command)
-- Checking database-index synchronization for subtrees (`check-subtree` command)
+- Checking database-index synchronization for subtrees (`check-subtree` command):
+  - Enhanced detection capabilities with multiple search strategies
+  - Accurate document validation and inspection
+  - Content type distribution analysis
+  - Version state tracking (published vs. draft content)
+  - Detailed reporting with statistics and markdown output
 
 ## Proposed Enhancements
 
@@ -49,6 +63,24 @@ The suite currently supports:
 - Add functions to optimize the index structure and reduce fragmentation
 - Support for segment merging and compaction
 - Add a new `optimize` command
+
+### 4. Content Synchronization Validation
+
+#### 4.1 Enhanced Subtree Checking ✓
+- ✅ Advanced algorithms for matching database items to index documents
+- ✅ Support for detailed reports and statistics
+- ✅ Content type distribution analysis
+- ✅ Version state tracking
+
+#### 4.2 Full Repository Integrity Checking
+- Add functionality to compare the entire repository with the index
+- Support for incremental and partial checking of very large repositories
+- Add a new `check-repository` command with sampling options
+
+#### 4.3 Automated Reindex Recommendations
+- Generate targeted reindex recommendations based on discovered issues
+- Create scripts to automate reindexing of problematic content
+- Add a new `analyze-reindex` command
 
 #### 3.2 Performance Analysis
 - Analyze and report on index structure efficiency

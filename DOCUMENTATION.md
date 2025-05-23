@@ -333,6 +333,12 @@ The Subtree Index Checker works by:
 dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "<path-in-repository>"
 ```
 
+For convenience, a PowerShell script is included:
+
+```powershell
+./CheckSubtree.ps1 -indexPath "<path-to-index>" -connectionString "<sql-connection-string>" -repositoryPath "<path-in-repository>" -detailed $true -openReport
+```
+
 #### Options
 
 | Option | Description | Required | Default |
@@ -346,18 +352,48 @@ dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "
 
 ### Implementation Notes
 
+#### Enhanced Index Checking
+
+The tool uses multiple strategies to locate items in the index:
+
+1. **Direct ID matching**: First attempts to find content by VersionId and NodeId
+2. **Path-based lookups**: Uses Path field in both normal and lowercase forms
+3. **Hierarchical search**: Checks InTree and InFolder fields for content relationships
+4. **Name-based search**: Falls back to searching by content name when needed
+
+This multi-strategy approach significantly improves the ability to find content that might be indexed in different ways.
+
 #### Database Query
 
-The database query retrieves essential content information:
+The database query retrieves essential content information, focusing on the latest versions:
 
 ```sql
-SELECT N.NodeId, V.VersionId, N.Path, NT.Name as NodeTypeName 
+SELECT 
+    N.NodeId, 
+    V.VersionId, 
+    N.Path, 
+    NT.Name as NodeTypeName,
+    CASE 
+        WHEN V.VersionId = N.LastMajorVersionId THEN 'Published' 
+        WHEN V.VersionId = N.LastMinorVersionId THEN 'Last Draft'
+        ELSE 'Historical' 
+    END as VersionState
 FROM Nodes N
-JOIN Versions V ON N.NodeId = V.NodeId
 JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
+JOIN Versions V ON N.NodeId = V.NodeId
 WHERE (N.Path = @path OR N.Path LIKE @pathPattern)
+AND (V.VersionId = N.LastMajorVersionId OR V.VersionId = N.LastMinorVersionId)
 ORDER BY N.Path
 ```
+
+#### Report Generation
+
+The detailed report includes:
+
+1. **Summary Statistics**: Overall counts and matching percentages
+2. **Content Type Distribution**: Breakdown of content by type with mismatch rates
+3. **Version State Analysis**: Information about which version states are more likely to have issues
+4. **Mismatched Items List**: Complete list of items that exist in the database but not in the index
 
 #### Index Search
 
