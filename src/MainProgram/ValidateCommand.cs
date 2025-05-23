@@ -555,11 +555,10 @@ namespace SenseNetIndexTools
             }
 
             return results;
-        }
-
-        private IEnumerable<ValidationResult> ValidateDocumentIntegrity()
+        }        private IEnumerable<ValidationResult> ValidateDocumentIntegrity()
         {
             var results = new List<ValidationResult>();
+            var missingNodeIdContentTypes = new Dictionary<string, int>();
 
             try
             {
@@ -614,8 +613,29 @@ namespace SenseNetIndexTools
                                     }
                                     else if (string.IsNullOrEmpty(doc.Get("NodeId")))
                                     {
-                                        isValid = false;
-                                        invalidReason = "Missing NodeId";
+                                        isValid = false;                                        invalidReason = "Missing NodeId";
+
+                                        // If NodeId is missing, try to identify content type
+                                        var contentType = doc.Get("TypeId") ?? doc.Get("Type") ?? doc.Get("ContentType");
+                                        var path = doc.Get("Path");
+                                        var name = doc.Get("Name");
+                                        var displayName = doc.Get("DisplayName");
+                                        var extraInfo = string.Join(" | ", new[]
+                                        {
+                                            contentType != null ? $"Content Type: {contentType}" : null,
+                                            path != null ? $"Path: {path}" : null,
+                                            name != null ? $"Name: {name}" : null,
+                                            displayName != null ? $"Display Name: {displayName}" : null
+                                        }.Where(x => x != null));                                        if (!string.IsNullOrEmpty(extraInfo))
+                                        {
+                                            invalidReason = $"Missing NodeId - {extraInfo}";
+                                            
+                                            // Track content type statistics
+                                            var typeKey = contentType ?? "Unknown";
+                                            if (!missingNodeIdContentTypes.ContainsKey(typeKey))
+                                                missingNodeIdContentTypes[typeKey] = 0;
+                                            missingNodeIdContentTypes[typeKey]++;
+                                        }
                                     }
                                     
                                     if (isValid)
@@ -633,7 +653,7 @@ namespace SenseNetIndexTools
                                     }
                                 }
                             }
-                            
+
                             if (invalidDocs == 0 && validDocs > 0)
                             {
                                 results.Add(new ValidationResult(
@@ -644,11 +664,26 @@ namespace SenseNetIndexTools
                             }
                             else if (invalidDocs > 0)
                             {
+                                // Add summary of integrity issues
                                 results.Add(new ValidationResult(
                                     ValidationSeverity.Warning,
                                     "Some documents have integrity issues",
                                     $"Found {invalidDocs} document(s) with issues out of {validDocs + invalidDocs} sampled"
                                 ));
+
+                                // Add content type breakdown if we found any documents with missing NodeId
+                                if (missingNodeIdContentTypes.Any())
+                                {
+                                    var contentTypeBreakdown = string.Join("\n",
+                                        missingNodeIdContentTypes.OrderByDescending(kvp => kvp.Value)
+                                            .Select(kvp => $"- {kvp.Key}: {kvp.Value} document(s)"));
+
+                                    results.Add(new ValidationResult(
+                                        ValidationSeverity.Warning,
+                                        "Content type breakdown of documents missing NodeId",
+                                        contentTypeBreakdown
+                                    ));
+                                }
                             }
                         }
                     }
