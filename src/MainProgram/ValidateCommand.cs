@@ -133,10 +133,27 @@ namespace SenseNetIndexTools
                 writer.WriteLine($"- Warnings: {results.Count(r => r.Severity == ValidationSeverity.Warning)}");
                 writer.WriteLine($"- Info: {results.Count(r => r.Severity == ValidationSeverity.Info)}");
                 writer.WriteLine();
-                
-                writer.WriteLine("## Details");
+
+                // First write field-related information
+                var fieldInfo = results.FirstOrDefault(r => r.Message == "Complete list of index fields");
+                if (fieldInfo != null)
+                {
+                    writer.WriteLine("## Index Fields");
+                    writer.WriteLine("All fields present in the index:");
+                    writer.WriteLine("```");
+                    writer.WriteLine(fieldInfo.Details);
+                    writer.WriteLine("```");
+                    writer.WriteLine();
+                }
+
+                // Then write all other validation details
+                writer.WriteLine("## Validation Details");
                 foreach (var result in results.OrderByDescending(r => r.Severity))
                 {
+                    // Skip the field list as we already displayed it
+                    if (result.Message == "Complete list of index fields")
+                        continue;
+
                     writer.WriteLine($"### [{result.Severity}] {result.Message}");
                     if (!string.IsNullOrEmpty(result.Details))
                     {
@@ -489,7 +506,16 @@ namespace SenseNetIndexTools
                         using (var reader = IndexReader.Open(directory, true))
                         {
                             var fields = reader.GetFieldNames(IndexReader.FieldOption.ALL).ToList();
+                            fields.Sort(); // Sort alphabetically for better readability
                             
+                            // List all fields for analysis
+                            var fieldsList = string.Join("\n", fields.Select(f => $"- {f}"));
+                            results.Add(new ValidationResult(
+                                ValidationSeverity.Info,
+                                "Complete list of index fields",
+                                fieldsList
+                            ));
+
                             results.Add(new ValidationResult(
                                 ValidationSeverity.Info,
                                 "Index field structure",
@@ -498,7 +524,7 @@ namespace SenseNetIndexTools
 
                             // Check for common SenseNet fields
                             var senseNetFields = new[] { 
-                                "NodeId", "VersionId", "NodeTimestamp", "VersionTimestamp", 
+                                "Id", "VersionId", "NodeTimestamp", "VersionTimestamp", 
                                 "Path", "Version", "IsLastPublic", "IsLastDraft" 
                             };
                             
@@ -611,11 +637,10 @@ namespace SenseNetIndexTools
                                         isValid = false;
                                         invalidReason = "Missing VersionId";
                                     }
-                                    else if (string.IsNullOrEmpty(doc.Get("NodeId")))
+                                    else if (string.IsNullOrEmpty(doc.Get("Id")))  // Changed from NodeId to Id
                                     {
-                                        isValid = false;                                        invalidReason = "Missing NodeId";
-
-                                        // If NodeId is missing, try to identify content type
+                                        isValid = false;
+                                        // If Id is missing, try to identify content type
                                         var contentType = doc.Get("TypeId") ?? doc.Get("Type") ?? doc.Get("ContentType");
                                         var path = doc.Get("Path");
                                         var name = doc.Get("Name");
@@ -626,9 +651,11 @@ namespace SenseNetIndexTools
                                             path != null ? $"Path: {path}" : null,
                                             name != null ? $"Name: {name}" : null,
                                             displayName != null ? $"Display Name: {displayName}" : null
-                                        }.Where(x => x != null));                                        if (!string.IsNullOrEmpty(extraInfo))
+                                        }.Where(x => x != null));
+                                        
+                                        if (!string.IsNullOrEmpty(extraInfo))
                                         {
-                                            invalidReason = $"Missing NodeId - {extraInfo}";
+                                            invalidReason = $"Missing Id - {extraInfo}";
                                             
                                             // Track content type statistics
                                             var typeKey = contentType ?? "Unknown";
