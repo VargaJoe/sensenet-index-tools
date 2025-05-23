@@ -45,16 +45,31 @@ namespace SenseNetIndexTools
                 name: "--backup-path",
                 description: "Custom path for storing backups");
 
+            // Option for sample size
+            var sampleSizeOption = new Option<int?>(
+                name: "--sample-size",
+                description: "Number of documents to sample for validation. Use 0 for full validation.",
+                getDefaultValue: () => 10);
+
+            // Option to specify required fields
+            var requiredFieldsOption = new Option<string?>(
+                name: "--required-fields",
+                description: "JSON array of required fields. Overrides default SenseNet fields. Example: '[\"Id\",\"Path\"]'");
+
             // Add all options to the command
             validateCommand.AddOption(pathOption);
             validateCommand.AddOption(detailedOption);
             validateCommand.AddOption(outputOption);
             validateCommand.AddOption(backupOption);
             validateCommand.AddOption(backupPathOption);
+            validateCommand.AddOption(sampleSizeOption);
+            validateCommand.AddOption(requiredFieldsOption);
 
             // Set the handler for the command
-            validateCommand.SetHandler(async (string path, bool detailed, string? output, bool backup, string? backupPath) =>
-            {                try
+            validateCommand.SetHandler(async (string path, bool detailed, string? output, bool backup, 
+                string? backupPath, int? sampleSize, string? requiredFields) =>
+            {
+                try
                 {
                     // Verify this is a valid Lucene index
                     if (!Program.IsValidLuceneIndex(path))
@@ -69,10 +84,29 @@ namespace SenseNetIndexTools
                         Program.CreateBackup(path, backupPath);
                     }
 
-                    Console.WriteLine($"Validating index at: {path}");
+                    string[]? customFields = null;
+                    if (!string.IsNullOrEmpty(requiredFields))
+                    {
+                        try
+                        {
+                            customFields = System.Text.Json.JsonSerializer.Deserialize<string[]>(requiredFields);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine($"Failed to parse required fields JSON: {ex.Message}");
+                            Environment.Exit(1);
+                        }
+                    }
 
-                    // Run validation logic
-                    var validator = new IndexValidator(path);
+                    // Run validation logic with configuration
+                    var validator = new IndexValidator(path)
+                    {
+                        SampleSize = sampleSize ?? 10
+                    };
+                    if (customFields != null)
+                    {
+                        validator.RequiredFields = customFields;
+                    }
                     var results = validator.Validate(detailed);
 
                     // Output results to console
@@ -115,7 +149,7 @@ namespace SenseNetIndexTools
                     Console.Error.WriteLine($"Stack trace: {ex.StackTrace}");
                     Environment.Exit(1);
                 }
-            }, pathOption, detailedOption, outputOption, backupOption, backupPathOption);
+            }, pathOption, detailedOption, outputOption, backupOption, backupPathOption, sampleSizeOption, requiredFieldsOption);
 
             return validateCommand;
         }
@@ -190,9 +224,27 @@ namespace SenseNetIndexTools
     {
         private readonly string _indexPath;
 
+        // Configuration properties
+        public int SampleSize { get; set; } = 10;
+        
+        // Default SenseNet fields that should be present in the index
+        public static readonly string[] DefaultSenseNetFields = new[] { 
+            "Id", "VersionId", "NodeTimestamp", "VersionTimestamp", 
+            "Path", "Version", "IsLastPublic", "IsLastDraft" 
+        };
+        
+        private string[] _requiredFields;
+        
+        public string[] RequiredFields
+        {
+            get => _requiredFields;
+            set => _requiredFields = value;
+        }
+
         public IndexValidator(string indexPath)
         {
             _indexPath = indexPath;
+            _requiredFields = DefaultSenseNetFields;  // Use defaults unless overridden
         }
 
         public IEnumerable<ValidationResult> Validate(bool detailed)
@@ -521,35 +573,30 @@ namespace SenseNetIndexTools
                                 "Index field structure",
                                 $"Index contains {fields.Count} unique field names"
                             ));
-
-                            // Check for common SenseNet fields
-                            var senseNetFields = new[] { 
-                                "Id", "VersionId", "NodeTimestamp", "VersionTimestamp", 
-                                "Path", "Version", "IsLastPublic", "IsLastDraft" 
-                            };
                             
-                            var missingSenseNetFields = senseNetFields
+                            // Check for required fields
+                            var missingFields = _requiredFields
                                 .Where(f => !fields.Contains(f))
                                 .ToList();
-                            
-                            if (missingSenseNetFields.Any())
+
+                            if (missingFields.Any())
                             {
                                 results.Add(new ValidationResult(
                                     ValidationSeverity.Warning,
-                                    "Missing SenseNet-specific fields",
-                                    $"Missing fields: {string.Join(", ", missingSenseNetFields)}"
+                                    "Missing required fields",
+                                    $"Missing fields: {string.Join(", ", missingFields)}"
                                 ));
                             }
                             else
                             {
                                 results.Add(new ValidationResult(
                                     ValidationSeverity.Info,
-                                    "All SenseNet-specific fields are present",
-                                    $"Found all required fields: {string.Join(", ", senseNetFields)}"
+                                    "All required fields are present",
+                                    $"Found all required fields: {string.Join(", ", _requiredFields)}"
                                 ));
                             }
 
-                            // Check for commit fields
+                            // Check for commit fields (these are always required)
                             var hasCommitFields = fields.Contains("$#COMMIT") && fields.Contains("$#DATA");
                             if (hasCommitFields)
                             {
@@ -584,7 +631,7 @@ namespace SenseNetIndexTools
         }        private IEnumerable<ValidationResult> ValidateDocumentIntegrity()
         {
             var results = new List<ValidationResult>();
-            var missingNodeIdContentTypes = new Dictionary<string, int>();
+            var missingIdContentTypes = new Dictionary<string, int>();
 
             try
             {
@@ -608,15 +655,28 @@ namespace SenseNetIndexTools
                                 $"Found {commitDocCount} commit document(s)"
                             ));
 
-                            // Sample a few documents to check core field integrity
-                            var docSampleSize = Math.Min(10, reader.NumDocs());
+                            // Report sampling strategy
+                            var totalDocs = reader.NumDocs();
+                            var samplingStrategy = SampleSize == 0 
+                                ? "Performing full validation of all documents" 
+                                : $"Sampling {Math.Min(SampleSize, totalDocs)} documents out of {totalDocs} total documents";
+                            
+                            results.Add(new ValidationResult(
+                                ValidationSeverity.Info,
+                                "Validation Strategy",
+                                samplingStrategy
+                            ));
+
+                            // Document validation
+                            var docSampleSize = SampleSize == 0 ? totalDocs : Math.Min(SampleSize, totalDocs);
                             int validDocs = 0;
                             int invalidDocs = 0;
                             var maxDoc = reader.MaxDoc();
                             
                             // Space out the sampling evenly through the index
-                            var samplingInterval = maxDoc > docSampleSize ? maxDoc / docSampleSize : 1;
-                            
+                            var samplingInterval = SampleSize == 0 ? 1 : 
+                                maxDoc > docSampleSize ? maxDoc / docSampleSize : 1;
+
                             for (int i = 0; i < maxDoc && validDocs + invalidDocs < docSampleSize; i += samplingInterval)
                             {
                                 if (!reader.IsDeleted(i))
@@ -632,12 +692,7 @@ namespace SenseNetIndexTools
                                     string invalidReason = "";
                                     
                                     // Check required fields for a SenseNet document
-                                    if (string.IsNullOrEmpty(doc.Get("VersionId")))
-                                    {
-                                        isValid = false;
-                                        invalidReason = "Missing VersionId";
-                                    }
-                                    else if (string.IsNullOrEmpty(doc.Get("Id")))  // Changed from NodeId to Id
+                                    if (string.IsNullOrEmpty(doc.Get("Id")))
                                     {
                                         isValid = false;
                                         // If Id is missing, try to identify content type
@@ -659,9 +714,9 @@ namespace SenseNetIndexTools
                                             
                                             // Track content type statistics
                                             var typeKey = contentType ?? "Unknown";
-                                            if (!missingNodeIdContentTypes.ContainsKey(typeKey))
-                                                missingNodeIdContentTypes[typeKey] = 0;
-                                            missingNodeIdContentTypes[typeKey]++;
+                                            if (!missingIdContentTypes.ContainsKey(typeKey))
+                                                missingIdContentTypes[typeKey] = 0;
+                                            missingIdContentTypes[typeKey]++;
                                         }
                                     }
                                     
@@ -698,16 +753,16 @@ namespace SenseNetIndexTools
                                     $"Found {invalidDocs} document(s) with issues out of {validDocs + invalidDocs} sampled"
                                 ));
 
-                                // Add content type breakdown if we found any documents with missing NodeId
-                                if (missingNodeIdContentTypes.Any())
+                                // Add content type breakdown if we found any documents with missing Id
+                                if (missingIdContentTypes.Any())
                                 {
                                     var contentTypeBreakdown = string.Join("\n",
-                                        missingNodeIdContentTypes.OrderByDescending(kvp => kvp.Value)
+                                        missingIdContentTypes.OrderByDescending(kvp => kvp.Value)
                                             .Select(kvp => $"- {kvp.Key}: {kvp.Value} document(s)"));
 
                                     results.Add(new ValidationResult(
                                         ValidationSeverity.Warning,
-                                        "Content type breakdown of documents missing NodeId",
+                                        "Content type breakdown of documents missing Id",
                                         contentTypeBreakdown
                                     ));
                                 }

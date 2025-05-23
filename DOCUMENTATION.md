@@ -92,86 +92,128 @@ sn-index-maintenance-suite validate --path <index-path>
 # Detailed validation with report
 sn-index-maintenance-suite validate --path <index-path> --detailed --output report.md
 
-# Validation without backup
-sn-index-maintenance-suite validate --path <index-path> --backup false
+# Custom sampling size
+sn-index-maintenance-suite validate --path <index-path> --sample-size 100
+
+# Custom required fields
+sn-index-maintenance-suite validate --path <index-path> --required-fields '["Id","Path","Name"]'
 ```
 
 #### Validation Options
 
 - `--path`: Required. Path to the Lucene index directory
-- `--detailed`: Optional. Enables comprehensive validation checks
-- `--output`: Optional. Path to save the validation report
-- `--backup`: Optional. Create a backup before validation (default: true)
-- `--backup-path`: Optional. Custom path for backups
+- `--detailed`: Optional. Performs additional in-depth checks including segments and orphaned files. Default: false
+- `--output`: Optional. Path to save the validation report in Markdown format
+- `--backup`: Optional. Creates a backup before validation. Default: true
+- `--backup-path`: Optional. Custom path for storing the backup
+- `--sample-size`: Optional. Number of documents to sample for validation (0 for full validation). Default: 10
+- `--required-fields`: Optional. JSON array of required fields. Overrides default SenseNet fields.
 
-#### Validation Report Sections
+#### Validation Coverage
 
-The validation report includes the following sections:
+The validation process includes:
 
-1. **Summary**
-   ```markdown
-   # SenseNet Index Validation Report
-   Generated: [Timestamp]
-   
-   ## Summary
-   - Errors: [count]
-   - Warnings: [count]
-   - Info: [count]
-   ```
+1. **Basic Structure Validation**
+   - Directory existence and accessibility
+   - Presence of required Lucene index files
+   - Segments file validation
+   - Lock status verification
 
-2. **Basic Structure**
-   ```markdown
-   [Info] Index directory structure verified
-   Details: Directory contains X files
-   
-   [Info] Segments file found
-   Details: Current segments file: segments.gen
-   ```
+2. **Document Integrity**
+   - Required field presence (Id, VersionId, etc.)
+   - Field value validation
+   - Document structure consistency
+   - Configurable sampling strategy
+   - Content type analysis for documents with issues
 
-3. **Lock Status**
-   ```markdown
-   [Info/Warning] Index lock status
-   Details: The index is [not] currently locked
-   ```
+3. **Segment Health** (with --detailed)
+   - Corrupt segment detection
+   - Multi-segment consistency
+   - Segment reader validation
+   - Segment statistics
 
-4. **Document Integrity**
-   ```markdown
-   [Info] Document integrity check
-   Details: Sampled X documents, Y have required fields
-   
-   [Warning] Document integrity issues (if any)
-   Details: Found X document(s) with issues out of Y sampled
-   ```
+4. **File System Analysis** (with --detailed)
+   - Orphaned file detection
+   - File pattern validation
+   - Index file consistency
 
-5. **Field Structure**
-   ```markdown
-   [Info] Index field structure
-   Details: Index contains X unique field names
-   
-   [Warning] Missing SenseNet-specific fields (if any)
-   Details: Missing fields: [field list]
-   ```
+#### Validation Report
 
-6. **Commit Data**
-   ```markdown
-   [Info] Commit user data
-   Details: Contains X entries, LastActivityId = Y
-   ```
+When using the `--output` option, the tool generates a detailed Markdown report containing:
 
-7. **Segment Health**
-   ```markdown
-   [Info] Segment structure information
-   Details: Index contains X segments
-   
-   [Error] Corrupt segments (if any)
-   Details: Found X corrupted segment(s)
-   ```
+1. **Summary Section**
+   - Total errors and warnings
+   - Sampling strategy used
+   - Index structure overview
 
-8. **File System**
-   ```markdown
-   [Warning] Orphaned files (if any)
-   Details: Files that don't match known patterns: [file list]
-   ```
+2. **Field Analysis**
+   - Complete list of index fields
+   - Required field status
+   - Field presence statistics
+
+3. **Document Analysis**
+   - Document integrity results
+   - Content type breakdown for issues
+   - Sampling coverage details
+
+4. **Detailed Checks** (with --detailed)
+   - Segment analysis results
+   - File system consistency
+   - Orphaned file detection results
+
+### Customizing Validation
+
+#### Document Sampling Configuration
+
+Control how many documents are validated:
+
+```powershell
+# Full validation of all documents
+sn-index-maintenance-suite validate --path <index-path> --sample-size 0
+
+# Increase sample size for more thorough sampling
+sn-index-maintenance-suite validate --path <index-path> --sample-size 100
+```
+
+#### Field Name Mapping
+
+If your index uses different field names, you can map them:
+
+```powershell
+# Map standard field names to custom ones
+sn-index-maintenance-suite validate --path <index-path> --field-mapping '{
+    "Id": "NodeId",
+    "VersionId": "DocumentVersion",
+    "Path": "DocumentPath"
+}'
+```
+
+#### Required Fields
+
+By default, the following fields are validated:
+- `Id` (or custom mapped name)
+- `VersionId`
+- `NodeTimestamp`
+- `VersionTimestamp`
+- `Path`
+- `Version`
+- `IsLastPublic`
+- `IsLastDraft`
+
+### Performance Considerations
+
+1. **Sampling Strategy**
+   - Default sampling checks 10 documents
+   - Full validation can be slow on large indexes
+   - Sampling interval is calculated to spread checks across the index
+
+2. **Backup Impact**
+   - Backup is enabled by default but can be disabled
+   - Consider disk space when validating large indexes
+
+3. **Memory Usage**
+   - Document sampling is designed to be memory-efficient
+   - Field analysis loads only metadata, not content
 
 ## Technical Dependencies
 
@@ -211,3 +253,46 @@ If an error occurs during operations:
 3. Save validation reports for tracking index health over time
 4. Address warnings promptly to prevent index corruption
 5. Regularly validate indices as part of maintenance routines
+
+#### Common Validation Scenarios
+
+1. **Quick Health Check**
+   ```powershell
+   sn-index-maintenance-suite validate --path <index-path>
+   ```
+   Performs basic validation with default sampling, suitable for routine health checks.
+
+2. **Full Index Validation**
+   ```powershell
+   sn-index-maintenance-suite validate --path <index-path> --detailed --sample-size 0
+   ```
+   Comprehensive validation of all documents and index structures.
+
+3. **Custom Field Requirements**
+   ```powershell
+   sn-index-maintenance-suite validate --path <index-path> --required-fields '["Id","Path","Name","Type"]'
+   ```
+   Validates specific fields important to your application.
+
+4. **CI/CD Integration**
+   ```powershell
+   sn-index-maintenance-suite validate --path <index-path> --backup false --output validation.md
+   ```
+   Suitable for automated validation in pipelines, with report generation.
+
+#### Error Reporting
+
+The validation tool reports issues with different severity levels:
+
+- **Error**: Critical issues that indicate index corruption or structural problems
+- **Warning**: Potential issues that might affect index functionality
+- **Info**: Informational messages about index structure and validation process
+
+Example output:
+```
+[Error] Segment appears to be corrupted
+[Warning] Missing required fields: Id, Path
+[Info] Found 1000 documents in the index
+
+Validation completed with 1 error and 2 warnings.
+```
