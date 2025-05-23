@@ -1,6 +1,6 @@
 # SenseNet Index Maintenance Suite
 
-A comprehensive toolkit for managing and maintaining SenseNet Lucene.NET indexes. This suite currently includes tools for managing the LastActivityId value in SenseNet indexes, with plans to expand with more index maintenance capabilities.
+A comprehensive toolkit for managing and maintaining SenseNet Lucene.NET indexes. This suite includes tools for managing the LastActivityId value in SenseNet indexes, validating index integrity, and checking content synchronization between the database and index.
 
 ## Repository
 
@@ -24,6 +24,17 @@ dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value>
 dotnet run -- lastactivityid-init --path "<path-to-index>" --id <initial-value>
 
 # Set a new LastActivityId value with a custom backup location
+dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value> --backup-path "<custom-backup-path>"
+
+# Validate index structure and integrity
+dotnet run -- validate --path "<path-to-index>" --detailed
+
+# Check if database content exists in the index for a subtree
+dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path/To/Check"
+
+# Check specific path without recursion and save detailed report
+dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path/To/Check" --recursive false --detailed --output "report.md"
+```
 dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value> --backup-path "D:\Backups\LuceneIndices"
 ```
 

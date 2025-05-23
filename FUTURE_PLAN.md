@@ -13,6 +13,8 @@ The suite currently supports:
 - Setting a new LastActivityId in an existing index (`set` command)
 - Initializing a LastActivityId in a non-SenseNet Lucene index (`init` command)
 - Automatic backup creation before making changes
+- Validating index structure and integrity (`validate` command)
+- Checking database-index synchronization for subtrees (`check-subtree` command)
 
 ## Proposed Enhancements
 
