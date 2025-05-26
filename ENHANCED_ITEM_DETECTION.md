@@ -21,7 +21,7 @@ The improved implementation uses a multi-strategy approach to check for items in
 ### 1. ID-Based Search (Primary)
 
 - **VersionId Search**: First attempts to find the content by its specific VersionId, which is the most precise identifier
-- **NodeId Search**: If the version isn't found, falls back to finding any version of the content by NodeId, with full document validation
+- **Id Search**: If the version isn't found, falls back to finding any version of the content by Id, with full document validation
 
 ### 2. Path-Based Search
 
@@ -41,7 +41,7 @@ For content that might be indexed differently:
 
 As a last resort:
 
-- **Name Field Search**: Attempts to find the content by its name and then verifies NodeId
+- **Name Field Search**: Attempts to find the content by its name and then verifies Id
 
 ## Implementation Details
 
@@ -50,10 +50,10 @@ The search methods are tried sequentially, stopping when a match is found. For a
 The fixed implementation now properly validates documents by retrieving and examining them:
 
 ```csharp
-// Method 2: Check by NodeId as a fallback
-("NodeId", () => {
-    var nodeTerm = new Term("NodeId", NumericUtils.IntToPrefixCoded(nodeId));
-    var nodeDocs = reader.TermDocs(nodeTerm);
+// Method 2: Check by Id as a fallback
+("Id", () => {
+    var idTerm = new Term("Id", NumericUtils.IntToPrefixCoded(id));
+    var docs = reader.TermDocs(idTerm);
     
     // FIX: Instead of just checking if there's a match, we now
     // retrieve and analyze the actual document
@@ -63,14 +63,12 @@ The fixed implementation now properly validates documents by retrieving and exam
         found = true;
         // Log the document to help with debugging
         var docId = nodeDocs.Doc();
-        var doc = reader.Document(docId);
-        
-        // Check if this is a "ghost" document - might be a deleted or incomplete index entry
+        var doc = reader.Document(docId);        // Check if this is a "ghost" document - might be a deleted or incomplete index entry
         var docVersionId = doc.Get("VersionId");
         if (docVersionId != null)
         {
             // Log detailed info for debugging purposes
-            Console.WriteLine($"Found NodeId {nodeId} with VersionId {docVersionId} in index");
+            Console.WriteLine($"Found Id {id} with VersionId {docVersionId} in index");
         }
     }
     return found;
@@ -91,22 +89,20 @@ searchMethods.Add(("DirectScan", () => {
         // Skip for very large indexes
         return false;
     }
-    
-    Console.WriteLine($"Attempting direct scan for NodeId {nodeId} (last resort)");
+      Console.WriteLine($"Attempting direct scan for Id {id} (last resort)");
     
     for (int i = 0; i < reader.MaxDoc(); i++)
     {
         if (reader.IsDeleted(i)) continue;
         
         var doc = reader.Document(i);
-        var docNodeId = doc.Get("NodeId");
-        
-        if (docNodeId != null)
+        var docId = doc.Get("Id");
+          if (docId != null)
         {
             try
             {
-                var indexedNodeId = NumericUtils.PrefixCodedToInt(docNodeId);
-                if (indexedNodeId == nodeId)
+                var indexedId = NumericUtils.PrefixCodedToInt(docId);
+                if (indexedId == id)
                 {
                     // Found it!
                     return true;
@@ -114,7 +110,7 @@ searchMethods.Add(("DirectScan", () => {
             }
             catch 
             {
-                // If we can't parse the NodeId, just continue
+                // If we can't parse the Id, just continue
             }
         }
     }

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The SenseNet Index Maintenance Suite is a comprehensive toolkit for SenseNet developers and administrators to manage and maintain Lucene.NET indexes used by SenseNet. The toolkit provides functionality for LastActivityId management, index structure validation, and database-index synchronization checking, which are critical for content synchronization and maintaining index health in SenseNet content repository systems.
+The SenseNet Index Maintenance Suite is a comprehensive toolkit for SenseNet developers and administrators to manage and maintain Lucene.NET indexes used by SenseNet. The toolkit provides functionality for LastActivityId management and index structure validation, which are critical for content synchronization and maintaining index health in SenseNet content repository systems.
 
 ## Repository
 
@@ -182,7 +182,7 @@ If your index uses different field names, you can map them:
 ```powershell
 # Map standard field names to custom ones
 sn-index-maintenance-suite validate --path <index-path> --field-mapping '{
-    "Id": "NodeId",
+    "Id": "Id",
     "VersionId": "DocumentVersion",
     "Path": "DocumentPath"
 }'
@@ -295,134 +295,4 @@ Example output:
 [Info] Found 1000 documents in the index
 
 Validation completed with 1 error and 2 warnings.
-```
-
-## Subtree Index Checker
-
-The Subtree Index Checker feature allows administrators to verify synchronization between content in the SenseNet database and the Lucene search index. It helps identify content items that may be missing from the index or have inconsistencies.
-
-### Technical Overview
-
-#### Database-Index Synchronization
-In SenseNet, each content item in the database should have a corresponding document in the Lucene index for proper search functionality. Mismatches can occur due to:
-
-1. Failed indexing operations
-2. Index corruption
-3. ActivityId synchronization issues
-4. Content operations bypassing the indexing subsystem
-
-#### Implementation Details
-
-The Subtree Index Checker works by:
-
-1. Connecting to the SenseNet database using a SQL connection
-2. Retrieving content items from a specified path (recursively or non-recursively)
-3. Opening the Lucene index and checking for corresponding documents
-4. Comparing database content with index content
-5. Generating detailed reports of any mismatches
-
-#### Key Components
-
-- **SQL Data Retrieval**: Uses direct SQL queries to fetch content from the SenseNet database tables (Nodes, Versions, NodeTypes)
-- **Lucene Document Lookup**: Uses TermDocs to search for documents by VersionId and NodeId
-- **Report Generation**: Creates formatted reports with statistics and details about mismatches
-
-### Command Usage
-
-```bash
-dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "<path-in-repository>"
-```
-
-For convenience, a PowerShell script is included:
-
-```powershell
-./CheckSubtree.ps1 -indexPath "<path-to-index>" -connectionString "<sql-connection-string>" -repositoryPath "<path-in-repository>" -detailed $true -openReport
-```
-
-#### Options
-
-| Option | Description | Required | Default |
-|--------|-------------|----------|---------|
-| `--index-path` | Path to the Lucene index directory | Yes | - |
-| `--connection-string` | SQL Connection string to the SenseNet database | Yes | - |
-| `--repository-path` | Path in the content repository to check | Yes | - |
-| `--recursive` | Recursively check all content items under the specified path | No | `true` |
-| `--detailed` | Generate a detailed report with comprehensive information | No | `false` |
-| `--output` | Path to save the report to a file | No | - |
-
-### Implementation Notes
-
-#### Enhanced Index Checking
-
-The tool uses multiple strategies to locate items in the index:
-
-1. **Direct ID matching**: First attempts to find content by VersionId and NodeId
-2. **Path-based lookups**: Uses Path field in both normal and lowercase forms
-3. **Hierarchical search**: Checks InTree and InFolder fields for content relationships
-4. **Name-based search**: Falls back to searching by content name when needed
-
-This multi-strategy approach significantly improves the ability to find content that might be indexed in different ways.
-
-#### Database Query
-
-The database query retrieves essential content information, focusing on the latest versions:
-
-```sql
-SELECT 
-    N.NodeId, 
-    V.VersionId, 
-    N.Path, 
-    NT.Name as NodeTypeName,
-    CASE 
-        WHEN V.VersionId = N.LastMajorVersionId THEN 'Published' 
-        WHEN V.VersionId = N.LastMinorVersionId THEN 'Last Draft'
-        ELSE 'Historical' 
-    END as VersionState
-FROM Nodes N
-JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
-JOIN Versions V ON N.NodeId = V.NodeId
-WHERE (N.Path = @path OR N.Path LIKE @pathPattern)
-AND (V.VersionId = N.LastMajorVersionId OR V.VersionId = N.LastMinorVersionId)
-ORDER BY N.Path
-```
-
-#### Report Generation
-
-The detailed report includes:
-
-1. **Summary Statistics**: Overall counts and matching percentages
-2. **Content Type Distribution**: Breakdown of content by type with mismatch rates
-3. **Version State Analysis**: Information about which version states are more likely to have issues
-4. **Mismatched Items List**: Complete list of items that exist in the database but not in the index
-
-#### Index Search
-
-The index search uses Lucene's TermDocs to efficiently locate documents:
-
-```csharp
-// Check by VersionId
-var versionTerm = new Term("VersionId", NumericUtils.IntToPrefixCoded(versionId));
-var versionDocs = reader.TermDocs(versionTerm);
-
-// Fallback to NodeId if VersionId not found
-var nodeTerm = new Term("NodeId", NumericUtils.IntToPrefixCoded(nodeId));
-var nodeDocs = reader.TermDocs(nodeTerm);
-```
-
-### Example Report
-
-```
-Check completed in 12.34 seconds.
-Database items: 245
-Index documents: 1056
-Matched items: 240
-Mismatched items: 5
-Matching percentage: 97.96%
-```
-
-For detailed reports, each mismatched item will show:
-
-```
-Mismatched Items:
-NodeId: 1234, VersionId: 5678, Path: /Root/Sites/Default_Site/Document1, NodeType: File, Reason: Item exists in database but not in index
 ```

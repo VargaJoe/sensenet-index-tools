@@ -34,11 +34,11 @@ namespace SenseNetIndexTools
                 name: "--backup-path",
                 description: "Custom path for storing backups. If not specified, backups will be stored in an 'IndexBackups' folder at the same level as the index parent folder");
 
-            var rootCommand = new RootCommand("SenseNet Index Maintenance Suite - Tools for managing SenseNet Lucene indices");            var getCommand = new Command("lastactivityid-get", "Get current LastActivityId from index");
+            var rootCommand = new RootCommand("SenseNet Index Maintenance Suite - Tools for managing SenseNet Lucene indices");
+            var getCommand = new Command("lastactivityid-get", "Get current LastActivityId from index");
             var setCommand = new Command("lastactivityid-set", "Set LastActivityId in index");
             var initCommand = new Command("lastactivityid-init", "Initialize LastActivityId in a non-SenseNet Lucene index");
             var validateCommand = SenseNetIndexTools.ValidateCommand.Create();
-            var subtreeCheckCommand = SenseNetIndexTools.SubtreeIndexChecker.Create();
 
             getCommand.AddOption(pathOption);
             setCommand.AddOption(pathOption);
@@ -54,7 +54,7 @@ namespace SenseNetIndexTools
             rootCommand.AddCommand(setCommand);
             rootCommand.AddCommand(initCommand);
             rootCommand.AddCommand(validateCommand);
-            rootCommand.AddCommand(subtreeCheckCommand);
+            rootCommand.AddCommand(IndexLister.Create());
 
             getCommand.SetHandler(async (string path) =>
             {
