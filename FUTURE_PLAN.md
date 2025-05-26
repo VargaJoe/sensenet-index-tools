@@ -13,6 +13,13 @@ The suite currently supports:
 - Setting a new LastActivityId in an existing index (`set` command)
 - Initializing a LastActivityId in a non-SenseNet Lucene index (`init` command)
 - Automatic backup creation before making changes
+- Validating index structure and integrity (`validate` command)
+- Checking database-index synchronization for subtrees (`check-subtree` command):
+  - Enhanced detection capabilities with multiple search strategies
+  - Accurate document validation and inspection
+  - Content type distribution analysis
+  - Version state tracking (published vs. draft content)
+  - Detailed reporting with statistics and markdown output
 
 ## Proposed Enhancements
 
@@ -47,6 +54,24 @@ The suite currently supports:
 - Add functions to optimize the index structure and reduce fragmentation
 - Support for segment merging and compaction
 - Add a new `optimize` command
+
+### 4. Content Synchronization Validation
+
+#### 4.1 Enhanced Subtree Checking ✓
+- ✅ Advanced algorithms for matching database items to index documents
+- ✅ Support for detailed reports and statistics
+- ✅ Content type distribution analysis
+- ✅ Version state tracking
+
+#### 4.2 Full Repository Integrity Checking
+- Add functionality to compare the entire repository with the index
+- Support for incremental and partial checking of very large repositories
+- Add a new `check-repository` command with sampling options
+
+#### 4.3 Automated Reindex Recommendations
+- Generate targeted reindex recommendations based on discovered issues
+- Create scripts to automate reindexing of problematic content
+- Add a new `analyze-reindex` command
 
 #### 3.2 Performance Analysis
 - Analyze and report on index structure efficiency

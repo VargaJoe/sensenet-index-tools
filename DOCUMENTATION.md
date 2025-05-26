@@ -182,7 +182,7 @@ If your index uses different field names, you can map them:
 ```powershell
 # Map standard field names to custom ones
 sn-index-maintenance-suite validate --path <index-path> --field-mapping '{
-    "Id": "NodeId",
+    "Id": "Id",
     "VersionId": "DocumentVersion",
     "Path": "DocumentPath"
 }'
