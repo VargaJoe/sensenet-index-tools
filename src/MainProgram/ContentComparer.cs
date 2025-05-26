@@ -291,10 +291,11 @@ namespace SenseNetIndexTools
                         var childQuery = new PrefixQuery(new Term("Path", normalizedPath.TrimEnd('/') + "/"));
                         boolQuery.Add(childQuery, BooleanClause.Occur.SHOULD);
 
-                        query = boolQuery;
-                    }
+                        query = boolQuery;                    }
 
-                    var collector = TopScoreDocCollector.Create(10000, true);
+                    // Use maxDoc to get all possible results instead of hard-coded limit
+                    int maxResults = reader.MaxDoc();
+                    var collector = TopScoreDocCollector.Create(maxResults, true);
                     searcher.Search(query, collector);
                     var searchHits = collector.TopDocs().ScoreDocs;
                     

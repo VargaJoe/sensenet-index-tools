@@ -77,5 +77,10 @@ logs/
 .DS_Store
 Thumbs.db
 validation_report.md
-src/MainProgram/subtree_check*
-src/MainProgram/comparison-report.md
+subtree_check*
+comparison-report.md
+full-subtree-report.md
+subtree-check-report.md
+subtree-report.md
+validation-report.md
+subtree-check-report*.md
