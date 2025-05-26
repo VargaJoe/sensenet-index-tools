@@ -9,7 +9,7 @@ namespace SenseNetIndexTools
 {
     public class ContentComparer
     {
-        private class ContentItem
+        public class ContentItem
         {
             public int NodeId { get; set; }
             public int VersionId { get; set; }
@@ -28,22 +28,6 @@ namespace SenseNetIndexTools
                     : InDatabase 
                         ? "DB Only" 
                         : "Index Only";
-
-            public override string ToString()
-            {
-                if (InDatabase && InIndex)
-                {
-                    return $"{NodeId}\t{VersionId}\t{IndexNodeId}\t{IndexVersionId}\t{Path}\t{NodeType}\t{Status}";
-                }
-                else if (InDatabase)
-                {
-                    return $"{NodeId}\t{VersionId}\t-\t-\t{Path}\t{NodeType}\t{Status}";
-                }
-                else
-                {
-                    return $"-\t-\t{IndexNodeId}\t{IndexVersionId}\t{Path}\t{NodeType}\t{Status}";
-                }
-            }
         }
 
         public static Command Create()
@@ -339,6 +323,55 @@ namespace SenseNetIndexTools
             }
 
             return items;
+        }
+
+        public List<ContentItem> CompareContent(string indexPath, string connectionString, string repositoryPath, bool recursive, int depth)
+        {
+            if (!Program.IsValidLuceneIndex(indexPath))
+            {
+                throw new InvalidOperationException($"The directory does not appear to be a valid Lucene index: {indexPath}");
+            }
+
+            // Get items from database and mark as database items 
+            var dbItems = GetContentItemsFromDatabase(connectionString, repositoryPath, recursive, depth)
+                .Select(i => { i.InDatabase = true; return i; });
+
+            // Get items from index and mark as index items
+            var indexItems = GetContentItemsFromIndex(indexPath, repositoryPath, recursive, depth)
+                .Select(i => { i.InIndex = true; return i; });
+
+            // Combine and group items by path for side-by-side comparison
+            var items = dbItems.Union(indexItems)
+                .GroupBy(i => i.Path.ToLowerInvariant())
+                .Select(g =>
+                {
+                    var dbItem = g.FirstOrDefault(i => i.InDatabase);
+                    var indexItem = g.FirstOrDefault(i => i.InIndex);
+
+                    if (dbItem != null && indexItem != null)
+                    {
+                        // Found in both - merge the index data into the DB item
+                        dbItem.InIndex = true;
+                        dbItem.IndexNodeId = indexItem.IndexNodeId;
+                        dbItem.IndexVersionId = indexItem.IndexVersionId;
+                        return dbItem;
+                    }
+                    
+                    return dbItem ?? indexItem!;
+                });
+
+            // Filter by depth if specified
+            if (depth > 0)
+            {
+                var basePath = repositoryPath.TrimEnd('/');
+                var baseDepth = basePath.Count(c => c == '/');
+                items = items.Where(item => {
+                    var itemDepth = item.Path.Count(c => c == '/') - baseDepth;
+                    return itemDepth <= depth;
+                });
+            }
+
+            return items.ToList();
         }
     }
 }
