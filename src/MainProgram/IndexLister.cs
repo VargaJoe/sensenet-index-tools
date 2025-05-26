@@ -4,6 +4,7 @@ using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Store;
 using IODirectory = System.IO.Directory;
+using BooleanClause = Lucene.Net.Search.BooleanClause;
 
 namespace SenseNetIndexTools
 {
@@ -11,7 +12,7 @@ namespace SenseNetIndexTools
     {
         public static Command Create()
         {
-            var command = new Command("list-items", "List content items from different sources");
+            var command = new Command("list-index", "List content items from the index");
 
             // Add path option for the index
             var indexPathOption = new Option<string>(
@@ -84,24 +85,26 @@ namespace SenseNetIndexTools
                 Console.WriteLine($"Searching for path: {path} (Recursive: {recursive}, Depth: {depth})");
 
                 // Convert path to lowercase for SenseNet indexes which store paths in lowercase
-                var normalizedPath = path.ToLowerInvariant();
-                
-                Query query;
+                var normalizedPath = path.ToLowerInvariant();                Query query;
                 if (!recursive)
                 {
                     // Direct match only - exact path
                     query = new TermQuery(new Term("Path", normalizedPath));
                 }
-                else if (depth == 1)
-                {
-                    // Only direct children - need to filter results later
-                    query = new PrefixQuery(new Term("Path", normalizedPath.TrimEnd('/') + "/"));
-                }
                 else
                 {
-                    // All descendants
-                    query = new PrefixQuery(new Term("Path", normalizedPath.TrimEnd('/') + "/"));
-                }                var collector = TopScoreDocCollector.Create(10000, true);
+                    var boolQuery = new BooleanQuery();
+                    // Root path match
+                    boolQuery.Add(new TermQuery(new Term("Path", normalizedPath)), BooleanClause.Occur.SHOULD);
+
+                    // Child path matches
+                    var childQuery = new PrefixQuery(new Term("Path", normalizedPath.TrimEnd('/') + "/"));
+                    boolQuery.Add(childQuery, BooleanClause.Occur.SHOULD);
+
+                    query = boolQuery;
+                }
+
+                var collector = TopScoreDocCollector.Create(10000, true);
                 searcher.Search(query, collector);
                 var searchHits = collector.TopDocs().ScoreDocs;
 
@@ -131,9 +134,8 @@ namespace SenseNetIndexTools
                     
                     items.Add((id, versionId, docPath, type));
                 }
-                
-                // Sort the items by path
-                items = items.OrderBy(item => item.Path).ToList();
+                  // Sort the items by path (case-insensitive)
+                items = items.OrderBy(item => item.Path, StringComparer.OrdinalIgnoreCase).ToList();
 
                 Console.WriteLine($"\nFound {items.Count} items in index under path {path}:");
                 
