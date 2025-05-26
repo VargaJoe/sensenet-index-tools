@@ -11,6 +11,7 @@ using SenseNet.ContentRepository.Storage;
 using SenseNet.Search;
 using SenseNet.Search.Indexing;
 using SenseNet.Search.Lucene29;
+using System.Text;
 using IOFile = System.IO.File;
 using IODirectory = System.IO.Directory;
 
@@ -18,6 +19,44 @@ namespace SenseNetIndexTools
 {
     public class SubtreeIndexChecker
     {
+        private class ContentItem
+        {
+            public int NodeId { get; set; }
+            public int VersionId { get; set; }
+            public string Path { get; set; } = string.Empty;
+            public string NodeType { get; set; } = string.Empty;
+        }
+
+        private class MismatchedItem
+        {
+            public int NodeId { get; set; }
+            public int VersionId { get; set; }
+            public string Path { get; set; } = string.Empty;
+            public string NodeType { get; set; } = string.Empty;
+            public string Reason { get; set; } = string.Empty;
+
+            public override string ToString()
+            {
+                return $"NodeId: {NodeId}, VersionId: {VersionId}, Path: {Path}, NodeType: {NodeType}, Reason: {Reason}";
+            }
+        }
+
+        private class CheckReport
+        {
+            public DateTime StartTime { get; set; }
+            public DateTime EndTime { get; set; }
+            public string RepositoryPath { get; set; } = string.Empty;
+            public bool Recursive { get; set; }
+            public int DatabaseItemsCount { get; set; }
+            public int IndexDocCount { get; set; }
+            public int MatchedItemsCount { get; set; }
+            public List<MismatchedItem> MismatchedItems { get; set; } = new List<MismatchedItem>();
+            public Dictionary<string, int> ContentTypeStats { get; set; } = new Dictionary<string, int>();
+            public Dictionary<string, int> MismatchesByType { get; set; } = new Dictionary<string, int>();
+            public string Summary { get; set; } = string.Empty;
+            public string DetailedReport { get; set; } = string.Empty;
+        }
+
         public static Command Create()
         {
             var command = new Command("check-subtree", "Check if content items from a database subtree exist in the index");
@@ -122,10 +161,10 @@ namespace SenseNetIndexTools
         }
 
         private static CheckReport PerformSubtreeCheck(
-            string indexPath, 
-            string connectionString, 
+            string indexPath,
+            string connectionString,
             string repositoryPath,
-            bool recursive, 
+            bool recursive,
             bool detailed)
         {
             var report = new CheckReport
@@ -269,7 +308,7 @@ namespace SenseNetIndexTools
             if (recursive)
             {
                 sql = @"
-                    SELECT N.NodeId, V.Id as VersionId, N.Path, NT.Name as NodeTypeName 
+                    SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName 
                     FROM Nodes N
                     JOIN Versions V ON N.NodeId = V.NodeId
                     JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
@@ -279,7 +318,7 @@ namespace SenseNetIndexTools
             else
             {
                 sql = @"
-                    SELECT N.NodeId, V.Id as VersionId, N.Path, NT.Name as NodeTypeName 
+                    SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName 
                     FROM Nodes N
                     JOIN Versions V ON N.NodeId = V.NodeId
                     JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
@@ -318,27 +357,35 @@ namespace SenseNetIndexTools
             return items;
         }
 
-        private static bool CheckItemInIndex(IndexReader reader, int nodeId, int versionId, string path = null)
+        private static bool CheckItemInIndex(IndexReader reader, int nodeId, int versionId, string? path = null)
         {
-            // List of search methods to try
-            var searchMethods = new List<(string Method, Func<bool> Search)>
+            // Create a list of search methods to try
+            var searchMethods = new List<(string Method, Func<bool> Search)>();            // Method 1: Search by Path (skip if path is null)
+            if (!string.IsNullOrEmpty(path))
             {
-                // Method 1: Search by Path
-                ("Path", () => {
+                // Try exact path first
+                searchMethods.Add(("ExactPath", new Func<bool>(() =>
+                {
                     var pathTerm = new Term("Path", path);
                     var pathDocs = reader.TermDocs(pathTerm);
                     return pathDocs.Next();
-                }),
-                
-                // Method 2: Search by VersionId
-                ("VersionId", () => {
-                    var versionTerm = new Term("VersionId", NumericUtils.IntToPrefixCoded(versionId));
-                    var versionDocs = reader.TermDocs(versionTerm);
-                    return versionDocs.Next();
-                }),
+                })));
 
-                // Method 3: Direct scan as last resort for small indexes
-                ("DirectScan", () => {
+                // Then try lowercase path
+                searchMethods.Add(("LowercasePath", new Func<bool>(() =>
+                {
+                    var pathTerm = new Term("Path", path.ToLowerInvariant());
+                    var pathDocs = reader.TermDocs(pathTerm);
+                    return pathDocs.Next();
+                })));
+            }            // Method 2: Search by Version_
+            searchMethods.Add(("Version", new Func<bool>(() =>
+            {
+                var versionTerm = new Term("Version_", NumericUtils.IntToPrefixCoded(versionId));
+                var versionDocs = reader.TermDocs(versionTerm);
+                return versionDocs.Next();
+            })));            // Method 3: Direct scan as last resort for small indexes
+            searchMethods.Add(("DirectScan", new Func<bool>(() => {
                     if (reader.MaxDoc() > 10000) 
                     {
                         return false; // Skip for large indexes
@@ -354,7 +401,7 @@ namespace SenseNetIndexTools
                         var fields = doc.GetFields();
                         foreach (var field in fields)
                         {
-                            if (field.Name == "VersionId" && field.StringValue() == NumericUtils.IntToPrefixCoded(versionId))
+                            if (field.Name() == "VersionId" && field.StringValue() == NumericUtils.IntToPrefixCoded(versionId))
                             {
                                 Console.WriteLine($"Found item in document #{i} by direct scan");
                                 return true;
@@ -362,9 +409,78 @@ namespace SenseNetIndexTools
                         }
                     }
                     return false;
-                })
-            };
-            
+                })));
+              // Add InFolder search strategy
+            if (!string.IsNullOrEmpty(path))
+            {
+                var parentPath = System.IO.Path.GetDirectoryName(path)?.Replace('\\', '/');
+                if (!string.IsNullOrEmpty(parentPath))
+                {
+                    searchMethods.Add(("InFolder", new Func<bool>(() =>
+                    {                        // Try exact case first
+                        var parentPathExact = parentPath;
+                        var nameExact = System.IO.Path.GetFileName(path);
+                        var inFolderTermExact = new Term("InFolder", parentPathExact);
+                        var nameTermExact = new Term("Name", nameExact);
+
+                        var inFolderDocsExact = reader.TermDocs(inFolderTermExact);
+                        while (inFolderDocsExact.Next())
+                        {
+                            var docId = inFolderDocsExact.Doc();
+                            var doc = reader.Document(docId);
+                            var nameField = doc.GetField("Name");
+                            if (nameField != null && nameField.StringValue().Equals(nameExact))
+                            {
+                                Console.WriteLine($"Found item in document #{docId} using InFolder + Name (exact case)");
+                                return true;
+                            }
+                        }
+
+                        // Try lowercase if exact case didn't work
+                        var parentPathLower = parentPath.ToLowerInvariant();
+                        var nameLower = System.IO.Path.GetFileName(path).ToLowerInvariant();
+                        var inFolderTermLower = new Term("InFolder", parentPathLower);
+                        var nameTermLower = new Term("Name", nameLower);
+
+                        var inFolderDocsLower = reader.TermDocs(inFolderTermLower);
+                        while (inFolderDocsLower.Next())
+                        {
+                            var docId = inFolderDocsLower.Doc();
+                            var doc = reader.Document(docId);
+                            var nameField = doc.GetField("Name");
+                            if (nameField != null && nameField.StringValue().ToLowerInvariant().Equals(nameLower))
+                            {
+                                Console.WriteLine($"Found item in document #{docId} using InFolder + Name (case insensitive)");
+                                return true;
+                            }
+                        }
+                        return false;
+                    })));
+                }                // Add InTree search strategy with case sensitivity handling
+                searchMethods.Add(("InTree", new Func<bool>(() =>
+                {
+                    // Try exact case first
+                    var inTreeTermExact = new Term("InTree", path);
+                    var inTreeDocsExact = reader.TermDocs(inTreeTermExact);
+                    if (inTreeDocsExact.Next())
+                    {
+                        Console.WriteLine($"Found item using InTree (exact case)");
+                        return true;
+                    }
+
+                    // Try lowercase if exact didn't work
+                    var inTreeTermLower = new Term("InTree", path.ToLowerInvariant());
+                    var inTreeDocsLower = reader.TermDocs(inTreeTermLower);
+                    if (inTreeDocsLower.Next())
+                    {
+                        Console.WriteLine($"Found item using InTree (case insensitive)");
+                        return true;
+                    }
+
+                    return false;
+                })));
+            }
+
             // Try each search method
             foreach (var (method, search) in searchMethods)
             {
@@ -384,37 +500,6 @@ namespace SenseNetIndexTools
             
             Console.WriteLine($"MISSING: Item not found in index: VersionId={versionId}, Path={path}");
             return false;
-        }        private class ContentItem
-        {
-            public int NodeId { get; set; }
-            public int VersionId { get; set; }
-            public required string Path { get; set; }
-            public required string NodeType { get; set; }
-        }            private class MismatchedItem
-        {
-            public int NodeId { get; set; }
-            public int VersionId { get; set; }
-            public required string Path { get; set; }
-            public required string NodeType { get; set; }
-            public required string Reason { get; set; }
-
-            public override string ToString()
-            {
-                return $"NodeId: {NodeId}, VersionId: {VersionId}, Path: {Path}, NodeType: {NodeType}, Reason: {Reason}";
-            }
-        }private class CheckReport
-        {
-            public DateTime StartTime { get; set; }
-            public DateTime EndTime { get; set; }
-            public required string RepositoryPath { get; set; }
-            public bool Recursive { get; set; }
-            public int DatabaseItemsCount { get; set; }
-            public int IndexDocCount { get; set; }            public int MatchedItemsCount { get; set; }
-            public List<MismatchedItem> MismatchedItems { get; set; } = new List<MismatchedItem>();
-            public Dictionary<string, int> ContentTypeStats { get; set; } = new Dictionary<string, int>();
-            public Dictionary<string, int> MismatchesByType { get; set; } = new Dictionary<string, int>();
-            public required string Summary { get; set; }
-            public required string DetailedReport { get; set; }
         }
     }
 }

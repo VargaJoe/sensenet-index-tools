@@ -2,10 +2,6 @@
 
 This document provides guidance on using the `check-subtree` command from the SenseNet Index Maintenance Suite to verify synchronization between content in the SenseNet database and the Lucene search index.
 
-## Important Update - May 2025
-
-The subtree checker has been significantly improved with a fix for a critical issue that was causing content items to be incorrectly reported as missing from the index. The tool now uses multiple enhanced search strategies and thoroughly validates search results to ensure accurate reporting. For technical details, see [INDEX_CHECKER_FIX.md](INDEX_CHECKER_FIX.md).
-
 ## Quick Start
 
 ### Basic Command

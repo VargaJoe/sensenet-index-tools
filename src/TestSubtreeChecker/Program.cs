@@ -95,9 +95,10 @@ namespace TestSubtreeChecker
                     
                     // Document 5: Uses InTree field
                     var doc5 = new Document();
+                    doc5.Add(new Field("Id", NumericUtils.IntToPrefixCoded(105), Field.Store.YES, Field.Index.NOT_ANALYZED));                    doc5.Add(new Field("Version_", NumericUtils.IntToPrefixCoded(1005), Field.Store.YES, Field.Index.NOT_ANALYZED));
                     doc5.Add(new Field("Id", NumericUtils.IntToPrefixCoded(105), Field.Store.YES, Field.Index.NOT_ANALYZED));
-                    doc5.Add(new Field("Version_", NumericUtils.IntToPrefixCoded(1005), Field.Store.YES, Field.Index.NOT_ANALYZED));
-                    doc5.Add(new Field("InTree", "/root/test", Field.Store.YES, Field.Index.NOT_ANALYZED));
+                    doc5.Add(new Field("Path", "/Root/Test/Document5", Field.Store.YES, Field.Index.NOT_ANALYZED));
+                    doc5.Add(new Field("InTree", "/Root/Test", Field.Store.YES, Field.Index.NOT_ANALYZED));
                     writer.AddDocument(doc5);
                     
                     // Document 6: Not found - for negative testing

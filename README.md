@@ -1,10 +1,6 @@
 # SenseNet Index Maintenance Suite
 
-A comprehensive toolkit for managing and maintaining SenseNet Lucene.NET indexes. This suite includes tools for managing the LastActivityId value in SenseNet indexes, validating index integrity, and checking content synchronization between the database and index.
-
-## Recent Updates
-
-**May 2025**: Fixed a critical issue in the `check-subtree` command that was incorrectly reporting content items as missing from the index. The key fix was updating the field names from "NodeId" to "Id" and "VersionId" to "Version_" to match SenseNet's actual index structure. See [INDEX_CHECKER_FIX.md](INDEX_CHECKER_FIX.md) for details.
+A comprehensive toolkit for managing and maintaining SenseNet Lucene.NET indexes. This suite currently includes tools for managing the LastActivityId value in SenseNet indexes, with plans to expand with more index maintenance capabilities.
 
 ## Repository
 
@@ -30,8 +26,11 @@ dotnet run -- lastactivityid-init --path "<path-to-index>" --id <initial-value>
 # Set a new LastActivityId value with a custom backup location
 dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value> --backup-path "<custom-backup-path>"
 
-# Validate index structure and integrity
-dotnet run -- validate --path "<path-to-index>" --detailed
+# Validate index structure and integrity and save report
+dotnet run -- validate --path "<path-to-index>" --detailed --output "<report-file>"
+
+# List items from index and/or database
+dotnet run -- list-items --index-path "<path-to-index>" --repository-path "/Root/Path" --source "index" --recursive true --depth 1
 
 # Check if database content exists in the index for a subtree
 dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path/To/Check"
@@ -79,21 +78,33 @@ dotnet run -- lastactivityid-init --path "<path-to-index>" --id <initial-value> 
 
 ## Options
 
+### Common Options
 - `--path`: (Required) Path to the Lucene index directory
 - `--id`: (Required for set/init) The LastActivityId value to set
 - `--backup`: (Optional) Create a backup of the index before making changes (default: true)
-- `--backup-path`: (Optional) Custom path for storing backups. If not specified, backups will be stored in an 'IndexBackups' folder at the same level as the index parent folder
+- `--backup-path`: (Optional) Custom path for storing backups. If not specified, backups will be stored in an 'IndexBackups' folder
 
-## Building and Testing
+### List Items Command Options
+- `--index-path`: (Required) Path to the Lucene index directory
+- `--repository-path`: (Required) Path in the content repository to list items from
+- `--source`: (Required) Source to list items from: 'index', 'db', or 'both'
+- `--recursive`: (Optional) Whether to list items recursively (default: true)
+- `--depth`: (Optional) Limit listing to specified depth (1=direct children only, 0=all descendants)
+
+## Building the Project
 
 ```bash
-# Build the project
 dotnet build
+```
 
-# Run the application
+## Running the Application
+
+```bash
 dotnet run -- lastactivityid-get --path "<path-to-index>"
+```
 
 # Run the subtree checker test
+```bash
 dotnet run --project src/TestSubtreeChecker/TestSubtreeChecker.csproj
 ```
 

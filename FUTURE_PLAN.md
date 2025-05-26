@@ -6,15 +6,6 @@ This document outlines potential enhancements and new features for the SenseNet 
 
 This project is maintained at: https://github.com/VargaJoe/sensenet-index-tools
 
-## Recent Accomplishments
-
-### May 2025: Fixed Critical Issue in Subtree Checker
-- Fixed fundamental issue in the `check-subtree` command that was incorrectly reporting content items as missing from the index
-- Implemented thorough document validation instead of relying solely on term matches
-- Added direct index scanning as a fallback for small indexes
-- Enhanced error handling to prevent false negatives
-- Added detailed logging for better diagnostic capabilities
-
 ## Current Functionality
 
 The suite currently supports:
