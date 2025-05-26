@@ -70,6 +70,11 @@ namespace SenseNetIndexTools
                 description: "Recursively list all content items under the specified path",
                 getDefaultValue: () => true);
 
+            var depthOption = new Option<int>(
+                name: "--depth",
+                description: "Limit listing to specified depth (1=direct children only, 0=all descendants)",
+                getDefaultValue: () => 0);
+
             var orderByOption = new Option<string>(
                 name: "--order-by",
                 description: "Order results by: 'path' (default), 'id', 'version', 'type'",
@@ -84,8 +89,10 @@ namespace SenseNetIndexTools
             command.AddOption(connectionStringOption);
             command.AddOption(repositoryPathOption);
             command.AddOption(recursiveOption);
+            command.AddOption(depthOption);
             command.AddOption(orderByOption);
-            command.AddOption(outputOption);            command.SetHandler((string indexPath, string connectionString, string repositoryPath, bool recursive, string orderBy, string? output) =>
+            command.AddOption(outputOption);
+            command.SetHandler((string indexPath, string connectionString, string repositoryPath, bool recursive, int depth, string orderBy, string? output) =>
             {
                 try
                 {
@@ -98,17 +105,16 @@ namespace SenseNetIndexTools
 
                     Console.WriteLine($"Repository path: {repositoryPath}");
                     Console.WriteLine($"Recursive mode: {(recursive ? "Yes" : "No")}");
+                    Console.WriteLine($"Depth limit: {depth}");
 
                     // Get items from database and mark as database items 
-                    var dbItems = GetContentItemsFromDatabase(connectionString, repositoryPath, recursive)
+                    var dbItems = GetContentItemsFromDatabase(connectionString, repositoryPath, recursive, depth)
                         .Select(i => { i.InDatabase = true; return i; });
 
                     // Get items from index
-                    var indexItems = GetContentItemsFromIndex(indexPath, repositoryPath, recursive)
-                        .Select(i => { i.InIndex = true; return i; });
-
-                    // Combine and group items by path for side-by-side display
-                    var groupedItems = dbItems.Union(indexItems)
+                    var indexItems = GetContentItemsFromIndex(indexPath, repositoryPath, recursive, depth)
+                        .Select(i => { i.InIndex = true; return i; });                    // Combine and group items by path for side-by-side display
+                    var items = dbItems.Union(indexItems)
                         .GroupBy(i => i.Path.ToLowerInvariant())
                         .Select(g =>
                         {
@@ -125,9 +131,28 @@ namespace SenseNetIndexTools
                             }
                             
                             return dbItem ?? indexItem!;
-                        })
-                        .OrderBy(i => i.Path)
-                        .ToList();
+                        });
+
+                    // Filter by depth if specified
+                    if (depth > 0)
+                    {
+                        var basePath = repositoryPath.TrimEnd('/');
+                        var baseDepth = basePath.Count(c => c == '/');
+                        items = items.Where(item => {
+                            var itemDepth = item.Path.Count(c => c == '/') - baseDepth;
+                            return itemDepth <= depth;
+                        });
+                    }
+
+                    // Sort items based on order-by option
+                    var groupedItems = orderBy switch
+                    {
+                        "id" => items.OrderBy(i => i.NodeId).ToList(),
+                        "version" => items.OrderBy(i => i.VersionId).ToList(),
+                        "type" => items.OrderBy(i => i.NodeType, StringComparer.OrdinalIgnoreCase)
+                                      .ThenBy(i => i.Path, StringComparer.OrdinalIgnoreCase).ToList(),
+                        _ => items.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase).ToList()
+                    };
 
                     // Display results on console
                     GenerateReport(groupedItems, output);
@@ -138,7 +163,7 @@ namespace SenseNetIndexTools
                     Console.Error.WriteLine(ex.StackTrace);
                     Environment.Exit(1);
                 }
-            }, indexPathOption, connectionStringOption, repositoryPathOption, recursiveOption, orderByOption, outputOption);
+            }, indexPathOption, connectionStringOption, repositoryPathOption, recursiveOption, depthOption, orderByOption, outputOption);
 
             return command;
         }
@@ -168,7 +193,7 @@ namespace SenseNetIndexTools
             sb.AppendLine("| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | Path | Type |");
             sb.AppendLine("|---------|-----------|----------|--------------|-------------|------|------|");
 
-            foreach (var item in items.OrderBy(i => i.Path))
+            foreach (var item in items.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
             {
                 var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
                 var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
@@ -204,7 +229,7 @@ namespace SenseNetIndexTools
             }
         }
 
-        private static List<ContentItem> GetContentItemsFromDatabase(string connectionString, string path, bool recursive)
+        private static List<ContentItem> GetContentItemsFromDatabase(string connectionString, string path, bool recursive, int depth)
         {
             var items = new List<ContentItem>();
             string sanitizedPath = path.Replace("'", "''");
@@ -255,7 +280,7 @@ namespace SenseNetIndexTools
             return items;
         }
 
-        private static List<ContentItem> GetContentItemsFromIndex(string indexPath, string path, bool recursive)
+        private static List<ContentItem> GetContentItemsFromIndex(string indexPath, string path, bool recursive, int depth)
         {
             var items = new List<ContentItem>();
 
@@ -266,8 +291,7 @@ namespace SenseNetIndexTools
                 {
                     // Convert path to lowercase for SenseNet indexes which store paths in lowercase
                     var normalizedPath = path.ToLowerInvariant();
-                    
-                    Query query;
+                      Query query;
                     if (!recursive)
                     {
                         // Direct match only - exact path
@@ -275,8 +299,15 @@ namespace SenseNetIndexTools
                     }
                     else
                     {
-                        // All descendants
-                        query = new PrefixQuery(new Term("Path", normalizedPath.TrimEnd('/') + "/"));
+                        var boolQuery = new BooleanQuery();
+                        // Root path match
+                        boolQuery.Add(new TermQuery(new Term("Path", normalizedPath)), BooleanClause.Occur.SHOULD);
+
+                        // Child path matches
+                        var childQuery = new PrefixQuery(new Term("Path", normalizedPath.TrimEnd('/') + "/"));
+                        boolQuery.Add(childQuery, BooleanClause.Occur.SHOULD);
+
+                        query = boolQuery;
                     }
 
                     var collector = TopScoreDocCollector.Create(10000, true);
