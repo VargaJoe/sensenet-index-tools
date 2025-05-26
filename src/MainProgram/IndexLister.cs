@@ -101,23 +101,36 @@ namespace SenseNetIndexTools
                     var childQuery = new PrefixQuery(new Term("Path", normalizedPath.TrimEnd('/') + "/"));
                     boolQuery.Add(childQuery, BooleanClause.Occur.SHOULD);
 
-                    query = boolQuery;                }
-
-                // Use maxDoc to get all possible results instead of hard-coded limit
-                int maxResults = reader.MaxDoc();
-                var collector = TopScoreDocCollector.Create(maxResults, true);
-                searcher.Search(query, collector);
-                var searchHits = collector.TopDocs().ScoreDocs;
-
-                // Create a list to hold all the items we want to display
+                    query = boolQuery;                }                // Create a list to hold all the items we want to display
                 var items = new List<(string Id, string VersionId, string Path, string Type)>();
                 
                 int pathSegmentCount = normalizedPath.Split('/').Length - 1;
                 
-                foreach (var hitDoc in searchHits)
+                // Implement paging for large indexes
+                const int PageSize = 10000; // Process 10000 documents at a time
+                int totalProcessed = 0;
+                
+                // Create a collector to find all matching documents
+                var initialCollector = TopScoreDocCollector.Create(1000000, true); // Use a large limit
+                searcher.Search(query, initialCollector);
+                var topDocs = initialCollector.TopDocs();
+                int totalHits = topDocs.TotalHits;
+                
+                Console.WriteLine($"Found {totalHits} items in index matching the query...");
+                
+                // Process in batches to avoid memory issues
+                while (totalProcessed < totalHits)
                 {
-                    var doc = searcher.Doc(hitDoc.Doc);
-                    var docPath = doc.Get("Path") ?? "?";
+                    var collector = TopScoreDocCollector.Create(1000000, true); // Use a large limit
+                    searcher.Search(query, collector);
+                    var searchHits = collector.TopDocs(totalProcessed, Math.Min(PageSize, totalHits - totalProcessed)).ScoreDocs;
+                    
+                    if (searchHits.Length == 0) break; // No more results
+                
+                    foreach (var hitDoc in searchHits)
+                    {
+                        var doc = searcher.Doc(hitDoc.Doc);
+                        var docPath = doc.Get("Path") ?? "?";
                     
                     // Skip if we're filtering by depth and this item exceeds our depth
                     if (depth == 1 && recursive)
@@ -132,8 +145,10 @@ namespace SenseNetIndexTools
                     var id = doc.Get("Id") ?? doc.Get("NodeId") ?? "?";
                     var versionId = doc.Get("VersionId") ?? "?";
                     var type = doc.Get("Type") ?? doc.Get("NodeType") ?? "?";
-                    
-                    items.Add((id, versionId, docPath, type));
+                      items.Add((id, versionId, docPath, type));
+                }
+                
+                    totalProcessed += searchHits.Length;
                 }
                   // Sort the items by path (case-insensitive)
                 items = items.OrderBy(item => item.Path, StringComparer.OrdinalIgnoreCase).ToList();

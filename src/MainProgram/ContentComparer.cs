@@ -291,26 +291,38 @@ namespace SenseNetIndexTools
                         var childQuery = new PrefixQuery(new Term("Path", normalizedPath.TrimEnd('/') + "/"));
                         boolQuery.Add(childQuery, BooleanClause.Occur.SHOULD);
 
-                        query = boolQuery;                    }
-
-                    // Use maxDoc to get all possible results instead of hard-coded limit
-                    int maxResults = reader.MaxDoc();
-                    var collector = TopScoreDocCollector.Create(maxResults, true);
-                    searcher.Search(query, collector);
-                    var searchHits = collector.TopDocs().ScoreDocs;
+                        query = boolQuery;                    }                    // Implement paging for large indexes
+                    const int PageSize = 10000; // Process 10000 documents at a time
+                    int totalProcessed = 0;
                     
-                    foreach (var hitDoc in searchHits)
+                    // Create a collector to find all matching documents
+                    var initialCollector = TopScoreDocCollector.Create(1000000, true); // Use a large limit
+                    searcher.Search(query, initialCollector);
+                    var topDocs = initialCollector.TopDocs();
+                    int totalHits = topDocs.TotalHits;
+                    
+                    Console.WriteLine($"Found {totalHits} items in index matching the query...");
+                    
+                    // Process in batches to avoid memory issues
+                    while (totalProcessed < totalHits)
                     {
-                        var doc = searcher.Doc(hitDoc.Doc);
+                        var collector = TopScoreDocCollector.Create(1000000, true); // Use a large limit
+                        searcher.Search(query, collector);
+                        var searchHits = collector.TopDocs(totalProcessed, Math.Min(PageSize, totalHits - totalProcessed)).ScoreDocs;
                         
-                        var nodeId = doc.Get("Id") ?? doc.Get("NodeId") ?? "0";
-                        var versionId = doc.Get("Version_") ?? doc.Get("VersionId") ?? "0";
-                        var docPath = doc.Get("Path") ?? string.Empty;
-                        var type = doc.Get("Type") ?? doc.Get("NodeType") ?? "Unknown";
+                        if (searchHits.Length == 0) break; // No more results
+                        
+                        foreach (var hitDoc in searchHits)
+                        {
+                            var doc = searcher.Doc(hitDoc.Doc);
+                            
+                            var nodeId = doc.Get("Id") ?? doc.Get("NodeId") ?? "0";
+                            var versionId = doc.Get("Version_") ?? doc.Get("VersionId") ?? "0";
+                            var docPath = doc.Get("Path") ?? string.Empty;
+                            var type = doc.Get("Type") ?? doc.Get("NodeType") ?? "Unknown";
 
                         items.Add(new ContentItem
-                        {
-                            NodeId = 0,  // We'll update this if we find a matching DB item
+                        {                            NodeId = 0,  // We'll update this if we find a matching DB item
                             VersionId = 0, // We'll update this if we find a matching DB item
                             Path = docPath,
                             NodeType = type,
@@ -319,6 +331,9 @@ namespace SenseNetIndexTools
                             IndexNodeId = nodeId,
                             IndexVersionId = versionId
                         });
+                        }
+                        
+                        totalProcessed += searchHits.Length;
                     }
                 }
             }
