@@ -1,42 +1,120 @@
 @model SenseNet.IndexTools.Core.Models.LastActivityReport
 
 <div class="card mb-4">
-    <div class="card-header">
-        <h5>LastActivityId Information</h5>
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5>LastActivityId Status</h5>
+        <div>
+            @if (Model?.Success == true)
+            {
+                <span class="badge bg-success">Active</span>
+            }
+            else
+            {
+                <span class="badge bg-danger">Issue Detected</span>
+            }
+        </div>
     </div>
     <div class="card-body">
-        <dl class="row">            
-            <dt class="col-sm-3">LastActivityId</dt>
-            <dd class="col-sm-9">@Model?.LastActivityId</dd>
-
-            @if (Model?.ActivityGaps != null && Model.ActivityGaps.Any())
-            {
-                <dt class="col-sm-3">Activity Gaps</dt>
-                <dd class="col-sm-9">
-                    @string.Join(", ", Model.ActivityGaps)
-                </dd>
-            }
-
-            <dt class="col-sm-3">Index Path</dt>
-            <dd class="col-sm-9">@Model?.IndexPath</dd>
-
-            <dt class="col-sm-3">Timestamp</dt>
-            <dd class="col-sm-9">@Model?.Timestamp</dd>
-
-            @if (Model?.Success != null)
-            {
-                <dt class="col-sm-3">Operation Status</dt>
-                <dd class="col-sm-9">
-                    @if (Model.Success == true)
-                    {
-                        <span class="badge bg-success">Success</span>
-                    }
-                    else
-                    {
-                        <span class="badge bg-danger">Failed</span>
-                    }
-                </dd>
-            }
-        </dl>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h6 class="mb-0">Activity Information</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-4">
+                            <h3 class="display-4 mb-0">@Model?.LastActivityId.ToString("N0")</h3>
+                            <small class="text-muted">Current LastActivityId</small>
+                        </div>
+                        <dl>
+                            <dt>Index Path</dt>
+                            <dd class="text-break">@Model?.IndexPath</dd>
+                            <dt>Last Updated</dt>
+                            <dd>@Model?.Timestamp</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h6 class="mb-0">Activity Gaps Analysis</h6>
+                    </div>
+                    <div class="card-body">
+                        @if (Model?.ActivityGaps != null && Model.ActivityGaps.Any())
+                        {
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                Found @Model.ActivityGaps.Count() gaps in activity sequence
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Gap ID</th>
+                                            <th>Position</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @{
+                                            var gaps = Model.ActivityGaps.OrderBy(g => g);
+                                            var i = 1;
+                                        }
+                                        @foreach (var gap in gaps)
+                                        {
+                                            <tr>
+                                                <td>#@(i++)</td>
+                                                <td>@gap.ToString("N0")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- Activity Timeline -->
+                            <div class="mt-4">
+                                <h6>Activity Timeline</h6>
+                                <div class="position-relative" style="height: 50px;">
+                                    <div class="progress position-relative" style="height: 20px;">
+                                        @{
+                                            var maxId = Math.Max(Model.LastActivityId, gaps.LastOrDefault());
+                                            foreach (var gap in gaps)
+                                            {
+                                                var position = (gap * 100.0 / maxId);
+                                                <div class="position-absolute" style="left: @(position)%; width: 2px; height: 100%; background-color: #dc3545;"
+                                                     data-bs-toggle="tooltip" data-bs-placement="top" title="Gap at @gap.ToString("N0")">
+                                                </div>
+                                            }
+                                            <div class="progress-bar bg-success" role="progressbar" style="width: 100%;"
+                                                 aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+                                            </div>
+                                        }
+                                    </div>
+                                    <div class="position-absolute bottom-0 start-0">0</div>
+                                    <div class="position-absolute bottom-0 end-0">@maxId.ToString("N0")</div>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle me-2"></i>
+                                No activity gaps detected
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
+
+<!-- Active Bootstrap tooltips -->
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        });
+    });
+</script>

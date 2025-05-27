@@ -235,7 +235,7 @@ sn-index-maintenance-suite compare --path <index-path> --connection-string <conn
    - Configurable backup paths
    - Timestamp-based backup naming
 
-#### Validation Options
+### Validation Options
 
 - `--path`: Required. Path to the Lucene index directory
 - `--detailed`: Optional. Performs additional in-depth checks including segments and orphaned files. Default: false

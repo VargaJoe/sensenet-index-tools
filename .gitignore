@@ -82,3 +82,4 @@ IndexBackups
 subtree_check*
 subtree-*.html
 subtree-*.md
+src/SenseNet.IndexTools.Web/Reports*
