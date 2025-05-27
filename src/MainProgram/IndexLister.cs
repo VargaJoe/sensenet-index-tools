@@ -26,13 +26,7 @@ namespace SenseNetIndexTools
                 description: "Path in the content repository to check (e.g., /Root/Sites/Default_Site)");
             repositoryPathOption.IsRequired = true;
 
-            // Add source option
-            var sourceOption = new Option<string>(
-                name: "--source",
-                description: "Source to list items from: 'index', 'db', or 'both'") {
-                IsRequired = true
-            };
-            sourceOption.FromAmong("index", "db", "both");            // Add recursive option
+            // Add recursive option
             var recursiveOption = new Option<bool>(
                 name: "--recursive",
                 description: "Recursively list all content items under the specified path",
@@ -46,13 +40,11 @@ namespace SenseNetIndexTools
 
             command.AddOption(indexPathOption);
             command.AddOption(repositoryPathOption);
-            command.AddOption(sourceOption);
             command.AddOption(recursiveOption);
             command.AddOption(depthOption);            command.SetHandler((context) =>
             {
                 var indexPath = context.ParseResult.GetValueForOption(indexPathOption) ?? string.Empty;
                 var repositoryPath = context.ParseResult.GetValueForOption(repositoryPathOption) ?? string.Empty;
-                var source = context.ParseResult.GetValueForOption(sourceOption) ?? "index";
                 var recursive = context.ParseResult.GetValueForOption(recursiveOption);
                 var depth = context.ParseResult.GetValueForOption(depthOption);
 
@@ -62,11 +54,7 @@ namespace SenseNetIndexTools
                     return Task.CompletedTask;
                 }
 
-                if (source == "index" || source == "both")
-                {
-                    return ListIndexItems(indexPath, repositoryPath, recursive, depth);
-                }
-                return Task.CompletedTask;
+                return ListIndexItems(indexPath, repositoryPath, recursive, depth);
             });
 
             return command;

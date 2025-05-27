@@ -23,6 +23,11 @@ dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value>
 # Initialize LastActivityId in a non-SenseNet index
 dotnet run -- lastactivityid-init --path "<path-to-index>" --id <initial-value>
 
+# Working with live production indexes
+dotnet run -- lastactivityid-get --path "<path-to-index>" --live-index true
+dotnet run -- list-index --index-path "<path-to-index>" --repository-path "/Root" --live-index true
+dotnet run -- validate --path "<path-to-index>" --live-index true
+
 # Set a new LastActivityId value with a custom backup location
 dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value> --backup-path "<custom-backup-path>"
 
@@ -119,3 +124,14 @@ The output will be in the `bin/Release/net8.0/publish` directory.
 ## Repository
 
 This tool is available on GitHub: [VargaJoe/sensenet-index-tools](https://github.com/VargaJoe/sensenet-index-tools)
+
+## New Features
+
+### Live Index Flag
+Added the `--live-index` flag for all operations to ensure safety when working with production indexes. When this flag is set, write operations will be blocked to prevent accidental modifications to live indexes.
+
+### Optional Backups for Read-Only Operations
+Backup creation is now disabled by default for read-only operations and enabled by default for write operations. You can still request backups for any operation with `--backup true`.
+
+### Enhanced Paging
+Index operations now properly support large indexes by implementing efficient paging, removing the previous 10,000 document limit.

@@ -78,12 +78,12 @@ namespace SenseNetIndexTools
                     
                     if (items.Count > 0)
                     {
-                        Console.WriteLine("NodeID\tVersionId\tPath\tNodeType");
+                        Console.WriteLine("NodeId\tVersionId\tPath\tNodeType");
                         Console.WriteLine(new string('-', 80));
 
                         foreach (var item in items)
                         {
-                            Console.WriteLine(item.ToString());
+                            Console.WriteLine($"{item.NodeId}\t{item.VersionId}\t{item.Path}\t{item.NodeType}");
                         }
                     }
                 }

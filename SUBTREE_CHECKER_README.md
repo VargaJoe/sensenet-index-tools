@@ -2,6 +2,10 @@
 
 This document provides guidance on using the `check-subtree` command from the SenseNet Index Maintenance Suite to verify synchronization between content in the SenseNet database and the Lucene search index.
 
+When using the `check-subtree` command, you'll get output in two forms:
+1. Console output - Always displayed, showing basic statistics and summary information
+2. File output - Optional detailed report, controlled by `--output` and `--report-format` flags
+
 ## Quick Start
 
 ### Basic Command
@@ -32,38 +36,109 @@ For convenience, you can use the included PowerShell script:
 | `--output` | Path to save the check report to a file |
 | `--report-format` | Format of the report: 'default', 'detailed', 'tree', or 'full' (default: 'default') |
 
-## Report Formats
+## Output and Report Formats
 
-The tool supports different report formats through the `--report-format` option:
+The tool provides two types of output:
 
-### 1. Default Format (--report-format default)
-- Basic summary statistics
-- Overall counts and matching percentages
-- Quick overview of mismatches by content type
+### Console Output (Always Shown)
+Console output is always displayed, regardless of other options, and includes:
+- Basic operation details (paths, options used)
+- Summary statistics (totals, matches, mismatches)
+- Quick overview of results:
+  ```
+  Subtree Check Summary:
+  Items in Database: 150
+  Items in Index: 148
+  Matched Items: 148
+  Mismatched Items: 2
 
-### 2. Detailed Format (--report-format detailed)
-- Everything in default format
-- Content type distribution with match rates
-- Detailed breakdown of mismatches by content type
-- Performance metrics and timing information
+  Mismatch Summary by Type: (shown if mismatches exist)
+  Document: 1 mismatches
+  Folder: 1 mismatches
+  ```
 
-### 3. Tree Format (--report-format tree)
-- Everything in detailed format
-- Hierarchical view of content structure
-- Clear visualization of where mismatches occur in the content tree
+### File Output (Optional)
+To get detailed reports saved to a file, you must use **both**:
+1. `--output` flag to specify the output file path
+2. `--report-format` flag to specify the level of detail
 
-### 4. Full Format (--report-format full)
-- Everything in detailed format
-- Complete item-by-item comparison
-- All matches and mismatches listed
-- Comprehensive content type analysis
-- All available metadata and statistics
+The content of the file will vary based on the chosen report format:
 
-The report provides insights such as:
-- Content types with high mismatch rates (indicating possible indexing configuration issues)
-- Version state analysis (published vs. draft versions missing from the index)
-- Path patterns where content is consistently missing
-- Match rates for each content type
+#### 1. Default Format (--report-format default)
+Basic report with summary information:
+```markdown
+# Subtree Index Check Report
+
+## Check Information
+- Repository Path: /Root/Content
+- Recursive: true
+- Start Time: 2023-11-15 10:30:15
+- End Time: 2023-11-15 10:30:18
+- Duration: 3.25 seconds
+
+## Summary
+- Items in Database: 150
+- Items in Index: 148
+- Matched Items: 148
+- Mismatched Items: 2
+```
+
+#### 2. Detailed Format (--report-format detailed)
+Everything in default format plus content type analysis:
+```markdown
+## Content Type Statistics
+| Type | Total Items | Mismatches | Match Rate |
+|------|-------------|------------|------------|
+| Document | 75 | 1 | 98.7% |
+| Folder | 45 | 1 | 97.8% |
+| Image | 30 | 0 | 100.0% |
+
+## Mismatches by Content Type
+### Documents
+| NodeId | Path | Content Type |
+|--------|------|-------------|
+| 12345 | /Root/Content/MyDoc.docx | Document |
+
+### Folders
+| NodeId | Path | Content Type |
+|--------|------|-------------|
+| 12346 | /Root/Content/MyFolder | Folder |
+```
+
+#### 3. Tree Format (--report-format tree)
+Adds hierarchical content structure to detailed format:
+```markdown
+## Content Tree
+/Root
+└── Content/
+    ├── Folder1/ ✓
+    │   ├── Document1.docx ✓
+    │   └── Image1.jpg ✓
+    └── Folder2/ ✗ (missing from index)
+        └── Document2.docx ✗ (missing from index)
+```
+
+#### 4. Full Format (--report-format full)
+Most comprehensive report, includes everything in detailed format plus:
+```markdown
+## Complete Item List
+| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | Path | Type |
+|--------|-----------|----------|--------------|-------------|------|------|
+| ✓ | 12345 | 1 | 12345 | 1 | /Root/Content/Doc1.docx | Document |
+| ✗ | 12346 | 1 | - | - | /Root/Content/Doc2.docx | Document |
+| ✓ | 12347 | 2 | 12347 | 2 | /Root/Content/Image1.jpg | Image |
+```
+
+### Important Notes About Report Outputs
+1. Console output is always shown and cannot be disabled
+2. File output requires **both** flags:
+   - `--output` to specify where to save the report
+   - `--report-format` to specify the level of detail
+3. Reports provide insights into:
+   - Content types with high mismatch rates
+   - Version state analysis (published vs. draft)
+   - Path patterns where content is missing
+   - Match rates by content type
 
 ## Common Scenarios
 

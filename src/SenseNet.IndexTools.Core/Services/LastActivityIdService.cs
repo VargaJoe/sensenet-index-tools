@@ -35,6 +35,10 @@ namespace SenseNet.IndexTools.Core.Services
         /// <summary>
         /// Gets the current LastActivityId from a SenseNet index
         /// </summary>
+        /// <remarks>
+        /// This is a read-only operation that is safe to use on live indexes.
+        /// It will never modify the index or acquire write locks.
+        /// </remarks>
         /// <param name="indexPath">Path to the Lucene index directory</param>
         /// <returns>LastActivityId and any activity gaps found</returns>
         public async Task<(long LastActivityId, IEnumerable<long>? Gaps)> GetLastActivityIdAsync(string indexPath)
@@ -108,13 +112,24 @@ namespace SenseNet.IndexTools.Core.Services
         }        /// <summary>
         /// Sets the LastActivityId in a SenseNet index
         /// </summary>
+        /// <remarks>
+        /// This operation modifies the index and should not be used on live indexes.
+        /// Use with --offline flag to confirm the index is not in use.
+        /// </remarks>
         /// <param name="indexPath">Path to the Lucene index directory</param>
         /// <param name="newId">The new LastActivityId value to set</param>
         /// <param name="createBackup">Whether to create a backup before modification</param>
         /// <param name="backupPath">Optional custom backup path</param>
+        /// <param name="allowLiveIndexModification">Set to true only if you are certain the index is not in use</param>
         /// <returns>True if successful</returns>
-        public async Task<bool> SetLastActivityIdAsync(string indexPath, long newId, bool createBackup = true, string? backupPath = null)
+        public async Task<bool> SetLastActivityIdAsync(string indexPath, long newId, bool createBackup = true, string? backupPath = null, bool allowLiveIndexModification = false)
         {
+            if (!allowLiveIndexModification)
+            {
+                _logger.LogError("Attempted to modify index without --offline flag. This operation is not allowed on potentially live indexes.");
+                throw new InvalidOperationException("Cannot modify index without explicit --offline flag. This protects live indexes from accidental modification.");
+            }
+
             _logger.LogInformation("Setting LastActivityId to {NewId} in index at {Path}", newId, indexPath);
 
             // Verify index

@@ -32,13 +32,11 @@ namespace SenseNetIndexTools
             // Option for output file
             var outputOption = new Option<string?>(
                 name: "--output",
-                description: "Path to save the validation report to a file");
-
-            // Option for backup
+                description: "Path to save the validation report to a file");            // Option for backup
             var backupOption = new Option<bool>(
                 name: "--backup",
-                description: "Create a backup of the index before validation",
-                getDefaultValue: () => true);
+                description: "Create a backup of the index (optional, since validation is read-only)",
+                getDefaultValue: () => false);
 
             // Option for backup path
             var backupPathOption = new Option<string?>(
