@@ -1,22 +1,12 @@
 using System.CommandLine;
 using System.Data.SqlClient;
 
+using SenseNet.IndexTools.Core.Models;
+
 namespace SenseNetIndexTools
 {
     public class DatabaseLister
     {
-        private class ContentItem
-        {
-            public int NodeId { get; set; }
-            public int VersionId { get; set; }
-            public string Path { get; set; } = string.Empty;
-            public string NodeType { get; set; } = string.Empty;
-
-            public override string ToString()
-            {
-                return $"{NodeId}\t{VersionId}\t{Path}\t{NodeType}";
-            }
-        }
 
         public static Command Create()
         {

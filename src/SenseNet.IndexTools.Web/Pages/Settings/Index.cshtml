@@ -1,0 +1,172 @@
+@page
+@model SenseNet.IndexTools.Web.Pages.Settings.IndexModel
+@{
+    ViewData["Title"] = "Settings";
+}
+
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>Settings</h1>
+            <p class="lead">Configure application settings.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="row mb-4">
+            <div class="col">
+                <div class="alert @Model.StatusClass" role="alert">
+                    @Model.StatusMessage
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Index Paths</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" asp-page-handler="AddIndexPath">
+                        <div class="mb-3">
+                            <label for="indexPathName" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="indexPathName" name="name" required placeholder="e.g., Production Index">
+                        </div>
+                        <div class="mb-3">
+                            <label for="indexPath" class="form-label">Path</label>
+                            <input type="text" class="form-control" id="indexPath" name="path" required placeholder="D:\path\to\index">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Index Path</button>
+                    </form>
+
+                    <hr />
+
+                    @if (Model.AppSettings.DefaultIndexPaths.Any())
+                    {
+                        <div class="table-responsive mt-4">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Path</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (int i = 0; i < Model.AppSettings.DefaultIndexPaths.Count; i++)
+                                    {
+                                        var path = Model.AppSettings.DefaultIndexPaths[i];
+                                        <tr>
+                                            <td>@path.Name</td>
+                                            <td>@path.Path</td>
+                                            <td>
+                                                <form method="post" asp-page-handler="DeleteIndexPath" class="d-inline">
+                                                    <input type="hidden" name="index" value="@i" />
+                                                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-info mt-4">
+                            No index paths configured.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Database Connections</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" asp-page-handler="AddDatabaseConnection">
+                        <div class="mb-3">
+                            <label for="dbConnectionName" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="dbConnectionName" name="name" required placeholder="e.g., Production Database">
+                        </div>
+                        <div class="mb-3">
+                            <label for="connectionString" class="form-label">Connection String</label>
+                            <input type="text" class="form-control" id="connectionString" name="connectionString" required 
+                                   placeholder="Data Source=server;Initial Catalog=sensenet;Integrated Security=True">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Database Connection</button>
+                    </form>
+
+                    <hr />
+
+                    @if (Model.AppSettings.DefaultDatabaseConnections.Any())
+                    {
+                        <div class="table-responsive mt-4">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Connection String</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (int i = 0; i < Model.AppSettings.DefaultDatabaseConnections.Count; i++)
+                                    {
+                                        var conn = Model.AppSettings.DefaultDatabaseConnections[i];
+                                        <tr>
+                                            <td>@conn.Name</td>
+                                            <td>@(conn.ConnectionString.Length > 30 ? conn.ConnectionString.Substring(0, 30) + "..." : conn.ConnectionString)</td>
+                                            <td>
+                                                <form method="post" asp-page-handler="DeleteDatabaseConnection" class="d-inline">
+                                                    <input type="hidden" name="index" value="@i" />
+                                                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-info mt-4">
+                            No database connections configured.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Backup Settings</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" asp-page-handler="UpdateBackupSettings">
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="createBackupsByDefault" name="createBackupsByDefault" 
+                                   @(Model.AppSettings.BackupSettings.CreateBackupsByDefault ? "checked" : "")>
+                            <label class="form-check-label" for="createBackupsByDefault">Create backups by default</label>
+                        </div>
+                        <div class="mb-3">
+                            <label for="defaultBackupPath" class="form-label">Default Backup Path</label>
+                            <input type="text" class="form-control" id="defaultBackupPath" name="defaultBackupPath" 
+                                   value="@Model.AppSettings.BackupSettings.DefaultBackupPath" 
+                                   placeholder="Leave empty for default location">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Update Backup Settings</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

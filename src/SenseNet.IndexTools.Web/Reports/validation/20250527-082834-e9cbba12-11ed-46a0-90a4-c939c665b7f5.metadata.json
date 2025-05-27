@@ -1,0 +1,13 @@
+{
+  "Id": "e9cbba12-11ed-46a0-90a4-c939c665b7f5",
+  "ReportType": "validation",
+  "Title": "Validation - d:\\dev\\gittfs\\Keler2024\\src\\KelerSearchService\\KelerSearchService\\App_Data\\LocalIndex\\20250401150343\\",
+  "CreatedAt": "2025-05-27T08:28:34.7386513+02:00",
+  "FilePath": "Reports\\validation\\20250527-082834-e9cbba12-11ed-46a0-90a4-c939c665b7f5.json",
+  "Parameters": {
+    "IndexPath": "d:\\dev\\gittfs\\Keler2024\\src\\KelerSearchService\\KelerSearchService\\App_Data\\LocalIndex\\20250401150343\\",
+    "Detailed": "True",
+    "SampleSize": "100",
+    "CreateBackup": "true"
+  }
+}

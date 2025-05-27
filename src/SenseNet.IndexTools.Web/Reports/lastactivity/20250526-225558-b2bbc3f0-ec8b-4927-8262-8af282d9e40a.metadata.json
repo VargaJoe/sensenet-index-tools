@@ -1,0 +1,12 @@
+{
+  "Id": "b2bbc3f0-ec8b-4927-8262-8af282d9e40a",
+  "ReportType": "lastactivity",
+  "Title": "LastActivityId - Set - d:\\dev\\gittfs\\Keler2024\\src\\KelerSearchService\\KelerSearchService\\App_Data\\LocalIndex\\20250401150343\\",
+  "CreatedAt": "2025-05-26T22:55:58.2031167+02:00",
+  "FilePath": "Reports\\lastactivity\\20250526-225558-b2bbc3f0-ec8b-4927-8262-8af282d9e40a.json",
+  "Parameters": {
+    "IndexPath": "d:\\dev\\gittfs\\Keler2024\\src\\KelerSearchService\\KelerSearchService\\App_Data\\LocalIndex\\20250401150343\\",
+    "NewId": "10",
+    "CreateBackup": "False"
+  }
+}

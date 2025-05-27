@@ -1,0 +1,18 @@
+{
+  "IsValid": true,
+  "Summary": "## Index Validation Summary\r\n\r\n- **Path**: d:\\dev\\gittfs\\Keler2024\\src\\KelerSearchService\\KelerSearchService\\App_Data\\LocalIndex\\20250401150343\\\r\n- **Time**: 2025. 05. 26. 22:46:10\r\n- **Documents**: 163\r\n- **Fields**: 3\r\n\r\n### Warnings\r\n- LastActivityId field not found in the index\r\n",
+  "DetailedReport": "## Index Validation Summary\r\n\r\n- **Path**: d:\\dev\\gittfs\\Keler2024\\src\\KelerSearchService\\KelerSearchService\\App_Data\\LocalIndex\\20250401150343\\\r\n- **Time**: 2025. 05. 26. 22:46:10\r\n- **Documents**: 163\r\n- **Fields**: 3\r\n\r\n### Warnings\r\n- LastActivityId field not found in the index\r\n\r\n### Field Statistics\r\n\r\n| Field | Document Count |\r\n|-------|---------------|\r\n| NodeId | 1\u00A0000 |\r\n| NodePath | 1\u00A0000 |\r\n| Version | 1\u00A0000 |\r\n",
+  "ValidationTime": "2025-05-26T22:46:10.1174094+02:00",
+  "IndexPath": "d:\\dev\\gittfs\\Keler2024\\src\\KelerSearchService\\KelerSearchService\\App_Data\\LocalIndex\\20250401150343\\",
+  "DetailedValidation": true,
+  "DocumentCount": 163,
+  "FieldStats": {
+    "NodeId": 1000,
+    "NodePath": 1000,
+    "Version": 1000
+  },
+  "Warnings": [
+    "LastActivityId field not found in the index"
+  ],
+  "Errors": []
+}

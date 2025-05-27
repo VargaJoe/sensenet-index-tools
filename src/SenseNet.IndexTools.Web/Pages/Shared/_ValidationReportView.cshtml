@@ -1,0 +1,73 @@
+@model SenseNet.IndexTools.Core.Models.ValidationReport
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>Validation Summary</h5>
+    </div>
+    <div class="card-body">
+        <dl class="row">
+            <dt class="col-sm-3">Status</dt>
+            <dd class="col-sm-9">
+                @if (!Model?.Results.Any(r => r.Severity == SenseNet.IndexTools.Core.Models.ValidationSeverity.Error) ?? false)
+                {
+                    <span class="badge bg-success">Valid</span>
+                }
+                else
+                {
+                    <span class="badge bg-danger">Invalid</span>
+                }
+            </dd>
+
+            <dt class="col-sm-3">Index Path</dt>
+            <dd class="col-sm-9">@Model?.IndexPath</dd>
+
+            <dt class="col-sm-3">Validation Time</dt>
+            <dd class="col-sm-9">@Model?.StartTime</dd>
+
+            <dt class="col-sm-3">Validation Results</dt>
+            <dd class="col-sm-9">
+                <span class="me-3">Errors: <span class="badge bg-danger">@Model?.ErrorCount</span></span>
+                <span class="me-3">Warnings: <span class="badge bg-warning text-dark">@Model?.WarningCount</span></span>
+                <span>Info: <span class="badge bg-info">@Model?.InfoCount</span></span>
+            </dd>
+
+            <dt class="col-sm-3">Detailed Validation</dt>
+            <dd class="col-sm-9">@(Model?.DetailedValidation == true ? "Yes" : "No")</dd>
+        </dl>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>Validation Results</h5>
+    </div>
+    <div class="card-body">
+        @if (Model?.Results != null && Model.Results.Any())
+        {
+            foreach (var result in Model.Results.OrderByDescending(r => r.Severity))
+            {
+                var bgClass = result.Severity switch
+                {
+                    SenseNet.IndexTools.Core.Models.ValidationSeverity.Error => "bg-danger",
+                    SenseNet.IndexTools.Core.Models.ValidationSeverity.Warning => "bg-warning",
+                    _ => "bg-info"
+                };
+
+                <div class="alert @bgClass bg-opacity-10 mb-3">
+                    <div class="d-flex align-items-center">
+                        <span class="badge @bgClass me-2">@result.Severity</span>
+                        <strong>@result.Message</strong>
+                    </div>
+                    @if (!string.IsNullOrEmpty(result.Details))
+                    {
+                        <div class="mt-2 ms-4 small">@result.Details</div>
+                    }
+                </div>
+            }
+        }
+        else
+        {
+            <div class="alert alert-info">No validation results available.</div>
+        }
+    </div>
+</div>

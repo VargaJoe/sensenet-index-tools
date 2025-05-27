@@ -1,0 +1,152 @@
+@page
+@model SenseNet.IndexTools.Web.Pages.Operations.ValidateModel
+@{
+    ViewData["Title"] = "Validate Index";
+}
+
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>Index Validation</h1>
+            <p class="lead">Validate the structure and integrity of a SenseNet Lucene index.</p>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Validation Settings</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        <div class="mb-3">
+                            <label for="indexPath" class="form-label">Index Path</label>
+                            <select class="form-select" id="indexPath" name="indexPath" required>
+                                <option value="">Select an index path...</option>
+                                @foreach (var path in Model.IndexPaths)
+                                {
+                                    <option value="@path.Path">@path.Name (@path.Path)</option>
+                                }
+                            </select>
+                            <div class="form-text">Or enter a custom path:</div>
+                            <input type="text" class="form-control mt-2" id="customIndexPath" name="customIndexPath" placeholder="D:\path\to\index">
+                        </div>
+
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="detailed" name="detailed" checked>
+                            <label class="form-check-label" for="detailed">Perform detailed validation</label>
+                            <div class="form-text">Includes comprehensive checks of document contents and field statistics</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="sampleSize" class="form-label">Sample Size</label>
+                            <input type="number" class="form-control" id="sampleSize" name="sampleSize" value="100" min="0">
+                            <div class="form-text">Number of documents to sample (0 for all documents)</div>
+                        </div>
+
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="createBackup" name="createBackup" checked>
+                            <label class="form-check-label" for="createBackup">Create backup before validation</label>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="backupPath" class="form-label">Backup Path (Optional)</label>
+                            <input type="text" class="form-control" id="backupPath" name="backupPath" 
+                                   placeholder="Leave empty for default location">
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">Validate Index</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (Model.ShowResult)
+    {
+        <div class="row">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Validation Result</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert @Model.ResultClass" role="alert">
+                            @Model.ResultMessage
+                        </div>
+
+                        @if (Model.ValidationResult != null)
+                        {
+                            <div class="mt-4">
+                                <h6>Summary</h6>
+                                <dl class="row">
+                                    <dt class="col-sm-3">Status</dt>
+                                    <dd class="col-sm-9">
+                                        @if (Model.ValidationResult.IsValid)
+                                        {
+                                            <span class="badge bg-success">Valid</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">Invalid</span>
+                                        }
+                                    </dd>
+
+                                    <dt class="col-sm-3">Documents</dt>
+                                    <dd class="col-sm-9">@Model.ValidationResult.DocumentCount</dd>
+
+                                    <dt class="col-sm-3">Fields</dt>
+                                    <dd class="col-sm-9">@Model.ValidationResult.FieldStats.Count</dd>
+                                </dl>
+
+                                @if (Model.ValidationResult.Errors.Any())
+                                {
+                                    <h6 class="mt-3">Errors</h6>
+                                    <ul class="list-group">
+                                        @foreach (var error in Model.ValidationResult.Errors)
+                                        {
+                                            <li class="list-group-item list-group-item-danger">@error</li>
+                                        }
+                                    </ul>
+                                }
+
+                                @if (Model.ValidationResult.Warnings.Any())
+                                {
+                                    <h6 class="mt-3">Warnings</h6>
+                                    <ul class="list-group">
+                                        @foreach (var warning in Model.ValidationResult.Warnings)
+                                        {
+                                            <li class="list-group-item list-group-item-warning">@warning</li>
+                                        }
+                                    </ul>
+                                }
+
+                                <div class="mt-3">
+                                    <a asp-page="/Reports/ViewReport" asp-route-type="validation" asp-route-id="@Model.ReportId" class="btn btn-primary">
+                                        View Full Report
+                                    </a>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        // Make the custom path field override the dropdown selection
+        document.getElementById('customIndexPath').addEventListener('input', function() {
+            const dropdown = document.getElementById('indexPath');
+            if (this.value) {
+                dropdown.value = '';
+                dropdown.disabled = true;
+            } else {
+                dropdown.disabled = false;
+            }
+        });
+    </script>
+}

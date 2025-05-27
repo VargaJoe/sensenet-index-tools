@@ -1,26 +1,22 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-    <RootNamespace>SenseNet.IndexMaintenanceSuite</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyName>sn-index-maintenance-suite</AssemblyName>
-    <Title>SenseNet Index Maintenance Suite</Title>
+    <RootNamespace>SenseNet.IndexTools.Core</RootNamespace>
     <Authors>vargajoe</Authors>
-    <Description>A comprehensive toolkit for managing and maintaining SenseNet Lucene.NET indexes</Description>
+    <Description>Core library for SenseNet Index Maintenance Suite</Description>
     <PackageProjectUrl>https://github.com/vargajoe/sensenet-index-tools</PackageProjectUrl>
     <RepositoryUrl>https://github.com/vargajoe/sensenet-index-tools</RepositoryUrl>
     <PackageTags>sensenet;lucene;index;search;maintenance</PackageTags>
-  </PropertyGroup>  <ItemGroup>
-    <ProjectReference Include="..\SenseNet.IndexTools.Core\SenseNet.IndexTools.Core.csproj" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
     <PackageReference Include="SenseNet.Search.Lucene29" Version="7.5.1" />
     <PackageReference Include="SenseNet.Search.Lucene29.Local" Version="7.5.1" />
     <PackageReference Include="SenseNet.ContentRepository" Version="7.8.1" />
     <PackageReference Include="SenseNet.Search.Lucene29.Common" Version="7.5.1" />
-    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
     <PackageReference Include="System.Data.SqlClient" Version="4.8.6" />
   </ItemGroup>
 

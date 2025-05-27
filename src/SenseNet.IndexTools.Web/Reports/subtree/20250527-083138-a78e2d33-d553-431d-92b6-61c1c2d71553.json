@@ -1,0 +1,29 @@
+{
+  "StartTime": "2025-05-27T08:31:37.9293516+02:00",
+  "EndTime": "2025-05-27T08:31:38.1506059+02:00",
+  "RepositoryPath": "/Root/Content",
+  "Recursive": true,
+  "DatabaseItemsCount": 1,
+  "IndexDocCount": 1,
+  "MatchedItemsCount": 1,
+  "MismatchedItems": [],
+  "MatchedItems": [
+    {
+      "NodeId": 1,
+      "VersionId": 1,
+      "IndexNodeId": "1",
+      "IndexVersionId": "1",
+      "Path": "/Root/Example/Item1",
+      "NodeType": "File",
+      "InDatabase": true,
+      "InIndex": true,
+      "Status": ""
+    }
+  ],
+  "ContentTypeStats": {
+    "File": 1
+  },
+  "MismatchesByType": {},
+  "Summary": "## Subtree Check Report\r\n\r\n- **Repository Path**: /Root/Content\r\n- **Start Time**: 2025. 05. 27. 8:31:37\r\n- **Duration**: -63883931497,93 seconds\r\n- **Recursive**: True\r\n\r\n### Summary\r\n\r\n- **Database Items**: 1\r\n- **Index Documents**: 1\r\n- **Matched Items**: 1\r\n- **Mismatched Items**: 0\r\n",
+  "DetailedReport": "## Subtree Check Report\r\n\r\n- **Repository Path**: /Root/Content\r\n- **Start Time**: 2025. 05. 27. 8:31:37\r\n- **Duration**: -63883931497,93 seconds\r\n- **Recursive**: True\r\n\r\n### Summary\r\n\r\n- **Database Items**: 1\r\n- **Index Documents**: 1\r\n- **Matched Items**: 1\r\n- **Mismatched Items**: 0\r\n"
+}

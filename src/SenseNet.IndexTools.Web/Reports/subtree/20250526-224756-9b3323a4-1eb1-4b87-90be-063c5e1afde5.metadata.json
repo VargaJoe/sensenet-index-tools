@@ -1,0 +1,14 @@
+{
+  "Id": "9b3323a4-1eb1-4b87-90be-063c5e1afde5",
+  "ReportType": "subtree",
+  "Title": "Subtree Check - /Root/System",
+  "CreatedAt": "2025-05-26T22:47:56.0121143+02:00",
+  "FilePath": "Reports\\subtree\\20250526-224756-9b3323a4-1eb1-4b87-90be-063c5e1afde5.json",
+  "Parameters": {
+    "IndexPath": "d:\\dev\\gittfs\\Keler2024\\src\\KelerSearchService\\KelerSearchService\\App_Data\\LocalIndex\\20250401150343\\",
+    "RepositoryPath": "/Root/System",
+    "Recursive": "True",
+    "Depth": "0",
+    "Detailed": "True"
+  }
+}

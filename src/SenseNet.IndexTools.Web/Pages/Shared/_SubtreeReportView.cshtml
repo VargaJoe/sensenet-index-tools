@@ -1,0 +1,181 @@
+@model SenseNet.IndexTools.Core.Models.SubtreeReport
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>Subtree Check Summary</h5>
+    </div>
+    <div class="card-body">
+        <dl class="row">
+            <dt class="col-sm-3">Repository Path</dt>
+            <dd class="col-sm-9">@Model.RepositoryPath</dd>
+
+            <dt class="col-sm-3">Recursive</dt>
+            <dd class="col-sm-9">@(Model.Recursive ? "Yes" : "No")</dd>
+
+            @* Depth property may not exist, so check for it *@
+            @if ((Model as dynamic)?.Depth > 0)
+            {
+                <dt class="col-sm-3">Depth</dt>
+                <dd class="col-sm-9">@(Model as dynamic).Depth</dd>
+            }
+
+            <dt class="col-sm-3">Start Time</dt>
+            <dd class="col-sm-9">@Model.StartTime</dd>
+
+            <dt class="col-sm-3">End Time</dt>
+            <dd class="col-sm-9">@Model.EndTime</dd>
+
+            <dt class="col-sm-3">Database Items</dt>
+            <dd class="col-sm-9">@Model.DatabaseItemsCount</dd>
+
+            <dt class="col-sm-3">Index Documents</dt>
+            <dd class="col-sm-9">@Model.IndexDocCount</dd>
+
+            <dt class="col-sm-3">Matched Items</dt>
+            <dd class="col-sm-9">@Model.MatchedItemsCount</dd>
+
+            <dt class="col-sm-3">Mismatched Items</dt>
+            <dd class="col-sm-9">@Model.MismatchedItems.Count</dd>
+        </dl>
+
+        @if (Model.MismatchedItems.Any())
+        {
+            <h6>Mismatched Items</h6>
+            <table class="table table-sm table-bordered">
+                <thead>
+                    <tr>
+                        <th>Path</th>
+                        <th>NodeType</th>
+                        <th>In Database</th>
+                        <th>In Index</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var item in Model.MismatchedItems)
+                {
+                    <tr>
+                        <td>@item.Path</td>
+                        <td>@item.NodeType</td>
+                        <td>@item.InDatabase</td>
+                        <td>@item.InIndex</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@if (Model.MismatchesByType != null && Model.MismatchesByType.Count > 0)
+{
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>Mismatches by Content Type</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Content Type</th>
+                            <th>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var mismatch in Model.MismatchesByType)
+                        {
+                            <tr>
+                                <td>@mismatch.Key</td>
+                                <td>@mismatch.Value</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@if (Model.ContentTypeStats != null && Model.ContentTypeStats.Count > 0)
+{
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>Content Type Statistics</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Content Type</th>
+                            <th>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var stat in Model.ContentTypeStats)
+                        {
+                            <tr>
+                                <td>@stat.Key</td>
+                                <td>@stat.Value</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@if (Model.MismatchedItems != null && Model.MismatchedItems.Count > 0)
+{
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>Mismatched Items</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>NodeId</th>
+                            <th>Path</th>
+                            <th>Type</th>
+                            <th>In Database</th>
+                            <th>In Index</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model.MismatchedItems)
+                        {
+                            <tr>
+                                <td>@item.NodeId</td>
+                                <td>@item.Path</td>
+                                <td>@item.NodeType</td>
+                                <td>
+                                    @if (item.InDatabase)
+                                    {
+                                        <span class="badge bg-success">Yes</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger">No</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (item.InIndex)
+                                    {
+                                        <span class="badge bg-success">Yes</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger">No</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}

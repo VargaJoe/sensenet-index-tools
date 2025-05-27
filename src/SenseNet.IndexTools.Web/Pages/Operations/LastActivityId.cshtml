@@ -1,0 +1,201 @@
+@page
+@model SenseNet.IndexTools.Web.Pages.Operations.LastActivityIdModel
+@{
+    ViewData["Title"] = "LastActivityId Management";
+}
+
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>LastActivityId Management</h1>
+            <p class="lead">View, set, or initialize LastActivityId values in SenseNet indexes.</p>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Operations</h5>
+                </div>
+                <div class="card-body">
+                    <div class="nav flex-column nav-pills" id="operations-tab" role="tablist" aria-orientation="vertical">
+                        <button class="nav-link active" id="get-tab" data-bs-toggle="pill" data-bs-target="#get" type="button" role="tab" aria-controls="get" aria-selected="true">
+                            Get LastActivityId
+                        </button>
+                        <button class="nav-link" id="set-tab" data-bs-toggle="pill" data-bs-target="#set" type="button" role="tab" aria-controls="set" aria-selected="false">
+                            Set LastActivityId
+                        </button>
+                        <button class="nav-link" id="init-tab" data-bs-toggle="pill" data-bs-target="#init" type="button" role="tab" aria-controls="init" aria-selected="false">
+                            Initialize LastActivityId
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 id="operation-title">Get LastActivityId</h5>
+                </div>
+                <div class="card-body">
+                    <div class="tab-content" id="operations-tabContent">
+                        <!-- Get LastActivityId Form -->
+                        <div class="tab-pane fade show active" id="get" role="tabpanel" aria-labelledby="get-tab">
+                            <form method="post" asp-page-handler="GetLastActivityId">
+                                <div class="mb-3">
+                                    <label for="getIndexPath" class="form-label">Index Path</label>
+                                    <select class="form-select" id="getIndexPath" name="indexPath" required>
+                                        <option value="">Select an index path...</option>
+                                        @foreach (var path in Model.IndexPaths)
+                                        {
+                                            <option value="@path.Path">@path.Name (@path.Path)</option>
+                                        }
+                                    </select>
+                                    <div class="form-text">Or enter a custom path:</div>
+                                    <input type="text" class="form-control mt-2" id="getCustomIndexPath" name="customIndexPath" placeholder="D:\path\to\index">
+                                </div>
+                                <button type="submit" class="btn btn-primary">Get LastActivityId</button>
+                            </form>
+                        </div>
+
+                        <!-- Set LastActivityId Form -->
+                        <div class="tab-pane fade" id="set" role="tabpanel" aria-labelledby="set-tab">
+                            <form method="post" asp-page-handler="SetLastActivityId">
+                                <div class="mb-3">
+                                    <label for="setIndexPath" class="form-label">Index Path</label>
+                                    <select class="form-select" id="setIndexPath" name="indexPath" required>
+                                        <option value="">Select an index path...</option>
+                                        @foreach (var path in Model.IndexPaths)
+                                        {
+                                            <option value="@path.Path">@path.Name (@path.Path)</option>
+                                        }
+                                    </select>
+                                    <div class="form-text">Or enter a custom path:</div>
+                                    <input type="text" class="form-control mt-2" id="setCustomIndexPath" name="customIndexPath" placeholder="D:\path\to\index">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="newId" class="form-label">New LastActivityId Value</label>
+                                    <input type="number" class="form-control" id="newId" name="newId" required min="0">
+                                </div>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="setCreateBackup" name="createBackup" checked>
+                                    <label class="form-check-label" for="setCreateBackup">Create backup before modifying</label>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="setBackupPath" class="form-label">Backup Path (Optional)</label>
+                                    <input type="text" class="form-control" id="setBackupPath" name="backupPath" 
+                                           placeholder="Leave empty for default location">
+                                </div>
+                                <button type="submit" class="btn btn-primary">Set LastActivityId</button>
+                            </form>
+                        </div>
+
+                        <!-- Initialize LastActivityId Form -->
+                        <div class="tab-pane fade" id="init" role="tabpanel" aria-labelledby="init-tab">
+                            <form method="post" asp-page-handler="InitLastActivityId">
+                                <div class="mb-3">
+                                    <label for="initIndexPath" class="form-label">Index Path</label>
+                                    <select class="form-select" id="initIndexPath" name="indexPath" required>
+                                        <option value="">Select an index path...</option>
+                                        @foreach (var path in Model.IndexPaths)
+                                        {
+                                            <option value="@path.Path">@path.Name (@path.Path)</option>
+                                        }
+                                    </select>
+                                    <div class="form-text">Or enter a custom path:</div>
+                                    <input type="text" class="form-control mt-2" id="initCustomIndexPath" name="customIndexPath" placeholder="D:\path\to\index">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="initialId" class="form-label">Initial LastActivityId Value</label>
+                                    <input type="number" class="form-control" id="initialId" name="initialId" required min="0">
+                                </div>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="initCreateBackup" name="createBackup" checked>
+                                    <label class="form-check-label" for="initCreateBackup">Create backup before modifying</label>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="initBackupPath" class="form-label">Backup Path (Optional)</label>
+                                    <input type="text" class="form-control" id="initBackupPath" name="backupPath" 
+                                           placeholder="Leave empty for default location">
+                                </div>
+                                <button type="submit" class="btn btn-primary">Initialize LastActivityId</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (Model.ShowResult)
+    {
+        <div class="row">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Result</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert @Model.ResultClass" role="alert">
+                            @Model.ResultMessage
+                        </div>
+                        @if (Model.LastActivityId.HasValue)
+                        {
+                            <div class="mt-3">
+                                <h6>LastActivityId: @Model.LastActivityId.Value</h6>
+                                @if (Model.ActivityGaps != null && Model.ActivityGaps.Any())
+                                {
+                                    <p>Activity Gaps: @string.Join(", ", Model.ActivityGaps)</p>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        // Update the operation title when changing tabs
+        document.querySelectorAll('#operations-tab button').forEach(button => {
+            button.addEventListener('click', function() {
+                document.getElementById('operation-title').textContent = this.textContent.trim();
+            });
+        });
+
+        // Make the custom path field override the dropdown selection
+        document.getElementById('getCustomIndexPath').addEventListener('input', function() {
+            const dropdown = document.getElementById('getIndexPath');
+            if (this.value) {
+                dropdown.value = '';
+                dropdown.disabled = true;
+            } else {
+                dropdown.disabled = false;
+            }
+        });
+
+        document.getElementById('setCustomIndexPath').addEventListener('input', function() {
+            const dropdown = document.getElementById('setIndexPath');
+            if (this.value) {
+                dropdown.value = '';
+                dropdown.disabled = true;
+            } else {
+                dropdown.disabled = false;
+            }
+        });
+
+        document.getElementById('initCustomIndexPath').addEventListener('input', function() {
+            const dropdown = document.getElementById('initIndexPath');
+            if (this.value) {
+                dropdown.value = '';
+                dropdown.disabled = true;
+            } else {
+                dropdown.disabled = false;
+            }
+        });
+    </script>
+}

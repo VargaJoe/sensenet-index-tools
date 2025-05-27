@@ -1,0 +1,10 @@
+{
+  "Id": "2231f9a4-ce7a-4e9c-b42c-c0acc2e0b5a0",
+  "ReportType": "lastactivity",
+  "Title": "LastActivityId - Get - d:\\dev\\gittfs\\Keler2024\\src\\KelerSearchService\\KelerSearchService\\App_Data\\LocalIndex\\20250401150343\\",
+  "CreatedAt": "2025-05-26T23:00:21.7010702+02:00",
+  "FilePath": "Reports\\lastactivity\\20250526-230021-2231f9a4-ce7a-4e9c-b42c-c0acc2e0b5a0.json",
+  "Parameters": {
+    "IndexPath": "d:\\dev\\gittfs\\Keler2024\\src\\KelerSearchService\\KelerSearchService\\App_Data\\LocalIndex\\20250401150343\\"
+  }
+}

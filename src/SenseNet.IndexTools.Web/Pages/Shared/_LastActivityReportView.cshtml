@@ -1,0 +1,42 @@
+@model SenseNet.IndexTools.Core.Models.LastActivityReport
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>LastActivityId Information</h5>
+    </div>
+    <div class="card-body">
+        <dl class="row">            
+            <dt class="col-sm-3">LastActivityId</dt>
+            <dd class="col-sm-9">@Model?.LastActivityId</dd>
+
+            @if (Model?.ActivityGaps != null && Model.ActivityGaps.Any())
+            {
+                <dt class="col-sm-3">Activity Gaps</dt>
+                <dd class="col-sm-9">
+                    @string.Join(", ", Model.ActivityGaps)
+                </dd>
+            }
+
+            <dt class="col-sm-3">Index Path</dt>
+            <dd class="col-sm-9">@Model?.IndexPath</dd>
+
+            <dt class="col-sm-3">Timestamp</dt>
+            <dd class="col-sm-9">@Model?.Timestamp</dd>
+
+            @if (Model?.Success != null)
+            {
+                <dt class="col-sm-3">Operation Status</dt>
+                <dd class="col-sm-9">
+                    @if (Model.Success == true)
+                    {
+                        <span class="badge bg-success">Success</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-danger">Failed</span>
+                    }
+                </dd>
+            }
+        </dl>
+    </div>
+</div>

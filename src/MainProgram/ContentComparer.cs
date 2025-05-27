@@ -5,29 +5,43 @@ using Lucene.Net.Search;
 using Lucene.Net.Store;
 using IODirectory = System.IO.Directory;
 
+using SenseNet.IndexTools.Core.Models;
+
 namespace SenseNetIndexTools
 {
     public class ContentComparer
     {
+        // This class is needed for compatibility with the old code
         public class ContentItem
         {
             public int NodeId { get; set; }
             public int VersionId { get; set; }
             public string Path { get; set; } = string.Empty;
-            public string NodeType { get; set; } = string.Empty;
+            public string? NodeType { get; set; }
             public bool InDatabase { get; set; }
             public bool InIndex { get; set; }
             public string? IndexNodeId { get; set; }
             public string? IndexVersionId { get; set; }
-            
-            public string Status => 
-                InDatabase && InIndex 
-                    ? (NodeId.ToString() != IndexNodeId || VersionId.ToString() != IndexVersionId)
-                        ? "ID Mismatch"
-                        : "Match"
-                    : InDatabase 
-                        ? "DB Only" 
-                        : "Index Only";
+
+            public string Status
+            {
+                get
+                {
+                    if (!InDatabase) return "Index only";
+                    if (!InIndex) return "DB only";
+
+                    bool idsMatch = string.Equals(NodeId.ToString(), IndexNodeId) && 
+                                   string.Equals(VersionId.ToString(), IndexVersionId);
+                    return idsMatch ? "Match" : "ID mismatch";
+                }
+            }
+
+            public override string ToString()
+            {
+                return $"{(InDatabase ? NodeId.ToString() : "-")}\t{(InDatabase ? VersionId.ToString() : "-")}\t" +
+                       $"{(InIndex ? IndexNodeId : "-")}\t{(InIndex ? IndexVersionId : "-")}\t" +
+                       $"{Path}\t{NodeType}\t{Status}";
+            }
         }
 
         public static Command Create()
