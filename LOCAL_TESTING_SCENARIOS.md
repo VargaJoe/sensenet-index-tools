@@ -137,8 +137,8 @@ The `check-subtree` command provides two types of output:
 ### Example Scenarios
 
 #### 1. Console-Only Output
+Test the basic functionality with console output:
 ```powershell
-# Only shows console output with basic statistics
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
     --index-path $TestIndex `
     --connection-string $TestDb `
@@ -146,33 +146,34 @@ dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-sub
 ```
 Expected console output:
 ```
-Starting subtree index check:
-  Index path: C:\path\to\index
-  Repository path: /Root/Content
-  Recursive: True
-  Report will be saved to: None
-
 Subtree Check Summary:
-Items in Database: 150
-Items in Index: 148
-Matched Items: 148
+Items in Database: 25
+Items in Index: 23
+Matched Items: 23
 Mismatched Items: 2
+
+Mismatch Summary by Type:
+Document: 2 mismatches
 ```
 
 #### 2. Basic File Output
+Generate a basic report file:
 ```powershell
-# Basic report saved to file (default format)
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
     --index-path $TestIndex `
     --connection-string $TestDb `
     --repository-path $RepositoryPath `
-    --output "subtree-basic.md" `
+    --output "subtree-default.md" `
     --report-format default
 ```
+Verify the report contains:
+- Basic statistics
+- Operation timing information
+- Simple mismatch counts
 
 #### 3. Detailed Analysis
+Test detailed reporting with content type breakdown:
 ```powershell
-# Detailed report with content type statistics
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
     --index-path $TestIndex `
     --connection-string $TestDb `
@@ -180,10 +181,19 @@ dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-sub
     --output "subtree-detailed.md" `
     --report-format detailed
 ```
+Check for:
+- Content type statistics table
+- Detailed mismatch information
+- Status indicators showing specific mismatch types:
+  - [✓] for matches
+  - [✗ DB Only] for database-only items
+  - [✗ Index Only] for index-only items
+  - [✗ ID Mismatch] for ID mismatches
+  - [✗ Version Mismatch] for version mismatches
 
 #### 4. Hierarchical View
+Test tree format visualization:
 ```powershell
-# Tree format showing content structure
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
     --index-path $TestIndex `
     --connection-string $TestDb `
@@ -191,32 +201,82 @@ dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-sub
     --output "subtree-tree.md" `
     --report-format tree
 ```
+Verify:
+- Proper tree structure with indentation
+- Status indicators with specific error types
+- Folder statistics showing match rates
+- Branch totals and success rates
 
-#### 5. Full Analysis
+#### 5. Full Analysis with HTML Output
+Test comprehensive reporting:
 ```powershell
-# Most comprehensive report with all available information
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
     --index-path $TestIndex `
     --connection-string $TestDb `
     --repository-path $RepositoryPath `
-    --output "subtree-full.md" `
-    --report-format full
+    --output "subtree-full.html" `
+    --report-format full `
+    --format html
 ```
+Check for:
+- Complete item list with status details
+- Color-coded status indicators in HTML
+- Tree visualization with expandable folders
+- Detailed statistics for each content type
+
+### HTML Output Testing
+
+When testing HTML output, verify:
+1. **Color Coding**
+   - Green for matches [✓]
+   - Red for mismatches [✗]
+   - Proper styling for different status types
+
+2. **Tree View**
+   - Proper indentation with line guides
+   - Folder indicators with forward slashes
+   - Match rate percentages for folders
+   - Total item counts in branches
+
+3. **Tables**
+   - Proper alignment of columns
+   - Clear status indicators
+   - Readable formatting of IDs and paths
+   - Sortable columns (if implemented)
 
 ### Important Notes
-1. Using `--report-format` without `--output` will only affect console verbosity
-2. Using `--output` without `--report-format` will save a basic report
-3. For detailed reports, always use both flags together
 
-### 3. Limited Scope Check
-```powershell
-# Non-recursive check (direct children only)
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --recursive false
+1. **Status Types**
+   - All mismatches should show specific error type
+   - Status format should be consistent across all views
+   - Both icon and text should be visible ([✗ DB Only], etc.)
 
-# Check with depth limit
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --depth 1
+2. **Testing Different Depths**
+   ```powershell
+   # Test direct children only
+   dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
+       --index-path $TestIndex `
+       --connection-string $TestDb `
+       --repository-path $RepositoryPath `
+       --depth 1 `
+       --report-format tree
+
+   # Test full recursion
+   dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
+       --index-path $TestIndex `
+       --connection-string $TestDb `
+       --repository-path $RepositoryPath `
+       --recursive `
+       --report-format tree
+   ```
+
+3. **Edge Cases**
+   - Empty folders
+   - Deep hierarchies
+   - Special characters in names
+   - Very large subtrees
+   - Mixed content types
 ```
-
 
 ## Recovery Scenarios
 

@@ -78,4 +78,7 @@ logs/
 Thumbs.db
 IndexBackups
 *report*.md
+*report*.html
 subtree_check*
+subtree-*.html
+subtree-*.md
