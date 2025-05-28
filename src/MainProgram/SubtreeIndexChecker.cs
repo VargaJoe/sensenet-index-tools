@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Invocation;
 using System.Data.SqlClient;
 using System.Text;
 using Lucene.Net.Store;
@@ -75,6 +76,11 @@ namespace SenseNetIndexTools
                 getDefaultValue: () => "md");
             formatOption.FromAmong("md", "html");
 
+            var verboseOption = new Option<bool>(
+                name: "--verbose",
+                description: "Enable verbose logging",
+                getDefaultValue: () => false);
+
             command.AddOption(indexPathOption);
             command.AddOption(connectionStringOption);
             command.AddOption(repositoryPathOption);
@@ -82,39 +88,64 @@ namespace SenseNetIndexTools
             command.AddOption(recursiveOption);
             command.AddOption(depthOption);
             command.AddOption(reportFormatOption);
-            command.AddOption(formatOption);            command.SetHandler((string indexPath, string connectionString, string repositoryPath, 
-                string? output, bool recursive, int depth, string reportFormat, string format) =>
+            command.AddOption(formatOption);
+            command.AddOption(verboseOption);
+
+            command.SetHandler((InvocationContext context) =>
             {
+                string indexPathValue = context.ParseResult.GetValueForOption(indexPathOption)
+                    ?? throw new ArgumentNullException("indexPath");
+                string connectionStringValue = context.ParseResult.GetValueForOption(connectionStringOption)
+                    ?? throw new ArgumentNullException("connectionString");
+                string repositoryPathValue = context.ParseResult.GetValueForOption(repositoryPathOption)
+                    ?? throw new ArgumentNullException("repositoryPath");
+                string? outputValue = context.ParseResult.GetValueForOption(outputOption);
+                bool recursiveValue = context.ParseResult.GetValueForOption(recursiveOption);
+                int depthValue = context.ParseResult.GetValueForOption(depthOption);
+                string reportFormatValue = context.ParseResult.GetValueForOption(reportFormatOption)
+                    ?? throw new ArgumentNullException("reportFormat");
+                string formatValue = context.ParseResult.GetValueForOption(formatOption)
+                    ?? throw new ArgumentNullException("format");
+                bool verboseValue = context.ParseResult.GetValueForOption(verboseOption);
+
                 try
                 {
-                    if (!IODirectory.Exists(indexPath))
+                    if (!IODirectory.Exists(indexPathValue))
                     {
-                        Console.Error.WriteLine($"Index directory not found: {indexPath}");
+                        Console.Error.WriteLine($"Index directory not found: {indexPathValue}");
                         Environment.Exit(1);
-                        return;
+                        return Task.CompletedTask;
                     }
 
                     var report = new CheckReport
                     {
                         StartTime = DateTime.Now,
-                        RepositoryPath = repositoryPath,
-                        Recursive = recursive
+                        RepositoryPath = repositoryPathValue,
+                        Recursive = recursiveValue
                     };
+
+                    // Set verbose logging
+                    ContentComparer.VerboseLogging = verboseValue;
 
                     // Use our established ContentComparer to get and compare items
                     var comparer = new ContentComparer();
-                    var results = comparer.CompareContent(indexPath, connectionString, repositoryPath, recursive, depth);
+                    var results = comparer.CompareContent(indexPathValue, connectionStringValue, repositoryPathValue, recursiveValue, depthValue);
 
                     // Process results for the report
-                    ProcessResults(results, report, reportFormat != "default");                    report.EndTime = DateTime.Now;
-                    GenerateReport(report, output, reportFormat, format);
+                    ProcessResults(results, report, reportFormatValue != "default");
+                    report.EndTime = DateTime.Now;
+                    GenerateReport(report, outputValue, reportFormatValue, formatValue);
+
+                    return Task.CompletedTask;
                 }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"Error checking subtree: {ex.Message}");
                     Console.Error.WriteLine(ex.StackTrace);
-                    Environment.Exit(1);                }
-            }, indexPathOption, connectionStringOption, repositoryPathOption, outputOption, recursiveOption, depthOption, reportFormatOption, formatOption);
+                    Environment.Exit(1);
+                    return Task.CompletedTask;
+                }
+            });
 
             return command;
         }
