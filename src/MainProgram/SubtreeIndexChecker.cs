@@ -186,16 +186,12 @@ namespace SenseNetIndexTools
                 reportContent = GenerateMarkdownReport(report, reportFormat);
             }
 
-            // Always show summary on console            Console.WriteLine($"\nSubtree Check Summary:");
+            // Always show summary on console
+            Console.WriteLine($"\nSubtree Check Summary:");
             Console.WriteLine($"Items in Database: {report.DatabaseItemsCount}");
             Console.WriteLine($"Items in Index: {report.IndexDocCount}");
             Console.WriteLine($"Matched Items: {report.MatchedItemsCount}");
             Console.WriteLine($"Mismatched Items: {report.MismatchedItems.Count}");
-            var timestampMismatchCount = report.MismatchedItems.Count(i => i.Status == "Timestamp mismatch");
-            if (timestampMismatchCount > 0)
-            {
-                Console.WriteLine($"  - Timestamp Mismatches: {timestampMismatchCount}");
-            }
 
             if (report.MismatchedItems.Any())
             {
@@ -226,17 +222,13 @@ namespace SenseNetIndexTools
             sb.AppendLine($"- Start Time: {report.StartTime}");
             sb.AppendLine($"- End Time: {report.EndTime}");
             sb.AppendLine($"- Duration: {(report.EndTime - report.StartTime).TotalSeconds:F2} seconds");
-            sb.AppendLine();            // Summary section
+            sb.AppendLine();
+            // Summary section
             sb.AppendLine("## Summary");
             sb.AppendLine($"- Items in Database: {report.DatabaseItemsCount}");
             sb.AppendLine($"- Items in Index: {report.IndexDocCount}");
             sb.AppendLine($"- Matched Items: {report.MatchedItemsCount}");
             sb.AppendLine($"- Mismatched Items: {report.MismatchedItems.Count}");
-            var timestampMismatchCount = report.MismatchedItems.Count(i => i.Status == "Timestamp mismatch");
-            if (timestampMismatchCount > 0)
-            {
-                sb.AppendLine($"  - Timestamp Mismatches: {timestampMismatchCount}");
-            }
             sb.AppendLine();
 
             // Content type distribution
@@ -271,8 +263,8 @@ namespace SenseNetIndexTools
                 {
                     sb.AppendLine($"### {typeGroup.Key}");
                     sb.AppendLine();
-                    sb.AppendLine("| Status | DB NodeId | DB VerID | DB Timestamp | Index NodeId | Index VerID | Index Timestamp | Path |");
-                    sb.AppendLine("|---------|-----------|----------|--------------|--------------|-------------|----------------|------|");
+                    sb.AppendLine("| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | Path |");
+                    sb.AppendLine("|---------|-----------|----------|--------------|-------------|------|");
                     
                     foreach (var item in typeGroup.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
                     {
@@ -281,9 +273,7 @@ namespace SenseNetIndexTools
                         var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
                         var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                         var statusInfo = FormatStatusWithDetail(item.Status, item.Status);
-                        var dbTimestamp = item.InDatabase && item.Timestamp.HasValue ? item.Timestamp.Value.ToString("u") : "-";
-                    var idxTimestamp = item.InIndex ? item.IndexTimestamp ?? "-" : "-";
-                    sb.AppendLine($"| {statusInfo} | {dbNodeId} | {dbVerID} | {dbTimestamp} | {idxNodeId} | {idxVerID} | {idxTimestamp} | {item.Path} |");
+                        sb.AppendLine($"| {statusInfo} | {dbNodeId} | {dbVerID} | {idxNodeId} | {idxVerID} | {item.Path} |");
                     }
                     sb.AppendLine();
                 }
@@ -569,19 +559,10 @@ namespace SenseNetIndexTools
             sb.AppendLine("<div class=\"stat-title\">Matched Items</div>");
             sb.AppendLine($"<div class=\"stat-value\">{report.MatchedItemsCount:N0}</div>");
             sb.AppendLine("</div>");
-              sb.AppendLine("<div class=\"stat-card\">");
+            sb.AppendLine("<div class=\"stat-card\">");
             sb.AppendLine("<div class=\"stat-title\">Mismatched Items</div>");
             sb.AppendLine($"<div class=\"stat-value\">{report.MismatchedItems.Count:N0}</div>");
             sb.AppendLine("</div>");
-
-            var timestampMismatchCount = report.MismatchedItems.Count(i => i.Status == "Timestamp mismatch");
-            if (timestampMismatchCount > 0)
-            {
-                sb.AppendLine("<div class=\"stat-card\">");
-                sb.AppendLine("<div class=\"stat-title\">Timestamp Mismatches</div>");
-                sb.AppendLine($"<div class=\"stat-value\">{timestampMismatchCount:N0}</div>");
-                sb.AppendLine("</div>");
-            }
             
             sb.AppendLine("</div>"); // End of stats-container
             sb.AppendLine("</div>"); // End of summary-section
@@ -635,13 +616,12 @@ namespace SenseNetIndexTools
                     sb.AppendLine($"<h3>{typeGroup.Key}</h3>");
                     sb.AppendLine("<table>");
                     sb.AppendLine("<thead>");
-                    sb.AppendLine("<tr>");                    sb.AppendLine("<th>Status</th>");
+                    sb.AppendLine("<tr>");
+                    sb.AppendLine("<th>Status</th>");
                     sb.AppendLine("<th>DB NodeId</th>");
                     sb.AppendLine("<th>DB VerID</th>");
-                    sb.AppendLine("<th>DB Timestamp</th>");
                     sb.AppendLine("<th>Index NodeId</th>");
                     sb.AppendLine("<th>Index VerID</th>");
-                    sb.AppendLine("<th>Index Timestamp</th>");
                     sb.AppendLine("<th>Path</th>");
                     sb.AppendLine("</tr>");
                     sb.AppendLine("</thead>");
@@ -656,14 +636,11 @@ namespace SenseNetIndexTools
                         var statusClass = item.Status == "Match" ? "tree-status-match" : "tree-status-mismatch";
                         var statusInfo = FormatStatusWithDetail(item.Status, item.Status);
                         sb.AppendLine("<tr>");
-                        sb.AppendLine($"<td class=\"{statusClass}\">{statusInfo}</td>");                        sb.AppendLine($"<td>{dbNodeId}</td>");
+                        sb.AppendLine($"<td class=\"{statusClass}\">{statusInfo}</td>");
+                        sb.AppendLine($"<td>{dbNodeId}</td>");
                         sb.AppendLine($"<td>{dbVerID}</td>");
-                        var dbTimestamp = item.InDatabase && item.Timestamp.HasValue ? item.Timestamp.Value.ToString("u") : "-";
-                        var idxTimestamp = item.InIndex ? item.IndexTimestamp ?? "-" : "-";
-                        sb.AppendLine($"<td>{dbTimestamp}</td>");
                         sb.AppendLine($"<td>{idxNodeId}</td>");
                         sb.AppendLine($"<td>{idxVerID}</td>");
-                        sb.AppendLine($"<td>{idxTimestamp}</td>");
                         sb.AppendLine($"<td>{item.Path}</td>");
                         sb.AppendLine("</tr>");
                     }
@@ -682,13 +659,12 @@ namespace SenseNetIndexTools
                 sb.AppendLine("<h2>Complete Item List</h2>");
                 sb.AppendLine("<table>");
                 sb.AppendLine("<thead>");
-                sb.AppendLine("<tr>");                sb.AppendLine("<th>Status</th>");
+                sb.AppendLine("<tr>");
+                sb.AppendLine("<th>Status</th>");
                 sb.AppendLine("<th>DB NodeId</th>");
                 sb.AppendLine("<th>DB VerID</th>");
-                sb.AppendLine("<th>DB Timestamp</th>");
                 sb.AppendLine("<th>Index NodeId</th>");
                 sb.AppendLine("<th>Index VerID</th>");
-                sb.AppendLine("<th>Index Timestamp</th>");
                 sb.AppendLine("<th>Path</th>");
                 sb.AppendLine("<th>Type</th>");
                 sb.AppendLine("</tr>");
@@ -711,14 +687,11 @@ namespace SenseNetIndexTools
                     var statusClass = item.Status == "Match" ? "tree-status-match" : "tree-status-mismatch";
                     var statusInfo = FormatStatusWithDetail(item.Status, item.Status);
                     sb.AppendLine("<tr>");
-                    sb.AppendLine($"<td class=\"{statusClass}\">{statusInfo}</td>");                    sb.AppendLine($"<td>{dbNodeId}</td>");
+                    sb.AppendLine($"<td class=\"{statusClass}\">{statusInfo}</td>");
+                    sb.AppendLine($"<td>{dbNodeId}</td>");
                     sb.AppendLine($"<td>{dbVerID}</td>");
-                    var dbTimestamp = item.InDatabase && item.Timestamp.HasValue ? item.Timestamp.Value.ToString("u") : "-";
-                    var idxTimestamp = item.InIndex ? item.IndexTimestamp ?? "-" : "-";
-                    sb.AppendLine($"<td>{dbTimestamp}</td>");
                     sb.AppendLine($"<td>{idxNodeId}</td>");
                     sb.AppendLine($"<td>{idxVerID}</td>");
-                    sb.AppendLine($"<td>{idxTimestamp}</td>");
                     sb.AppendLine($"<td>{item.Path}</td>");
                     sb.AppendLine($"<td>{item.NodeType}</td>");
                     sb.AppendLine("</tr>");

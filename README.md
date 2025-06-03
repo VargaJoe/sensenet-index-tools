@@ -1,6 +1,6 @@
 # SenseNet Index Maintenance Suite
 
-A comprehensive toolkit for managing and maintaining SenseNet Lucene.NET indexes. This suite currently includes tools for managing the LastActivityId value in SenseNet indexes, with plans to expand with more index maintenance capabilities.
+A comprehensive toolkit for managing and maintaining SenseNet Lucene.NET indexes. This suite currently includes tools for managing the LastActivityId value in SenseNet indexes and other index maintenance capabilities.
 
 ## Repository
 
@@ -42,6 +42,9 @@ dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "
 
 # Check specific path without recursion and save detailed report
 dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path/To/Check" --recursive false --detailed --output "report.md"
+
+# Clean up orphaned index entries (items that exist in index but not in database)
+dotnet run -- clean-orphaned --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path/To/Check"
 ```
 
 ## PowerShell Helper Scripts
@@ -55,7 +58,7 @@ For convenience, PowerShell helper scripts are included in the root directory:
 
 ## Commands
 
-The tool provides three main commands for managing LastActivityId:
+The suite provides several commands for managing SenseNet indexes:
 
 ### lastactivityid-get
 
@@ -81,6 +84,20 @@ Initializes a LastActivityId in a Lucene index that doesn't have one yet. This i
 dotnet run -- lastactivityid-init --path "<path-to-index>" --id <initial-value> [--backup false] [--backup-path "<custom-backup-location>"]
 ```
 
+### clean-orphaned
+
+Clean up orphaned index entries that exist in the index but not in the database.
+
+```bash 
+dotnet run -- clean-orphaned --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path" [options]
+```
+
+Options:
+- `--recursive`: Process all content items under the specified path (default: true)
+- `--verbose`: Enable detailed logging of the cleanup process (default: false)
+- `--dry-run`: Only show what would be deleted without making changes (default: true)
+- `--backup`: Create a backup of the index before making changes (default: true)
+
 ## Options
 
 ### Common Options
@@ -102,14 +119,10 @@ dotnet run -- lastactivityid-init --path "<path-to-index>" --id <initial-value> 
 dotnet build
 ```
 
-## Running the Application
+## Running the Tests
 
 ```bash
-dotnet run -- lastactivityid-get --path "<path-to-index>"
-```
-
 # Run the subtree checker test
-```bash
 dotnet run --project src/TestSubtreeChecker/TestSubtreeChecker.csproj
 ```
 
@@ -135,3 +148,6 @@ Backup creation is now disabled by default for read-only operations and enabled 
 
 ### Enhanced Paging
 Index operations now properly support large indexes by implementing efficient paging, removing the previous 10,000 document limit.
+
+### Clean Orphaned Entries
+New `clean-orphaned` command for cleaning up index entries that exist in the index but not in the database.

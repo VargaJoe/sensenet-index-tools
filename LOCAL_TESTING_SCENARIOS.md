@@ -363,3 +363,89 @@ dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj compare `
     --connection-string $TestDb `
     --recursive true
 ```
+
+## Cleanup Operations
+
+### 1. Preview Orphaned Entries (Safe for Live Indexes)
+```powershell
+# Basic check to preview orphaned entries (safe for live indexes)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
+    --index-path $TestIndex `
+    --connection-string $TestDb `
+    --repository-path $RepositoryPath
+
+# Check specific path with detailed output
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
+    --index-path $TestIndex `
+    --connection-string $TestDb `
+    --repository-path $RepositoryPath `
+    --verbose
+
+# Check direct children only
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
+    --index-path $TestIndex `
+    --connection-string $TestDb `
+    --repository-path $RepositoryPath `
+    --recursive false
+```
+
+### 2. Cleanup Operations (Non-Live Index Only)
+```powershell
+# Clean up with default safety measures (requires --offline flag)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
+    --index-path $TestIndex `
+    --connection-string $TestDb `
+    --repository-path $RepositoryPath `
+    --dry-run false `
+    --offline
+
+# Clean up without creating backup (not recommended, requires --offline flag)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
+    --index-path $TestIndex `
+    --connection-string $TestDb `
+    --repository-path $RepositoryPath `
+    --dry-run false `
+    --backup false `
+    --offline
+
+# Clean up with custom backup location (requires --offline flag)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
+    --index-path $TestIndex `
+    --connection-string $TestDb `
+    --repository-path $RepositoryPath `
+    --dry-run false `
+    --backup-path $BackupPath `
+    --offline
+
+# Attempt without offline flag (should fail)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
+    --index-path $TestIndex `
+    --connection-string $TestDb `
+    --repository-path $RepositoryPath `
+    --dry-run false
+```
+
+### 3. Test Recovery From Backup
+```powershell
+# Create a backup before cleanup
+$CleanupBackupPath = "${BackupPath}_pre_cleanup_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+Copy-Item -Path $TestIndex -Destination $CleanupBackupPath -Recurse
+
+# Perform cleanup (requires --offline flag)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
+    --index-path $TestIndex `
+    --connection-string $TestDb `
+    --repository-path $RepositoryPath `
+    --dry-run false `
+    --offline
+
+# Verify results
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj compare `
+    --index-path $TestIndex `
+    --connection-string $TestDb `
+    --repository-path $RepositoryPath
+
+# If needed, restore from backup
+Remove-Item -Path $TestIndex -Recurse
+Copy-Item -Path $CleanupBackupPath -Destination $TestIndex -Recurse
+```

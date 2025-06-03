@@ -84,3 +84,6 @@ subtree-*.html
 subtree-*.md
 src/SenseNet.IndexTools.Web/Reports*
 src/MainProgram/out/*
+pre-cleanup-check.html
+post-cleanup-check.html
+preversion/*

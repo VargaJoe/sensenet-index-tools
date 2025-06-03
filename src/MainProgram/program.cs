@@ -63,11 +63,13 @@ namespace SenseNetIndexTools
             initCommand.AddOption(offlineOption); // Add offline flag to init command
             rootCommand.AddCommand(getCommand);
             rootCommand.AddCommand(setCommand);
-            rootCommand.AddCommand(initCommand);            rootCommand.AddCommand(validateCommand);
+            rootCommand.AddCommand(initCommand);
+            rootCommand.AddCommand(validateCommand);
             rootCommand.AddCommand(IndexLister.Create());
             rootCommand.AddCommand(SubtreeIndexChecker.Create());
             rootCommand.AddCommand(DatabaseLister.Create());
             rootCommand.AddCommand(ContentComparer.Create());
+            rootCommand.AddCommand(CleanOrphanedCommand.Create());
 
             getCommand.SetHandler(async (string path) =>
             {
