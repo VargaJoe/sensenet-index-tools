@@ -70,15 +70,18 @@ namespace SenseNetIndexTools
 
             command.SetHandler((context) =>
             {
+                bool verbose = false; // Declare at method scope
                 try
-                {                    var indexPath = context.ParseResult.GetValueForOption(indexPathOption)
+                {
+                    // Parse options
+                    var indexPath = context.ParseResult.GetValueForOption(indexPathOption)
                         ?? throw new ArgumentNullException(nameof(indexPathOption), "Index path is required.");
                     var connectionString = context.ParseResult.GetValueForOption(connectionStringOption)
                         ?? throw new ArgumentNullException(nameof(connectionStringOption), "Connection string is required.");
                     var repositoryPath = context.ParseResult.GetValueForOption(repositoryPathOption)
                         ?? throw new ArgumentNullException(nameof(repositoryPathOption), "Repository path is required.");
                     var recursive = context.ParseResult.GetValueForOption(recursiveOption);
-                    var verbose = context.ParseResult.GetValueForOption(verboseOption);
+                    verbose = context.ParseResult.GetValueForOption(verboseOption); // Assign to the outer scope variable
                     var dryRun = context.ParseResult.GetValueForOption(dryRunOption);
                     var backup = context.ParseResult.GetValueForOption(backupOption);
                     var offline = context.ParseResult.GetValueForOption(offlineOption);
@@ -87,6 +90,7 @@ namespace SenseNetIndexTools
                     Console.WriteLine($"Starting orphaned index entries cleanup for path: {repositoryPath}");
                     ContentComparer.VerboseLogging = verbose;
 
+                    // Validation checks
                     if (!Program.IsValidLuceneIndex(indexPath))
                     {
                         Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {indexPath}");
@@ -128,52 +132,196 @@ namespace SenseNetIndexTools
                         Console.WriteLine("\nDRY RUN - No changes were made. Use --dry-run=false --offline to perform the cleanup.");
                         return Task.CompletedTask;
                     }
-
                     if (orphanedEntries.Count > 0)
                     {
                         // Perform the cleanup using IndexWriter
                         using (var directory = FSDirectory.Open(new DirectoryInfo(indexPath)))
                         using (var analyzer = new Lucene.Net.Analysis.Standard.StandardAnalyzer(Lucene.Net.Util.Version.LUCENE_29))
-                        using (var writer = new IndexWriter(directory, analyzer, false, IndexWriter.MaxFieldLength.UNLIMITED))
                         {
-                            foreach (var entry in orphanedEntries)
-                            {                                // Create a boolean query to match the exact document
-                                var booleanQuery = new BooleanQuery();
-                                
-                                // IMPORTANT: We're using only path-based matching because the Id field
-                                // format in the index might be different from what we have
-                                // This is safer and works reliably
-                                
-                                // Match by path (SenseNet stores paths in lowercase)
-                                booleanQuery.Add(new TermQuery(new Term("Path", entry.Path.ToLowerInvariant())), BooleanClause.Occur.MUST);
-
-                                // Delete matching documents
-                                if (verbose)
-                                {
-                                    Console.WriteLine($"Deleting documents with Path={entry.Path.ToLowerInvariant()} (path-only matching)");
-                                }
-                                writer.DeleteDocuments(booleanQuery);
+                            // Check if index is locked and unlock if necessary
+                            bool isLocked = IndexWriter.IsLocked(directory);
+                            if (isLocked)
+                            {
+                                Console.WriteLine("Index is locked. Attempting to unlock...");
+                                IndexWriter.Unlock(directory);
+                                Console.WriteLine("Index unlocked successfully.");
                             }
 
-                            writer.Commit();
-                            writer.Optimize();
+                            using (var writer = new IndexWriter(directory, analyzer, false, IndexWriter.MaxFieldLength.UNLIMITED))
+                            {
+                                int successfulDeletions = 0;
+                                Console.WriteLine($"\nBeginning deletion of {orphanedEntries.Count} orphaned entries...");
 
-                            Console.WriteLine($"Successfully removed {orphanedEntries.Count} orphaned entries from the index.");
+                                foreach (var entry in orphanedEntries)
+                                {
+                                    if (verbose)
+                                    {
+                                        Console.WriteLine($"\nDELETING: Path='{entry.Path}', NodeId={entry.IndexNodeId}");
+                                    }
+
+                                    try
+                                    {
+                                        // Get initial count of matching documents
+                                        var initialMatchCount = 0;
+                                        using (var searcher = new IndexSearcher(writer.GetReader()))
+                                        {
+                                            var query = new TermQuery(new Term("Path", entry.Path));
+                                            initialMatchCount = searcher.Search(query, 1).TotalHits;
+                                        }
+
+                                        DeleteOrphanedEntry(writer, entry, verbose);
+
+                                        // Verify deletion
+                                        using (var searcher = new IndexSearcher(writer.GetReader()))
+                                        {
+                                            var query = new TermQuery(new Term("Path", entry.Path));
+                                            var finalMatchCount = searcher.Search(query, 1).TotalHits;
+
+                                            if (finalMatchCount < initialMatchCount)
+                                            {
+                                                successfulDeletions++;
+                                                if (verbose)
+                                                {
+                                                    Console.WriteLine($"Deletion verified: Removed {initialMatchCount - finalMatchCount} documents for path '{entry.Path}'");
+                                                }
+                                            }
+                                            else
+                                            {
+                                                Console.WriteLine($"Warning: Failed to delete documents for path '{entry.Path}' (Before: {initialMatchCount}, After: {finalMatchCount})");
+                                            }
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Console.WriteLine($"Error while deleting entry {entry.Path}: {ex.Message}");
+                                        if (verbose)
+                                        {
+                                            Console.WriteLine(ex.StackTrace);
+                                        }
+                                    }
+                                }
+
+                                // Final cleanup and optimization
+                                writer.Commit();
+                                writer.Optimize();
+
+                                if (successfulDeletions > 0)
+                                {
+                                    Console.WriteLine($"\nSuccessfully removed {successfulDeletions} orphaned entries from the index.");
+                                    if (successfulDeletions < orphanedEntries.Count)
+                                    {
+                                        Console.WriteLine($"Warning: {orphanedEntries.Count - successfulDeletions} entries could not be deleted.");
+                                    }
+                                }
+                                else
+                                {
+                                    Console.WriteLine("\nWarning: No entries were successfully deleted from the index.");
+                                }
+                            }
                         }
                     }
-                    
-                    return Task.CompletedTask;
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"Error cleaning orphaned entries: {ex.Message}");
-                    Console.Error.WriteLine(ex.StackTrace);
+                    Console.Error.WriteLine($"Error: {ex.Message}");
+                    if (verbose)
+                    {
+                        Console.Error.WriteLine(ex.StackTrace);
+                    }
                     Environment.Exit(1);
-                    return Task.CompletedTask;
                 }
+
+                return Task.CompletedTask;
             });
 
             return command;
+        }
+
+        private static void DeleteOrphanedEntry(IndexWriter writer, ContentComparer.ContentItem entry, bool verbose)
+        {
+            using (var searcher = new IndexSearcher(writer.GetReader()))
+            {
+                // We must always search with lowercase path as that's how SenseNet stores it
+                var pathQuery = new TermQuery(new Term("Path", entry.Path.ToLowerInvariant()));
+
+                // Create NodeId query with prefix-coded value to match both possible field names
+                var nodeIdQuery = new BooleanQuery();
+                if (!string.IsNullOrEmpty(entry.IndexNodeId) && int.TryParse(entry.IndexNodeId, out var nodeId))
+                {
+                    var prefixCodedNodeId = Lucene.Net.Util.NumericUtils.IntToPrefixCoded(nodeId);
+                    nodeIdQuery.Add(new TermQuery(new Term("NodeId", prefixCodedNodeId)), BooleanClause.Occur.SHOULD);
+                    nodeIdQuery.Add(new TermQuery(new Term("Id", prefixCodedNodeId)), BooleanClause.Occur.SHOULD);
+                }
+
+                // Create version query with prefix-coded value - this is required to identify the exact document
+                TermQuery? versionIdQuery = null;
+                if (!string.IsNullOrEmpty(entry.IndexVersionId) && int.TryParse(entry.IndexVersionId, out var versionId))
+                {
+                    var prefixCodedVersionId = Lucene.Net.Util.NumericUtils.IntToPrefixCoded(versionId);
+                    versionIdQuery = new TermQuery(new Term("VersionId", prefixCodedVersionId));
+                }
+
+                // Build query to match exact document: NodeId + Path + VersionId
+                var fullQuery = new BooleanQuery();
+                fullQuery.Add(pathQuery, BooleanClause.Occur.MUST);          // Always include path
+                fullQuery.Add(nodeIdQuery, BooleanClause.Occur.MUST);        // Always include NodeId
+                if (versionIdQuery != null)
+                {
+                    fullQuery.Add(versionIdQuery, BooleanClause.Occur.MUST); // Include VersionId when available
+                }
+
+                var hits = searcher.Search(fullQuery, int.MaxValue);
+                if (verbose)
+                {
+                    Console.WriteLine($"Found {hits.TotalHits} documents matching criteria:");
+                    Console.WriteLine($"  Path: {entry.Path.ToLowerInvariant()}");
+                    Console.WriteLine($"  NodeId: {entry.IndexNodeId}");
+                    Console.WriteLine($"  VersionId: {entry.IndexVersionId}");
+                }
+
+                if (hits.TotalHits > 0)
+                {
+                    // Delete matching documents - should only be one if criteria are correct
+                    for (int i = 0; i < hits.TotalHits; i++)
+                    {
+                        int docId = hits.ScoreDocs[i].Doc;
+                        Document doc = searcher.Doc(docId);
+
+                        // Log what we're about to delete
+                        if (verbose)
+                        {
+                            Console.WriteLine($"\nDeleting document {i + 1}/{hits.TotalHits}:");
+                            Console.WriteLine($"  DocId: {docId}");
+                            Console.WriteLine($"  NodeId: {doc.Get("NodeId") ?? doc.Get("Id")}");
+                            Console.WriteLine($"  Path: {doc.Get("Path")}");
+                            Console.WriteLine($"  Version: {doc.Get("Version_")}");
+                            Console.WriteLine($"  VersionId: {doc.Get("VersionId")}");
+                        }
+
+                        // Delete by NodeId + Path + VersionId to ensure we only delete the exact document
+                        writer.DeleteDocuments(fullQuery);
+                        writer.Commit();
+
+                        // Verify deletion
+                        using (var verifySearcher = new IndexSearcher(writer.GetReader()))
+                        {
+                            var verifyHits = verifySearcher.Search(fullQuery, 1);
+                            if (verifyHits.TotalHits > 0)
+                            {
+                                Console.WriteLine($"WARNING: Document still exists after deletion attempt!");
+                            }
+                            else if (verbose)
+                            {
+                                Console.WriteLine($"Successfully deleted document with NodeId={entry.IndexNodeId}, VersionId={entry.IndexVersionId}, Path={entry.Path}");
+                            }
+                        }
+                    }
+                }
+                else if (verbose)
+                {
+                    Console.WriteLine($"No documents found matching the exact criteria");
+                }
+            }
         }
     }
 }
