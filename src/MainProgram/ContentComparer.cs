@@ -3,6 +3,7 @@ using System.Data.SqlClient;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Store;
+using Lucene.Net.Util;
 using IODirectory = System.IO.Directory;
 
 using SenseNet.IndexTools.Core.Models;
@@ -119,30 +120,32 @@ namespace SenseNetIndexTools
                         
                     // Get items from index
                     var indexItems = GetContentItemsFromIndex(indexPath, repositoryPath, recursive, depth)
-                        .Select(i => { i.InIndex = true; return i; });
+                        .Select(i => { i.InIndex = true; return i; });            // Combine and group items by normalized path, type, NodeId/IndexNodeId AND version for side-by-side display
+            var items = dbItems.Union(indexItems)
+                .GroupBy(i => new { 
+                    Path = NormalizePath(i.Path),
+                    Type = i.NodeType ?? "unknown", // NodeType is already normalized to lowercase
+                    // Create a unique identifier that distinctly identifies each item by both ID and version
+                    // This ensures items with same path but different IDs or versions are treated as separate entries
+                    Id = i.InDatabase ? i.NodeId.ToString() : i.IndexNodeId ?? "unknown",
+                    Version = i.InDatabase ? i.VersionId.ToString() : i.IndexVersionId ?? "unknown"
+                })
+                .Select(g =>
+                {
+                    var dbItem = g.FirstOrDefault(i => i.InDatabase);
+                    var indexItem = g.FirstOrDefault(i => i.InIndex);
 
-                    // Combine and group items by normalized path and type for side-by-side display
-                    var items = dbItems.Union(indexItems)
-                        .GroupBy(i => new { 
-                            Path = NormalizePath(i.Path),
-                            Type = i.NodeType ?? "unknown" // NodeType is already normalized to lowercase
-                        })
-                        .Select(g =>
-                        {
-                            var dbItem = g.FirstOrDefault(i => i.InDatabase);
-                            var indexItem = g.FirstOrDefault(i => i.InIndex);
-
-                            if (dbItem != null && indexItem != null)
-                            {
-                                // Found in both - merge the index data into the DB item
-                                dbItem.InIndex = true;
-                                dbItem.IndexNodeId = indexItem.IndexNodeId;
-                                dbItem.IndexVersionId = indexItem.IndexVersionId;
-                                return dbItem;
-                            }
-                            
-                            return dbItem ?? indexItem!;
-                        });
+                    if (dbItem != null && indexItem != null)
+                    {
+                        // Found in both - merge the index data into the DB item
+                        dbItem.InIndex = true;
+                        dbItem.IndexNodeId = indexItem.IndexNodeId;
+                        dbItem.IndexVersionId = indexItem.IndexVersionId;
+                        return dbItem;
+                    }
+                    
+                    return dbItem ?? indexItem!;
+                });
 
                     // Filter by depth if specified
                     if (depth > 0)
@@ -186,12 +189,11 @@ namespace SenseNetIndexTools
             var indexOnlyCount = items.Count(i => !i.InDatabase && i.InIndex);
 
             // Build report in markdown format
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine("# Content Comparison Report");
+            var sb = new System.Text.StringBuilder();            sb.AppendLine("# Content Comparison Report");
             sb.AppendLine();
             sb.AppendLine("## Summary");
             sb.AppendLine();
-            sb.AppendLine($"- Total unique paths: {items.Count}");
+            sb.AppendLine($"- Total unique items: {items.Count} (unique by path, ID, and version)");
             sb.AppendLine($"- Perfect matches: {matchCount}");
             sb.AppendLine($"- ID mismatches: {mismatchCount}");
             sb.AppendLine($"- Database only: {dbOnlyCount}");
@@ -211,10 +213,8 @@ namespace SenseNetIndexTools
                 var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                 
                 sb.AppendLine($"| {item.Status} | {dbNodeId} | {dbVerID} | {idxNodeId} | {idxVerID} | {item.Path} | {item.NodeType} |");
-            }
-
-            // Always show summary on console
-            Console.WriteLine($"\nFound {items.Count} unique paths:");
+            }            // Always show summary on console
+            Console.WriteLine($"\nFound {items.Count} unique content items (by path, ID, and version):");
             Console.WriteLine($"Perfect matches: {matchCount}");
             Console.WriteLine($"ID mismatches: {mismatchCount}");
             Console.WriteLine($"Database only: {dbOnlyCount}");
@@ -491,14 +491,12 @@ namespace SenseNetIndexTools
                 .Select(i => { i.InIndex = true; return i; });
             
             var indexItemsCount = indexItems.Count();
-            Console.WriteLine($"INDEX ITEMS LOADED: {indexItemsCount} items");
-
-            // Combine and group items by path for side-by-side comparison
+            Console.WriteLine($"INDEX ITEMS LOADED: {indexItemsCount} items");            // Combine and group items by path for side-by-side comparison
             Console.WriteLine("MERGING DATABASE AND INDEX ITEMS...");
             var pathComparer = StringComparer.OrdinalIgnoreCase; // Use case-insensitive comparison for paths
             
-            // Create dictionaries for faster lookup
-            var dbItemsByNormalizedPath = new Dictionary<string, ContentItem>(pathComparer);
+            // Create dictionaries for faster lookup - use dictionaries with NodeId as a secondary key
+            var dbItemsByNormalizedPathAndId = new Dictionary<string, Dictionary<string, ContentItem>>(pathComparer);
             var pathNormalizationCount = 0;
             
             foreach (var item in dbItems)
@@ -509,113 +507,195 @@ namespace SenseNetIndexTools
                     pathNormalizationCount++;
                 }
                 
-                if (!dbItemsByNormalizedPath.ContainsKey(normalizedPath))
+                if (!dbItemsByNormalizedPathAndId.ContainsKey(normalizedPath))
                 {
-                    dbItemsByNormalizedPath[normalizedPath] = item;
+                    dbItemsByNormalizedPathAndId[normalizedPath] = new Dictionary<string, ContentItem>();
                 }
-                else
+                
+                string nodeIdKey = item.NodeId.ToString();
+                dbItemsByNormalizedPathAndId[normalizedPath][nodeIdKey] = item;
+                
+                if (VerboseLogging && dbItemsByNormalizedPathAndId[normalizedPath].Count > 1)
                 {
-                    if (VerboseLogging)
-                    {
-                        Console.WriteLine($"WARNING: Duplicate normalized path in database: '{normalizedPath}'");
-                        Console.WriteLine($"  Existing: NodeId={dbItemsByNormalizedPath[normalizedPath].NodeId}, Path='{dbItemsByNormalizedPath[normalizedPath].Path}'");
-                        Console.WriteLine($"  Skipping: NodeId={item.NodeId}, Path='{item.Path}'");
-                    }
+                    Console.WriteLine($"INFO: Multiple versions found in database for path: '{normalizedPath}'");
+                    Console.WriteLine($"  Adding version: NodeId={item.NodeId}, VersionId={item.VersionId}, Path='{item.Path}'");
                 }
             }
             
             Console.WriteLine($"PATH NORMALIZATION: {pathNormalizationCount} database paths were normalized beyond simple case conversion and trailing slash removal");
             
-            var results = new List<ContentItem>();
-            var matchedCount = 0;
+            var results = new List<ContentItem>();            var matchedCount = 0;
             var indexOnlyCount = 0;
             var pathMismatchSamples = 0;
             const int MaxPathMismatchSamples = 10;
-            
-            // Process index items and match against database items
+              // Process index items and match against database items
             foreach (var indexItem in indexItems)
             {
                 var indexNormalizedPath = NormalizePath(indexItem.Path);
-                
-                if (dbItemsByNormalizedPath.TryGetValue(indexNormalizedPath, out var dbItem))
+                bool matched = false;
+                  if (dbItemsByNormalizedPathAndId.TryGetValue(indexNormalizedPath, out var pathItems))
                 {
-                    // Found in both database and index
-                    matchedCount++;
-                    
-                    // Log sample matches
-                    if (VerboseLogging && (matchedCount <= 5 || matchedCount % 10000 == 0))
+                    // Try to match by NodeId first if available
+                    if (!string.IsNullOrEmpty(indexItem.IndexNodeId) && 
+                        pathItems.TryGetValue(indexItem.IndexNodeId, out var matchedDbItem) &&
+                        string.Equals(matchedDbItem.VersionId.ToString(), indexItem.IndexVersionId)) // Also check version match
                     {
-                        Console.WriteLine($"MATCH FOUND: Index path '{indexItem.Path}' -> DB path '{dbItem.Path}' (NodeIds: Index={indexItem.IndexNodeId}, DB={dbItem.NodeId})");
-                    }
-                    
-                    // Merge the data - copy index info to database item
-                    dbItem.InIndex = true;
-                    dbItem.IndexNodeId = indexItem.IndexNodeId;
-                    dbItem.IndexVersionId = indexItem.IndexVersionId;
-                    
-                    // Remove from dictionary to mark as processed
-                    dbItemsByNormalizedPath.Remove(indexNormalizedPath);
-                    
-                    // Add to results
-                    results.Add(dbItem);
+                        // Found exact match by path, ID AND version
+                        matchedCount++;
+                        
+                        // Log sample matches
+                        if (VerboseLogging && (matchedCount <= 5 || matchedCount % 10000 == 0))
+                        {
+                            Console.WriteLine($"MATCH FOUND: Index path '{indexItem.Path}' -> DB path '{matchedDbItem.Path}' (NodeIds: Index={indexItem.IndexNodeId}, DB={matchedDbItem.NodeId})");
+                        }
+                        
+                        // Merge the data - copy index info to database item
+                        matchedDbItem.InIndex = true;
+                        matchedDbItem.IndexNodeId = indexItem.IndexNodeId;
+                        matchedDbItem.IndexVersionId = indexItem.IndexVersionId;
+                        
+                        // Mark as processed by removing the specific NodeId entry
+                        pathItems.Remove(indexItem.IndexNodeId);
+                        if (pathItems.Count == 0)
+                        {
+                            // If no more items at this path, remove the path entry
+                            dbItemsByNormalizedPathAndId.Remove(indexNormalizedPath);
+                        }
+                        
+                        // Add to results
+                        results.Add(matchedDbItem);
+                        matched = true;
+                    }                    else if (!string.IsNullOrEmpty(indexItem.IndexNodeId) && pathItems.Count > 0)
+                    {
+                        // We have a NodeId match but version mismatch, or just a path match
+                        // In either case, this is a distinct item and should be shown separately
+                        
+                        // Check if we have a NodeId match but version mismatch (different version of same content)
+                        if (pathItems.TryGetValue(indexItem.IndexNodeId, out var sameIdDifferentVersion))
+                        {
+                            if (VerboseLogging)
+                            {
+                                Console.WriteLine($"VERSION MISMATCH AT SAME PATH AND ID: Found index item at path '{indexItem.Path}' with ID {indexItem.IndexNodeId}");
+                                Console.WriteLine($"  Index version: {indexItem.IndexVersionId}, DB version: {sameIdDifferentVersion.VersionId}");
+                            }
+                        }
+                        else if (VerboseLogging)
+                        {
+                            Console.WriteLine($"DIFFERENT ID AT SAME PATH: Found index item at path '{indexItem.Path}' with ID {indexItem.IndexNodeId}");
+                            Console.WriteLine($"  This path already has {pathItems.Count} item(s) in the database with different IDs");
+                        }
+                        
+                        // Add as a separate index-only item
+                        indexOnlyCount++;
+                        results.Add(indexItem);
+                        matched = true;}
                 }
-                else
-                {
-                    // Item exists only in the index
-                    indexOnlyCount++;
+                  if (!matched)
+                {                    // Before definitively marking as orphaned, check if any database items have 
+                    // a matching NodeId AND VersionId, regardless of path - this handles path renames
+                    var matchByIdOnly = dbItems.FirstOrDefault(db => 
+                        db.NodeId.ToString() == indexItem.IndexNodeId && 
+                        !db.InIndex && // Make sure we haven't already matched this DB item
+                        db.VersionId.ToString() == indexItem.IndexVersionId); // Must match BOTH ID and version
                     
-                    // Log sample mismatches
-                    if (VerboseLogging && pathMismatchSamples < MaxPathMismatchSamples)
+                    if (matchByIdOnly != null)
                     {
-                        pathMismatchSamples++;
-                        Console.WriteLine($"PATH MISMATCH SAMPLE {pathMismatchSamples}:");
-                        Console.WriteLine($"  Index path: '{indexItem.Path}'");
-                        Console.WriteLine($"  Normalized: '{indexNormalizedPath}'");
-                        Console.WriteLine($"  NodeId: {indexItem.IndexNodeId}");
-                        
-                        // Find similar paths
-                        var similarPaths = dbItemsByNormalizedPath.Keys
-                            .Where(k => k.Contains(indexNormalizedPath, StringComparison.OrdinalIgnoreCase) || 
-                                       indexNormalizedPath.Contains(k, StringComparison.OrdinalIgnoreCase))
-                            .Take(3)
-                            .ToList();
-                        
-                        if (similarPaths.Any())
+                        // We found a match by both NodeId and VersionId but the paths differ - this is likely a renamed item
+                        if (VerboseLogging)
                         {
-                            Console.WriteLine("  Similar paths in database:");
-                            foreach (var similarPath in similarPaths)
+                            Console.WriteLine($"ID-ONLY MATCH: Index item path='{indexItem.Path}' matched to DB item with different path='{matchByIdOnly.Path}'");
+                            Console.WriteLine($"  This suggests the item was renamed in the database but the index wasn't updated.");
+                            Console.WriteLine($"  Matched by NodeId={matchByIdOnly.NodeId} and VersionId={matchByIdOnly.VersionId}");
+                        }
+                        
+                        // Merge the data - copy index info to database item
+                        matchByIdOnly.InIndex = true;
+                        matchByIdOnly.IndexNodeId = indexItem.IndexNodeId;
+                        matchByIdOnly.IndexVersionId = indexItem.IndexVersionId;
+                        
+                        // Remove this item from any path collections
+                        string matchIdKey = matchByIdOnly.NodeId.ToString();
+                        string matchNormalizedPath = NormalizePath(matchByIdOnly.Path);
+                        if (dbItemsByNormalizedPathAndId.TryGetValue(matchNormalizedPath, out var matchPathItems) &&
+                            matchPathItems.ContainsKey(matchIdKey))
+                        {
+                            matchPathItems.Remove(matchIdKey);
+                            if (matchPathItems.Count == 0)
                             {
-                                var similarDbItem = dbItemsByNormalizedPath[similarPath];
-                                Console.WriteLine($"    Path: '{similarDbItem.Path}'");
-                                Console.WriteLine($"    Normalized: '{similarPath}'");
-                                Console.WriteLine($"    NodeId: {similarDbItem.NodeId}");
+                                dbItemsByNormalizedPathAndId.Remove(matchNormalizedPath);
                             }
                         }
                         
-                        // Check if NodeId matches any database items
-                        var matchingNodeIds = dbItems.Where(db => db.NodeId.ToString() == indexItem.IndexNodeId).Take(3).ToList();
-                        if (matchingNodeIds.Any())
-                        {
-                            Console.WriteLine("  POTENTIAL MATCHES BY NODEID:");
-                            foreach (var match in matchingNodeIds)
-                            {
-                                Console.WriteLine($"    Path: '{match.Path}'");
-                                Console.WriteLine($"    Normalized: '{NormalizePath(match.Path)}'");
-                                Console.WriteLine($"    NodeId: {match.NodeId}");
-                            }
-                        }
-                        
-                        Console.WriteLine();
+                        // Add to results
+                        results.Add(matchByIdOnly);
+                        matched = true;
+                        matchedCount++;
                     }
-                    
-                    // Add to results
-                    results.Add(indexItem);
+                    else
+                    {
+                        // Item exists only in the index - truly orphaned
+                        indexOnlyCount++;
+                        
+                        // Log sample mismatches
+                        if (VerboseLogging && pathMismatchSamples < MaxPathMismatchSamples)
+                        {
+                            pathMismatchSamples++;
+                            Console.WriteLine($"PATH MISMATCH SAMPLE {pathMismatchSamples}:");
+                            Console.WriteLine($"  Index path: '{indexItem.Path}'");
+                            Console.WriteLine($"  Normalized: '{indexNormalizedPath}'");
+                            Console.WriteLine($"  NodeId: {indexItem.IndexNodeId}");
+                            
+                            // Find similar paths
+                            var similarPaths = dbItemsByNormalizedPathAndId.Keys
+                                .Where(k => k.Contains(indexNormalizedPath, StringComparison.OrdinalIgnoreCase) || 
+                                           indexNormalizedPath.Contains(k, StringComparison.OrdinalIgnoreCase))
+                                .Take(3)
+                                .ToList();
+                            
+                            if (similarPaths.Any())
+                            {
+                                Console.WriteLine("  Similar paths in database:");
+                                foreach (var similarPath in similarPaths)
+                                {
+                                    var firstSimilarDbItem = dbItemsByNormalizedPathAndId[similarPath].Values.First();
+                                    Console.WriteLine($"    Path: '{firstSimilarDbItem.Path}'");
+                                    Console.WriteLine($"    Normalized: '{similarPath}'");
+                                    Console.WriteLine($"    NodeId: {firstSimilarDbItem.NodeId}");
+                                }
+                            }
+                            
+                            // Check if NodeId matches any database items
+                            var matchingNodeIds = dbItems.Where(db => db.NodeId.ToString() == indexItem.IndexNodeId).Take(3).ToList();
+                            if (matchingNodeIds.Any())
+                            {
+                                Console.WriteLine("  POTENTIAL MATCHES BY NODEID:");
+                                foreach (var match in matchingNodeIds)
+                                {
+                                    Console.WriteLine($"    Path: '{match.Path}'");
+                                    Console.WriteLine($"    Normalized: '{NormalizePath(match.Path)}'");
+                                    Console.WriteLine($"    NodeId: {match.NodeId}");
+                                }
+                            }
+                            
+                            Console.WriteLine();
+                        }
+                        
+                        // Add to results
+                        results.Add(indexItem);                    }
                 }
             }
             
             // Add remaining database items (those not found in the index)
-            Console.WriteLine($"ADDING REMAINING DATABASE ITEMS: {dbItemsByNormalizedPath.Count} items");
-            results.AddRange(dbItemsByNormalizedPath.Values);
+            int remainingDbItems = 0;
+            foreach (var pathDict in dbItemsByNormalizedPathAndId)
+            {
+                foreach (var item in pathDict.Value.Values)
+                {
+                    results.Add(item);
+                    remainingDbItems++;
+                }
+            }
+            Console.WriteLine($"ADDING REMAINING DATABASE ITEMS: {remainingDbItems} items");
             
             // Filter by depth if specified
             if (depth > 0)
@@ -631,16 +711,14 @@ namespace SenseNetIndexTools
                 
                 Console.WriteLine($"DEPTH FILTERING: Filtered out {beforeCount - results.Count} items exceeding depth {depth}");
             }
-            
-            // Summary
-            Console.WriteLine();
+              // Summary            Console.WriteLine();
             Console.WriteLine("COMPARISON SUMMARY:");
             Console.WriteLine($"- Database items: {dbItemsCount}");
             Console.WriteLine($"- Index items: {indexItemsCount}");
             Console.WriteLine($"- Matched items: {matchedCount}");
-            Console.WriteLine($"- Database-only items: {dbItemsByNormalizedPath.Count}");
+            Console.WriteLine($"- Database-only items: {remainingDbItems}");
             Console.WriteLine($"- Index-only items: {indexOnlyCount}");
-            Console.WriteLine($"- Total unique items: {results.Count}");
+            Console.WriteLine($"- Total unique items: {results.Count} (unique by path, ID, and version)");
             
             return results;
         }
