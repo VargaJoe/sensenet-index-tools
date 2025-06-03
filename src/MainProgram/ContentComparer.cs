@@ -3,6 +3,7 @@ using System.Data.SqlClient;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Store;
+using Lucene.Net.Util;
 using IODirectory = System.IO.Directory;
 
 namespace SenseNetIndexTools
@@ -97,9 +98,16 @@ namespace SenseNetIndexTools
 
                     // Get items from index
                     var indexItems = GetContentItemsFromIndex(indexPath, repositoryPath, recursive, depth)
-                        .Select(i => { i.InIndex = true; return i; });                    // Combine and group items by path for side-by-side display
+                        .Select(i => { i.InIndex = true; return i; });                    // Combine and group items by normalized path, type, NodeId/IndexNodeId AND version for side-by-side display
                     var items = dbItems.Union(indexItems)
-                        .GroupBy(i => i.Path.ToLowerInvariant())
+                        .GroupBy(i => new { 
+                            Path = i.Path.ToLowerInvariant(),
+                            Type = i.NodeType ?? "unknown",
+                            // Create a unique identifier that distinctly identifies each item by both ID and version
+                            // This ensures items with same path but different IDs or versions are treated as separate entries
+                            Id = i.InDatabase ? i.NodeId.ToString() : i.IndexNodeId ?? "unknown",
+                            Version = i.InDatabase ? i.VersionId.ToString() : i.IndexVersionId ?? "unknown"
+                        })
                         .Select(g =>
                         {
                             var dbItem = g.FirstOrDefault(i => i.InDatabase);
@@ -165,7 +173,7 @@ namespace SenseNetIndexTools
             sb.AppendLine();
             sb.AppendLine("## Summary");
             sb.AppendLine();
-            sb.AppendLine($"- Total unique paths: {items.Count}");
+            sb.AppendLine($"- Total unique items: {items.Count} (unique by path, ID, and version)");
             sb.AppendLine($"- Perfect matches: {matchCount}");
             sb.AppendLine($"- ID mismatches: {mismatchCount}");
             sb.AppendLine($"- Database only: {dbOnlyCount}");
@@ -188,7 +196,7 @@ namespace SenseNetIndexTools
             }
 
             // Always show summary on console
-            Console.WriteLine($"\nFound {items.Count} unique paths:");
+            Console.WriteLine($"\nFound {items.Count} unique content items (by path, ID, and version):");
             Console.WriteLine($"Perfect matches: {matchCount}");
             Console.WriteLine($"ID mismatches: {mismatchCount}");
             Console.WriteLine($"Database only: {dbOnlyCount}");
