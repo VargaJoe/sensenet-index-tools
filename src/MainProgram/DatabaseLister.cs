@@ -1,10 +1,10 @@
 using System.CommandLine;
 using System.Data.SqlClient;
 
-using SenseNet.IndexTools.Core.Models;
-
 namespace SenseNetIndexTools
 {
+    using DbContentItem = ContentItem;
+
     public class DatabaseLister
     {
 
@@ -98,9 +98,9 @@ namespace SenseNetIndexTools
             return command;
         }
 
-        private static List<ContentItem> GetContentItemsFromDatabase(string connectionString, string path, bool recursive, int depth)
+        private static List<DbContentItem> GetContentItemsFromDatabase(string connectionString, string path, bool recursive, int depth)
         {
-            var items = new List<ContentItem>();
+            var items = new List<DbContentItem>();
             
             // Sanitize path for SQL query
             string sanitizedPath = path.Replace("'", "''");
@@ -144,7 +144,7 @@ namespace SenseNetIndexTools
                     {
                         while (reader.Read())
                         {
-                            items.Add(new ContentItem
+                            items.Add(new DbContentItem
                             {
                                 NodeId = reader.GetInt32(reader.GetOrdinal("NodeId")),
                                 VersionId = reader.GetInt32(reader.GetOrdinal("VersionId")),

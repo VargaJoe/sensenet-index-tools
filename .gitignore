@@ -87,3 +87,5 @@ src/MainProgram/out/*
 pre-cleanup-check.html
 post-cleanup-check.html
 preversion/*
+timestamp-fix-verification*
+ts-cleanup-check*
