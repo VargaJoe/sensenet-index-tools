@@ -79,7 +79,7 @@ The fix implements the following changes:
 After implementing the fix, we ran the `verify-timestamp-fix.ps1` script and found:
 
 1. The tool now correctly compares the actual numeric timestamp values
-2. For the test case at `/Root/Content/KELERData/Hírcenter/Hírek/2016`:
+2. For the test case at `/Root/Content`:
    - Database timestamp (bigint): `3403825`
    - Index timestamp (string): `3403824`
    - This is a legitimate timestamp mismatch where the database and index timestamps differ by 1

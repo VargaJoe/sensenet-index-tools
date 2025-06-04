@@ -2,7 +2,7 @@
 
 # Script to add clear timestamp debug output
 
-$filePath = "d:\devgit\joe\sensenet-index-tools\src\MainProgram\ContentComparer.cs"
+$filePath = ".\src\MainProgram\ContentComparer.cs"
 
 # First, let's make a backup of the original file if one doesn't exist
 if (-not (Test-Path "$filePath.bak")) {

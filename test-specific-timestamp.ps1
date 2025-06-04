@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 
 # Variables
-$TestIndex = "d:\devgit\joe\!TestIndex\"
+$TestIndex = ""
 # Use a trusted connection instead of specific database
 $TestDb = "Server=localhost;Database=SenseNet;Trusted_Connection=True;"
 $RepositoryPath = "/Root"
@@ -28,7 +28,7 @@ Write-Host "Running a focused test with a specific path..."
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
     --index-path $TestIndex `
     --connection-string $TestDb `
-    --repository-path "/Root/Content/KELERData" `
+    --repository-path "/Root/Content" `
     --recursive false `
     --verbose
 

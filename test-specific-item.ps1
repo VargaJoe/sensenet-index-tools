@@ -1,14 +1,15 @@
 #!/usr/bin/env pwsh
 
 # Set the path to test with a specific item to diagnose the timestamp issue
-$TestPath = "/Root/Content/KELERData/Hírcenter/Hírek/2016"
-$TestNodeId = "102928"
+$TestIndex = ""
+$TestPath = "/Root/Content"
+$TestNodeId = ""
 $OutputFile = "timestamp-specific-test.html"
 
 # Run a targeted test with specific ID
 Write-Host "Running a targeted test for specific NodeId $TestNodeId..."
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
-    --index-path "d:\devgit\joe\!TestIndex\" `
+    --index-path $TestIndex `
     --connection-string "Server=localhost;Database=SenseNet;Trusted_Connection=True;" `
     --repository-path $TestPath `
     --output $OutputFile `

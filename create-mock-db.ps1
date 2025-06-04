@@ -9,7 +9,7 @@ dotnet add src/MainProgram/sn-index-maintenance-suite.csproj package System.Data
 # Create a mock SQLite database
 Add-Type -Path "$(dotnet nuget locals global-packages -l | ForEach-Object { $_.Split(' ')[1] })\system.data.sqlite\1.0.118\lib\netstandard2.0\System.Data.SQLite.dll"
 
-$dbPath = "d:\devgit\joe\sensenet-index-tools\mock-sensenet.db"
+$dbPath = ".\mock-sensenet.db"
 $connString = "Data Source=$dbPath;Version=3;"
 
 # Remove existing database if it exists
@@ -125,7 +125,7 @@ Write-Host "Mock SQLite database created at $dbPath"
 Write-Host "Connection string: $connString"
 
 # Create a mock index directory
-$indexDir = "d:\devgit\joe\sensenet-index-tools\mock-index"
+$indexDir = ".\mock-index"
 if (-not (Test-Path $indexDir)) {
     New-Item -ItemType Directory -Path $indexDir -Force
 }
@@ -152,7 +152,7 @@ dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-sub
 Write-Host "Done! Check the 'timestamp-fix-check.html' file for results."
 "@
 
-Set-Content -Path "d:\devgit\joe\sensenet-index-tools\test-mock-db.ps1" -Value $testScript
+Set-Content -Path ".\test-mock-db.ps1" -Value $testScript
 
 Write-Host "Created test script: test-mock-db.ps1"
 Write-Host "You can run this script to test the timestamp handling fix with a mock database."

@@ -4,9 +4,9 @@
 # It focuses on displaying the numeric timestamp values to help debug comparison issues
 
 # Variables
-$TestIndex = "d:\devgit\joe\!TestIndex\"
+$TestIndex = ""
 # $TestDb = "Server=localhost;Database=SenseNet;Trusted_Connection=True;"
-$TestPath = "/Root/Content/KELERData/Hírcenter/Hírek/2016"
+$TestPath = "/Root/Content"
 $OutputFile = "timestamp-comparison-results.html"
 
 Write-Host "Testing timestamp comparison fix..." -ForegroundColor Green

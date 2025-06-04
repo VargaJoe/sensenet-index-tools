@@ -12,7 +12,7 @@ namespace TestDuplicatePaths
     {
         static void Main(string[] args)
         {
-            string indexPath = @"./IndexBackups/KelerTestIndex202505271035_backup_20250527_144228";
+            string indexPath = @"./IndexBackups/TestIndex202505271035_backup_20250527_144228";
             string path = "/root/content";
             
             Console.WriteLine("Starting test for duplicate paths with different IDs...");

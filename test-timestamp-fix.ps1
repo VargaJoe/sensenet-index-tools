@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 
 # Variables
-$TestIndex = "d:\devgit\joe\!TestIndex\"
+$TestIndex = ""
 # Update connection string to use integrated security (Windows Authentication)
 $TestDb = "Server=localhost;Database=SenseNet;Integrated Security=True;"
 $RepositoryPath = "/Root"
@@ -11,7 +11,7 @@ Write-Host "Running a targeted test with the specific path where the issue was o
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj compare `
     --index-path $TestIndex `
     --connection-string $TestDb `
-    --repository-path "/Root/Content/KELERData/Hírcenter/Hírek/2016" `
+    --repository-path "/Root/Content" `
     --recursive false `
     --verbose
 
