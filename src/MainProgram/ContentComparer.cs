@@ -393,7 +393,7 @@ namespace SenseNetIndexTools
                             var docPath = doc.Get("Path") ?? string.Empty;
                             var type = (doc.Get("Type") ?? doc.Get("NodeType") ?? "Unknown").ToLowerInvariant();
                             var timestamp = doc.Get("NodeTimestamp") ?? string.Empty;
-                            var versionTimeStamp = doc.Get("VersionTimestampNumeric") ?? string.Empty;
+                            var versionTimeStamp = doc.Get("VersionTimestamp") ?? string.Empty;
                             
                             // Debug output for timestamp values
                             if (VerboseLogging && batchCount <= 10)

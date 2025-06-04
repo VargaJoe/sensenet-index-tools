@@ -11,7 +11,7 @@ namespace SenseNetIndexTools
 {
     public class SubtreeIndexChecker
     {
-        private class BranchStats 
+        private class BranchStats
         {
             public int Total { get; set; }
             public int Matches { get; set; }
@@ -25,7 +25,8 @@ namespace SenseNetIndexTools
             public bool Recursive { get; set; }
             public int DatabaseItemsCount { get; set; }
             public int IndexDocCount { get; set; }
-            public int MatchedItemsCount { get; set; }            public List<ContentItem> MismatchedItems { get; set; } = new List<ContentItem>();
+            public int MatchedItemsCount { get; set; }
+            public List<ContentItem> MismatchedItems { get; set; } = new List<ContentItem>();
             public List<ContentItem> MatchedItems { get; set; } = new List<ContentItem>();
             public Dictionary<string, int> ContentTypeStats { get; set; } = new Dictionary<string, int>();
             public Dictionary<string, int> MismatchesByType { get; set; } = new Dictionary<string, int>();
@@ -38,7 +39,7 @@ namespace SenseNetIndexTools
             var command = new Command("check-subtree", "Check if content items from a database subtree exist in the index");
 
             var indexPathOption = new Option<string>(
-                name: "--index-path", 
+                name: "--index-path",
                 description: "Path to the Lucene index directory");
             indexPathOption.IsRequired = true;
 
@@ -64,7 +65,7 @@ namespace SenseNetIndexTools
             var depthOption = new Option<int>(
                 name: "--depth",
                 description: "Limit checking to specified depth (1=direct children only, 0=all descendants)",
-                getDefaultValue: () => 0);            var reportFormatOption = new Option<string>(
+                getDefaultValue: () => 0); var reportFormatOption = new Option<string>(
                 name: "--report-format",
                 description: "Format of the report: 'default' (statistics only), 'detailed' (with content type breakdown), 'tree' (with hierarchical view), or 'full' (all information)",
                 getDefaultValue: () => "default");
@@ -155,7 +156,7 @@ namespace SenseNetIndexTools
             report.DatabaseItemsCount = results.Count(r => r.InDatabase);
             report.IndexDocCount = results.Count(r => r.InIndex);
             report.MatchedItemsCount = results.Count(r => r.InDatabase && r.InIndex && r.Status == "Match");
-            
+
             // Separate matched and mismatched items
             report.MatchedItems = results.Where(r => r.Status == "Match").ToList();
             report.MismatchedItems = results.Where(r => r.Status != "Match").ToList();
@@ -173,10 +174,11 @@ namespace SenseNetIndexTools
                     report.MismatchesByType[type] = count + 1;
                 }
             }
-        }        private static void GenerateReport(CheckReport report, string? outputPath, string reportFormat, string format)
+        }
+        private static void GenerateReport(CheckReport report, string? outputPath, string reportFormat, string format)
         {
             string reportContent;
-            
+
             if (format.ToLower() == "html")
             {
                 reportContent = GenerateHtmlReport(report, reportFormat);
@@ -238,7 +240,7 @@ namespace SenseNetIndexTools
                 sb.AppendLine();
                 sb.AppendLine("| Type | Total Items | Mismatches | Match Rate |");
                 sb.AppendLine("|------|-------------|------------|------------|");
-                
+
                 foreach (var type in report.ContentTypeStats.Keys.OrderBy(k => k))
                 {
                     report.MismatchesByType.TryGetValue(type, out int mismatches);
@@ -248,7 +250,7 @@ namespace SenseNetIndexTools
                 }
                 sb.AppendLine();
             }
-            
+
             // Mismatches by content type
             if (reportFormat != "default" && report.MismatchedItems.Any())
             {
@@ -258,60 +260,67 @@ namespace SenseNetIndexTools
 
                 sb.AppendLine("## Mismatches by Content Type");
                 sb.AppendLine();
-                
+
                 foreach (var typeGroup in mismatchesByType)
                 {
                     sb.AppendLine($"### {typeGroup.Key}");
                     sb.AppendLine();
-                    sb.AppendLine("| Status | DB NodeId | DB VerID | DB Timestamp | Index NodeId | Index VerID | Index Timestamp | Path |");
-                    sb.AppendLine("|---------|-----------|----------|--------------|--------------|-------------|----------------|------|");
+                    sb.AppendLine("| Status | DB NodeId | DB VerID | DB Timestamp | DB VerTimestamp | Index NodeId | Index VerID | Index Timestamp | Index VerTimestamp | Path |");
+                    sb.AppendLine("|---------|-----------|----------|--------------|----------------|--------------|-------------|----------------|------------------|------|");
 
                     foreach (var item in typeGroup.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
                     {
                         var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
                         var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
                         var dbTimestamp = item.InDatabase ? item.TimestampNumeric.ToString() : "-";
+                        var dbVerTimestamp = item.InDatabase ? item.VersionTimestampNumeric.ToString() : "-";
                         var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
                         var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                         var idxTimestamp = item.InIndex ? item.IndexTimestamp : "-";
+                        var idxVerTimestamp = item.InIndex ? item.IndexVersionTimestamp : "-";
                         var statusInfo = FormatStatusWithDetail(item.Status, item.Status);
-                        sb.AppendLine($"| {statusInfo} | {dbNodeId} | {dbVerID} | {dbTimestamp} | {idxNodeId} | {idxVerID} | {idxTimestamp} | {item.Path} |");
+                        sb.AppendLine($"| {statusInfo} | {dbNodeId} | {dbVerID} | {dbTimestamp} | {dbVerTimestamp} | {idxNodeId} | {idxVerID} | {idxTimestamp} | {idxVerTimestamp} | {item.Path} |");
                     }
                     sb.AppendLine();
                 }
             }
-            
+
             // Complete Item List
             if (reportFormat == "full")
             {
                 sb.AppendLine("## Complete Item List");
-                sb.AppendLine();                sb.AppendLine("| Status | DB NodeId | DB VerID | DB Timestamp | Index NodeId | Index VerID | Index Timestamp | Path | Type |");
-                sb.AppendLine("|---------|-----------|----------|--------------|--------------|-------------|----------------|------|------|");
-                
-                // Get all items (both matched and mismatched)
+                sb.AppendLine();
+                sb.AppendLine("| Status | DB NodeId | DB VerID | DB Timestamp | DB VerTimestamp | Index NodeId | Index VerID | Index Timestamp | Index VerTimestamp | Path | Type |");
+                sb.AppendLine("|---------|-----------|----------|--------------|----------------|--------------|-------------|----------------|------------------|------|------|");
+
                 var allItems = report.MismatchedItems.ToList();
                 if (report.MatchedItems != null)
                 {
                     allItems.AddRange(report.MatchedItems);
-                }                foreach (var item in allItems.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
-                {                    var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
+                }
+
+                foreach (var item in allItems.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
+                {
+                    var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
                     var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
                     var dbTimestamp = item.InDatabase ? item.TimestampNumeric.ToString() : "-";
+                    var dbVerTimestamp = item.InDatabase ? item.VersionTimestampNumeric.ToString() : "-";
                     var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
                     var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                     var idxTimestamp = item.InIndex ? item.IndexTimestamp : "-";
+                    var idxVerTimestamp = item.InIndex ? item.IndexVersionTimestamp : "-";
                     var statusInfo = FormatStatusWithDetail(item.Status, item.Status);
-                    sb.AppendLine($"| {statusInfo} | {dbNodeId} | {dbVerID} | {dbTimestamp} | {idxNodeId} | {idxVerID} | {idxTimestamp} | {item.Path} | {item.NodeType} |");
+                    sb.AppendLine($"| {statusInfo} | {dbNodeId} | {dbVerID} | {dbTimestamp} | {dbVerTimestamp} | {idxNodeId} | {idxVerID} | {idxTimestamp} | {idxVerTimestamp} | {item.Path} | {item.NodeType} |");
                 }
                 sb.AppendLine();
             }
-      
+
             // Tree format (hierarchical view)
             if (reportFormat == "tree")
             {
                 sb.AppendLine("## Content Tree");
                 sb.AppendLine();
-                
+
                 // Group items by path hierarchy
                 var allItems = new List<ContentItem>();
                 if (report.MatchedItems != null)
@@ -322,7 +331,7 @@ namespace SenseNetIndexTools
 
                 // Sort items by path for tree organization
                 var sortedItems = allItems.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase).ToList();
-                
+
                 // Create branch statistics
                 var branchStats = new Dictionary<string, BranchStats>();
                 foreach (var item in sortedItems)
@@ -340,7 +349,7 @@ namespace SenseNetIndexTools
                         {
                             stats.Matches++;
                         }
-                        
+
                         var lastSlash = path.LastIndexOf('/');
                         if (lastSlash <= 0) break;
                         path = path.Substring(0, lastSlash);
@@ -350,7 +359,7 @@ namespace SenseNetIndexTools
                 // Root node
                 var rootPath = report.RepositoryPath;
                 var rootItem = sortedItems.FirstOrDefault(i => i.Path == rootPath);
-                var rootStatusInfo = rootItem != null 
+                var rootStatusInfo = rootItem != null
                     ? FormatStatusWithDetail(rootItem.Status, rootItem.Status)
                     : "";
                 var rootStats = branchStats.TryGetValue(rootPath, out var rs) ? rs : new BranchStats();
@@ -370,20 +379,20 @@ namespace SenseNetIndexTools
                     {
                         relativePath = relativePath.Substring(rootPath.Length).TrimStart('/');
                     }
-                    
+
                     var pathParts = relativePath.Split('/');
                     var itemName = pathParts[pathParts.Length - 1];
                     var level = pathParts.Length;
-                    
+
                     // Adjust level trackers
                     while (currentLevel.Count > level) currentLevel.RemoveAt(currentLevel.Count - 1);
                     while (currentLevel.Count < level) currentLevel.Add(false);
-                    
+
                     // Check if this is the last item at current level
-                    var isLast = (i == sortedItems.Count - 1) || 
+                    var isLast = (i == sortedItems.Count - 1) ||
                         !sortedItems[i + 1].Path.StartsWith(item.Path.Substring(0, item.Path.LastIndexOf('/')));
                     currentLevel[level - 1] = !isLast;
-                    
+
                     // Build line prefix
                     var linePrefix = string.Empty;
                     for (int j = 0; j < level - 1; j++)
@@ -391,16 +400,16 @@ namespace SenseNetIndexTools
                         linePrefix += currentLevel[j] ? "│   " : "    ";
                     }
                     linePrefix += isLast ? "└── " : "├── ";
-                    
+
                     // Add item details
                     var isFolder = sortedItems.Any(x => x != item && x.Path.StartsWith(item.Path + "/"));
                     var displayName = isFolder ? itemName + "/" : itemName;
                     var statusInfo = FormatStatusWithDetail(item.Status, item.Status);
-                    
+
                     // Add folder statistics
                     var stats = branchStats.TryGetValue(item.Path, out var itemStats) ? itemStats : new BranchStats();
                     var statsInfo = isFolder ? $" ({stats.Matches}/{stats.Total} match)" : "";
-                    
+
                     sb.AppendLine($"{linePrefix}{displayName} {statusInfo}{statsInfo}");
                 }
                 sb.AppendLine();
@@ -412,7 +421,7 @@ namespace SenseNetIndexTools
         private static string GenerateHtmlReport(CheckReport report, string reportFormat)
         {
             var sb = new StringBuilder();
-            
+
             // Start HTML document
             sb.AppendLine("<!DOCTYPE html>");
             sb.AppendLine("<html lang=\"en\">");
@@ -527,7 +536,7 @@ namespace SenseNetIndexTools
             sb.AppendLine("</style>");
             sb.AppendLine("</head>");
             sb.AppendLine("<body>");
-            
+
             // Report header
             sb.AppendLine("<header>");
             sb.AppendLine("<h1>SenseNet Index Check Report</h1>");
@@ -539,22 +548,22 @@ namespace SenseNetIndexTools
             sb.AppendLine($"<p><strong>Duration:</strong> {(report.EndTime - report.StartTime).TotalSeconds:F2} seconds</p>");
             sb.AppendLine("</div>");
             sb.AppendLine("</header>");
-            
+
             // Summary section with statistics
             sb.AppendLine("<div class=\"summary-section\">");
             sb.AppendLine("<h2>Summary</h2>");
             sb.AppendLine("<div class=\"stats-container\">");
-            
+
             sb.AppendLine("<div class=\"stat-card\">");
             sb.AppendLine("<div class=\"stat-title\">Items in Database</div>");
             sb.AppendLine($"<div class=\"stat-value\">{report.DatabaseItemsCount:N0}</div>");
             sb.AppendLine("</div>");
-            
+
             sb.AppendLine("<div class=\"stat-card\">");
             sb.AppendLine("<div class=\"stat-title\">Items in Index</div>");
             sb.AppendLine($"<div class=\"stat-value\">{report.IndexDocCount:N0}</div>");
             sb.AppendLine("</div>");
-            
+
             sb.AppendLine("<div class=\"stat-card\">");
             sb.AppendLine("<div class=\"stat-title\">Matched Items</div>");
             sb.AppendLine($"<div class=\"stat-value\">{report.MatchedItemsCount:N0}</div>");
@@ -563,10 +572,10 @@ namespace SenseNetIndexTools
             sb.AppendLine("<div class=\"stat-title\">Mismatched Items</div>");
             sb.AppendLine($"<div class=\"stat-value\">{report.MismatchedItems.Count:N0}</div>");
             sb.AppendLine("</div>");
-            
+
             sb.AppendLine("</div>"); // End of stats-container
             sb.AppendLine("</div>"); // End of summary-section
-            
+
             // Content type distribution
             if (reportFormat != "default" && report.ContentTypeStats.Any())
             {
@@ -582,7 +591,7 @@ namespace SenseNetIndexTools
                 sb.AppendLine("</tr>");
                 sb.AppendLine("</thead>");
                 sb.AppendLine("<tbody>");
-                
+
                 foreach (var type in report.ContentTypeStats.Keys.OrderBy(k => k))
                 {
                     report.MismatchesByType.TryGetValue(type, out int mismatches);
@@ -595,12 +604,12 @@ namespace SenseNetIndexTools
                     sb.AppendLine($"<td>{matchRate}%</td>");
                     sb.AppendLine("</tr>");
                 }
-                
+
                 sb.AppendLine("</tbody>");
                 sb.AppendLine("</table>");
                 sb.AppendLine("</div>");
             }
-            
+
             // Mismatches by content type
             if (reportFormat != "default" && report.MismatchedItems.Any())
             {
@@ -610,7 +619,7 @@ namespace SenseNetIndexTools
 
                 sb.AppendLine("<div class=\"section\">");
                 sb.AppendLine("<h2>Mismatches by Content Type</h2>");
-                  foreach (var typeGroup in mismatchesByType)
+                foreach (var typeGroup in mismatchesByType)
                 {
                     sb.AppendLine($"<h3>{typeGroup.Key}</h3>");
                     sb.AppendLine("<table>");
@@ -620,21 +629,26 @@ namespace SenseNetIndexTools
                     sb.AppendLine("<th>DB NodeId</th>");
                     sb.AppendLine("<th>DB VerID</th>");
                     sb.AppendLine("<th>DB Timestamp</th>");
+                    sb.AppendLine("<th>DB VerTimestamp</th>");
                     sb.AppendLine("<th>Index NodeId</th>");
                     sb.AppendLine("<th>Index VerID</th>");
                     sb.AppendLine("<th>Index Timestamp</th>");
+                    sb.AppendLine("<th>Index VerTimestamp</th>");
                     sb.AppendLine("<th>Path</th>");
                     sb.AppendLine("</tr>");
                     sb.AppendLine("</thead>");
                     sb.AppendLine("<tbody>");
-                      foreach (var item in typeGroup.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
+
+                    foreach (var item in typeGroup.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
                     {
                         var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
                         var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
                         var dbTimestamp = item.InDatabase ? item.TimestampNumeric.ToString() : "-";
+                        var dbVerTimestamp = item.InDatabase ? item.VersionTimestampNumeric.ToString() : "-";
                         var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
                         var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                         var idxTimestamp = item.InIndex ? item.IndexTimestamp : "-";
+                        var idxVerTimestamp = item.InIndex ? item.IndexVersionTimestamp : "-";
                         var statusClass = item.Status == "Match" ? "tree-status-match" : "tree-status-mismatch";
                         var statusInfo = FormatStatusWithDetail(item.Status, item.Status);
                         sb.AppendLine("<tr>");
@@ -642,52 +656,61 @@ namespace SenseNetIndexTools
                         sb.AppendLine($"<td>{dbNodeId}</td>");
                         sb.AppendLine($"<td>{dbVerID}</td>");
                         sb.AppendLine($"<td>{dbTimestamp}</td>");
+                        sb.AppendLine($"<td>{dbVerTimestamp}</td>");
                         sb.AppendLine($"<td>{idxNodeId}</td>");
                         sb.AppendLine($"<td>{idxVerID}</td>");
                         sb.AppendLine($"<td>{idxTimestamp}</td>");
+                        sb.AppendLine($"<td>{idxVerTimestamp}</td>");
                         sb.AppendLine($"<td>{item.Path}</td>");
                         sb.AppendLine("</tr>");
                     }
-                    
+
                     sb.AppendLine("</tbody>");
                     sb.AppendLine("</table>");
                 }
-                
+
                 sb.AppendLine("</div>");
             }
-            
+
             // Complete Item List
             if (reportFormat == "full")
-            {                sb.AppendLine("<div class=\"section\">");
-                sb.AppendLine("<h2>Complete Item List</h2>");                sb.AppendLine("<table>");
+            {
+                sb.AppendLine("<div class=\"section\">");
+                sb.AppendLine("<h2>Complete Item List</h2>");
+                sb.AppendLine("<table>");
                 sb.AppendLine("<thead>");
                 sb.AppendLine("<tr>");
                 sb.AppendLine("<th>Status</th>");
                 sb.AppendLine("<th>DB NodeId</th>");
                 sb.AppendLine("<th>DB VerID</th>");
                 sb.AppendLine("<th>DB Timestamp</th>");
+                sb.AppendLine("<th>DB VerTimestamp</th>");
                 sb.AppendLine("<th>Index NodeId</th>");
                 sb.AppendLine("<th>Index VerID</th>");
                 sb.AppendLine("<th>Index Timestamp</th>");
+                sb.AppendLine("<th>Index VerTimestamp</th>");
                 sb.AppendLine("<th>Path</th>");
                 sb.AppendLine("<th>Type</th>");
                 sb.AppendLine("</tr>");
                 sb.AppendLine("</thead>");
                 sb.AppendLine("<tbody>");
-                
-                // Get all items (both matched and mismatched)
+
                 var allItems = report.MismatchedItems.ToList();
                 if (report.MatchedItems != null)
                 {
                     allItems.AddRange(report.MatchedItems);
-                }                foreach (var item in allItems.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
-                {                    
+                }
+
+                foreach (var item in allItems.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
+                {
                     var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
                     var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
                     var dbTimestamp = item.InDatabase ? item.TimestampNumeric.ToString() : "-";
+                    var dbVerTimestamp = item.InDatabase ? item.VersionTimestampNumeric.ToString() : "-";
                     var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
                     var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                     var idxTimestamp = item.InIndex ? item.IndexTimestamp : "-";
+                    var idxVerTimestamp = item.InIndex ? item.IndexVersionTimestamp : "-";
                     var statusClass = item.Status == "Match" ? "tree-status-match" : "tree-status-mismatch";
                     var statusInfo = FormatStatusWithDetail(item.Status, item.Status);
                     sb.AppendLine("<tr>");
@@ -695,26 +718,28 @@ namespace SenseNetIndexTools
                     sb.AppendLine($"<td>{dbNodeId}</td>");
                     sb.AppendLine($"<td>{dbVerID}</td>");
                     sb.AppendLine($"<td>{dbTimestamp}</td>");
+                    sb.AppendLine($"<td>{dbVerTimestamp}</td>");
                     sb.AppendLine($"<td>{idxNodeId}</td>");
                     sb.AppendLine($"<td>{idxVerID}</td>");
                     sb.AppendLine($"<td>{idxTimestamp}</td>");
+                    sb.AppendLine($"<td>{idxVerTimestamp}</td>");
                     sb.AppendLine($"<td>{item.Path}</td>");
                     sb.AppendLine($"<td>{item.NodeType}</td>");
                     sb.AppendLine("</tr>");
                 }
-                
+
                 sb.AppendLine("</tbody>");
                 sb.AppendLine("</table>");
                 sb.AppendLine("</div>");
             }
-            
+
             // Tree format (hierarchical view)
             if (reportFormat == "tree")
             {
                 sb.AppendLine("<div class=\"section\">");
                 sb.AppendLine("<h2>Content Tree</h2>");
                 sb.AppendLine("<div class=\"tree-view\">");
-                
+
                 // Group items and create branch statistics (same as markdown version)
                 var allItems = new List<ContentItem>();
                 if (report.MatchedItems != null)
@@ -722,7 +747,7 @@ namespace SenseNetIndexTools
                     allItems.AddRange(report.MatchedItems);
                 }
                 allItems.AddRange(report.MismatchedItems);
-                
+
                 var sortedItems = allItems.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase).ToList();
                 var branchStats = new Dictionary<string, BranchStats>();
                 foreach (var item in sortedItems)
@@ -740,23 +765,23 @@ namespace SenseNetIndexTools
                         {
                             stats.Matches++;
                         }
-                        
+
                         var lastSlash = path.LastIndexOf('/');
                         if (lastSlash <= 0) break;
                         path = path.Substring(0, lastSlash);
                     }
                 }
-                
+
                 // Root node
                 var rootPath = report.RepositoryPath;
                 var rootItem = sortedItems.FirstOrDefault(i => i.Path == rootPath);
                 var rootStatusClass = rootItem?.Status == "Match" ? "tree-status-match" : "tree-status-mismatch";
-                var rootStatusInfo = rootItem != null 
+                var rootStatusInfo = rootItem != null
                     ? $"<span class=\"{rootStatusClass}\">{FormatStatusWithDetail(rootItem.Status, rootItem.Status)}</span>"
                     : "";
                 var rootStats = branchStats.TryGetValue(rootPath, out var rs) ? rs : new BranchStats();
                 var rootMatchRate = rootStats.Total > 0 ? (rootStats.Matches * 100.0 / rootStats.Total) : 100.0;
-                
+
                 sb.AppendLine($"<div class=\"tree-item tree-folder\">");
                 sb.AppendLine($"  {rootPath}/ {rootStatusInfo}");
                 sb.AppendLine($"  <span class=\"tree-stats\">({rootMatchRate:F1}% match, {rootStats.Total} items)</span>");
@@ -774,31 +799,31 @@ namespace SenseNetIndexTools
                     {
                         relativePath = relativePath.Substring(rootPath.Length).TrimStart('/');
                     }
-                    
+
                     var pathParts = relativePath.Split('/');
                     var level = pathParts.Length;
-                    
+
                     while (currentLevel.Count > level) currentLevel.RemoveAt(currentLevel.Count - 1);
                     while (currentLevel.Count < level) currentLevel.Add(false);
-                    
-                    var isLast = (i == sortedItems.Count - 1) || 
+
+                    var isLast = (i == sortedItems.Count - 1) ||
                         !sortedItems[i + 1].Path.StartsWith(item.Path.Substring(0, item.Path.LastIndexOf('/')));
                     currentLevel[level - 1] = !isLast;
-                    
+
                     var html = "<div class=\"tree-item\">";
                     for (int j = 0; j < level - 1; j++)
                     {
                         html += currentLevel[j] ? "<span class=\"tree-line\">│   </span>" : "    ";
                     }
                     html += isLast ? "<span class=\"tree-line\">└── </span>" : "<span class=\"tree-line\">├── </span>";
-                    
+
                     var itemName = pathParts.Last();
                     var isFolder = sortedItems.Any(x => x != item && x.Path.StartsWith(item.Path + "/"));
                     var nameClass = isFolder ? "tree-folder" : "tree-file";
                     var displayName = isFolder ? itemName + "/" : itemName;
-                    
+
                     html += $"<span class=\"{nameClass}\">{displayName}</span>";
-                    
+
                     var statusClass = item.Status == "Match" ? "tree-status-match" : "tree-status-mismatch";
                     var statusInfo = FormatStatusWithDetail(item.Status, item.Status);
                     html += $" <span class=\"{statusClass}\">{statusInfo}</span>";
@@ -810,15 +835,15 @@ namespace SenseNetIndexTools
                         var matchRate = stats.Total > 0 ? (stats.Matches * 100.0 / stats.Total) : 100.0;
                         html += $" <span class=\"tree-stats\">({matchRate:F1}% match, {stats.Total} items)</span>";
                     }
-                    
+
                     html += "</div>";
                     sb.AppendLine(html);
                 }
-                
+
                 sb.AppendLine("</div>"); // End of tree-view
                 sb.AppendLine("</div>"); // End of section
             }
-            
+
             // Footer
             sb.AppendLine("<footer>");
             sb.AppendLine($"<p>Generated by SenseNet Index Maintenance Suite on {DateTime.Now:yyyy-MM-dd HH:mm:ss}</p>");
@@ -835,7 +860,7 @@ namespace SenseNetIndexTools
         private static string FormatStatusWithDetail(string status, string detailedStatus)
         {
             var icon = status == "Match" ? "✓" : "✗";
-            
+
             if (status == "Match")
             {
                 return $"[{icon}]";
