@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.Data.SqlClient;
+using System.Text;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Store;
@@ -10,6 +11,8 @@ namespace SenseNetIndexTools
 {
     public class ContentComparer
     {
+        public static bool VerboseLogging { get; set; } = false;
+        
         public class ContentItem
         {
             public int NodeId { get; set; }
@@ -20,6 +23,10 @@ namespace SenseNetIndexTools
             public bool InIndex { get; set; }
             public string? IndexNodeId { get; set; }
             public string? IndexVersionId { get; set; }
+            public string? IndexTimestamp { get; set; }
+            public string? IndexVersionTimestamp { get; set; }
+            public long? DbTimestamp { get; set; }
+            public long? DbVersionTimestamp { get; set; }
             
             public string Status => 
                 InDatabase && InIndex 
