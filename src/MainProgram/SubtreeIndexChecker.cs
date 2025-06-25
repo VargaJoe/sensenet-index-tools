@@ -180,13 +180,12 @@ namespace SenseNetIndexTools
                     var mismatchesByType = report.MismatchedItems
                         .GroupBy(x => x.NodeType)
                         .OrderByDescending(g => g.Count());
-
                     sb.AppendLine("## Mismatches by Content Type");
                     foreach (var typeGroup in mismatchesByType)
                     {
                         sb.AppendLine($"### {typeGroup.Key}");
-                        sb.AppendLine("| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | Path |");
-                        sb.AppendLine("|---------|-----------|----------|--------------|-------------|------|");
+                        sb.AppendLine("| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | Index VerTimestamp | Path |");
+                        sb.AppendLine("|---------|-----------|----------|--------------|-------------|-------------------|------|");
                         
                         foreach (var item in typeGroup.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
                         {
@@ -194,18 +193,17 @@ namespace SenseNetIndexTools
                             var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
                             var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
                             var idxVerID = item.InIndex ? item.IndexVersionId : "-";
-                            sb.AppendLine($"| {item.Status} | {dbNodeId} | {dbVerID} | {idxNodeId} | {idxVerID} | {item.Path} |");
+                            var idxVerTimestamp = item.InIndex ? (item.IndexVersionTimestamp ?? "-") : "-";
+                            sb.AppendLine($"| {item.Status} | {dbNodeId} | {dbVerID} | {idxNodeId} | {idxVerID} | {idxVerTimestamp} | {item.Path} |");
                         }
                         sb.AppendLine();
                     }
-                }
-
-                if (reportFormat == "full")
+                }                if (reportFormat == "full")
                 {
                     // Full Item List (like in compare function)
                     sb.AppendLine("## Complete Item List");
-                    sb.AppendLine("| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | Path | Type |");
-                    sb.AppendLine("|---------|-----------|----------|--------------|-------------|------|------|");
+                    sb.AppendLine("| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | Index VerTimestamp | Path | Type |");
+                    sb.AppendLine("|---------|-----------|----------|--------------|-------------|-------------------|------|------|");
 
                     // Get all items (both matched and mismatched)
                     var allItems = report.MismatchedItems.ToList();
@@ -220,7 +218,8 @@ namespace SenseNetIndexTools
                         var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
                         var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
                         var idxVerID = item.InIndex ? item.IndexVersionId : "-";
-                        sb.AppendLine($"| {item.Status} | {dbNodeId} | {dbVerID} | {idxNodeId} | {idxVerID} | {item.Path} | {item.NodeType} |");
+                        var idxVerTimestamp = item.InIndex ? (item.IndexVersionTimestamp ?? "-") : "-";
+                        sb.AppendLine($"| {item.Status} | {dbNodeId} | {dbVerID} | {idxNodeId} | {idxVerID} | {idxVerTimestamp} | {item.Path} | {item.NodeType} |");
                     }
                     sb.AppendLine();
                 }
