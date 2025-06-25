@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Data.SqlClient;
 using System.Text;
+using System.Web;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Store;
@@ -100,10 +101,15 @@ namespace SenseNetIndexTools
                 description: "Order results by: 'path' (default), 'id', 'version', 'type'",
                 getDefaultValue: () => "path");
             orderByOption.FromAmong("path", "id", "version", "type");
-
             var outputOption = new Option<string?>(
                 name: "--output",
-                description: "Path to save the comparison report to a markdown file");
+                description: "Path to save the comparison report to a file");
+
+            var formatOption = new Option<string>(
+                name: "--format",
+                description: "Output format: 'md' (Markdown) or 'html' (HTML format suitable for web viewing)",
+                getDefaultValue: () => "md");
+            formatOption.FromAmong("md", "html");
 
             command.AddOption(indexPathOption);
             command.AddOption(connectionStringOption);
@@ -112,7 +118,8 @@ namespace SenseNetIndexTools
             command.AddOption(depthOption);
             command.AddOption(orderByOption);
             command.AddOption(outputOption);
-            command.SetHandler((string indexPath, string connectionString, string repositoryPath, bool recursive, int depth, string orderBy, string? output) =>
+            command.AddOption(formatOption);
+            command.SetHandler((string indexPath, string connectionString, string repositoryPath, bool recursive, int depth, string orderBy, string? output, string format) =>
             {
                 try
                 {
@@ -183,9 +190,8 @@ namespace SenseNetIndexTools
                                       .ThenBy(i => i.Path, StringComparer.OrdinalIgnoreCase).ToList(),
                         _ => items.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase).ToList()
                     };
-
                     // Display results on console
-                    GenerateReport(groupedItems, output);
+                    GenerateReport(groupedItems, output, format);
                 }
                 catch (Exception ex)
                 {
@@ -193,10 +199,58 @@ namespace SenseNetIndexTools
                     Console.Error.WriteLine(ex.StackTrace);
                     Environment.Exit(1);
                 }
-            }, indexPathOption, connectionStringOption, repositoryPathOption, recursiveOption, depthOption, orderByOption, outputOption);
+            }, indexPathOption, connectionStringOption, repositoryPathOption, recursiveOption, depthOption, orderByOption, outputOption, formatOption);
 
             return command;
-        }        private static void GenerateReport(List<ContentItem> items, string? outputPath)
+        }
+
+        private static void GenerateReport(List<ContentItem> items, string? outputPath, string format)
+        {
+            string reportContent;
+
+            if (format.ToLower() == "html")
+            {
+                reportContent = GenerateHtmlReport(items);
+            }
+            else
+            {
+                reportContent = GenerateMarkdownReport(items);
+            }
+
+            var matchCount = items.Count(i => i.InDatabase && i.InIndex && i.Status == "Match");
+            var idMismatchCount = items.Count(i => i.InDatabase && i.InIndex && i.Status == "ID mismatch");
+            var timestampMismatchCount = items.Count(i => i.InDatabase && i.InIndex && i.Status == "Timestamp mismatch");
+            var dbOnlyCount = items.Count(i => i.InDatabase && !i.InIndex);
+            var indexOnlyCount = items.Count(i => !i.InDatabase && i.InIndex);
+
+            // Build report in markdown format            // Always show summary on console
+            Console.WriteLine($"\nFound {items.Count} unique content items (by path, ID, and version):");
+            Console.WriteLine($"Perfect matches: {matchCount}");
+            Console.WriteLine($"ID mismatches: {idMismatchCount}");
+            Console.WriteLine($"Timestamp mismatches: {timestampMismatchCount}");
+            Console.WriteLine($"Database only: {dbOnlyCount}");
+            Console.WriteLine($"Index only: {indexOnlyCount}");
+
+            // Save to file if output path is specified
+            if (!string.IsNullOrEmpty(outputPath))
+            {
+                File.WriteAllText(outputPath, reportContent);
+                Console.WriteLine($"\nDetailed report saved to: {outputPath}");
+            }
+            else
+            {
+                // Show items on console in a simpler format
+                Console.WriteLine("\nDB_NodeId\tDB_VerID\tIdx_NodeId\tIdx_VerID\tDB_Timestamp\tIdx_Timestamp\tPath\tNodeType\tStatus");
+                Console.WriteLine(new string('-', 140));
+
+                foreach (var item in items)
+                {
+                    Console.WriteLine(item.ToString());
+                }
+            }
+        }
+
+        private static string GenerateMarkdownReport(List<ContentItem> items)
         {
             var matchCount = items.Count(i => i.InDatabase && i.InIndex && i.Status == "Match");
             var idMismatchCount = items.Count(i => i.InDatabase && i.InIndex && i.Status == "ID mismatch");
@@ -204,7 +258,6 @@ namespace SenseNetIndexTools
             var dbOnlyCount = items.Count(i => i.InDatabase && !i.InIndex);
             var indexOnlyCount = items.Count(i => !i.InDatabase && i.InIndex);
 
-            // Build report in markdown format
             var sb = new System.Text.StringBuilder();
             sb.AppendLine("# Content Comparison Report");
             sb.AppendLine();
@@ -223,7 +276,8 @@ namespace SenseNetIndexTools
             sb.AppendLine("|---------|-----------|----------|--------------|-------------|--------------|-----------------|------|------|");
 
             foreach (var item in items.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
-            {                var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
+            {
+                var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
                 var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
                 var dbTimestamp = item.InDatabase && item.Timestamp.HasValue ? item.Timestamp.Value.ToString("yyyy-MM-dd HH:mm:ss") : "-";
                 var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
@@ -231,30 +285,8 @@ namespace SenseNetIndexTools
                 var idxTimestamp = item.InIndex ? (item.IndexTimestamp ?? "-") : "-";
                 
                 sb.AppendLine($"| {item.Status} | {dbNodeId} | {dbVerID} | {idxNodeId} | {idxVerID} | {dbTimestamp} | {idxTimestamp} | {item.Path} | {item.NodeType} |");
-            }            // Always show summary on console
-            Console.WriteLine($"\nFound {items.Count} unique content items (by path, ID, and version):");
-            Console.WriteLine($"Perfect matches: {matchCount}");
-            Console.WriteLine($"ID mismatches: {idMismatchCount}");
-            Console.WriteLine($"Timestamp mismatches: {timestampMismatchCount}");
-            Console.WriteLine($"Database only: {dbOnlyCount}");
-            Console.WriteLine($"Index only: {indexOnlyCount}");
-
-            // Save to file if output path is specified
-            if (!string.IsNullOrEmpty(outputPath))
-            {
-                File.WriteAllText(outputPath, sb.ToString());
-                Console.WriteLine($"\nDetailed report saved to: {outputPath}");
-            }            else
-            {
-                // Show items on console in a simpler format
-                Console.WriteLine("\nDB_NodeId\tDB_VerID\tIdx_NodeId\tIdx_VerID\tDB_Timestamp\tIdx_Timestamp\tPath\tNodeType\tStatus");
-                Console.WriteLine(new string('-', 140));
-
-                foreach (var item in items)
-                {
-                    Console.WriteLine(item.ToString());
-                }
             }
+            return sb.ToString();
         }
 
         private static List<ContentItem> GetContentItemsFromDatabase(string connectionString, string path, bool recursive, int depth)
@@ -435,6 +467,275 @@ namespace SenseNetIndexTools
             }
 
             return items.ToList();
+        }
+
+        private static string GenerateHtmlReport(List<ContentItem> items)
+        {
+            var matchCount = items.Count(i => i.InDatabase && i.InIndex && i.Status == "Match");
+            var idMismatchCount = items.Count(i => i.InDatabase && i.InIndex && i.Status == "ID mismatch");
+            var timestampMismatchCount = items.Count(i => i.InDatabase && i.InIndex && i.Status == "Timestamp mismatch");
+            var dbOnlyCount = items.Count(i => i.InDatabase && !i.InIndex);
+            var indexOnlyCount = items.Count(i => !i.InDatabase && i.InIndex);
+
+            var sb = new StringBuilder();
+            
+            // Start HTML document
+            sb.AppendLine("<!DOCTYPE html>");
+            sb.AppendLine("<html lang=\"en\">");
+            sb.AppendLine("<head>");
+            sb.AppendLine("<meta charset=\"utf-8\">");
+            sb.AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+            sb.AppendLine("<title>SenseNet Content Comparison Report</title>");
+            sb.AppendLine("<style>");
+            sb.AppendLine(@"
+                body { 
+                    font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, ""Helvetica Neue"", Arial, sans-serif; 
+                    line-height: 1.6; 
+                    max-width: 1400px; 
+                    margin: 0 auto; 
+                    padding: 20px;
+                    color: #333;
+                    background-color: #fafbfc;
+                }
+                .container {
+                    background: white;
+                    border-radius: 6px;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                    padding: 30px;
+                }
+                h1, h2 { 
+                    border-bottom: 1px solid #eee; 
+                    padding-bottom: 0.3em; 
+                    margin-top: 1.5em;
+                    color: #24292e;
+                }
+                h1 {
+                    margin-top: 0;
+                    font-size: 2rem;
+                }
+                table { 
+                    border-collapse: collapse; 
+                    width: 100%; 
+                    margin: 1em 0; 
+                    font-size: 14px;
+                }
+                th, td { 
+                    padding: 12px 8px; 
+                    text-align: left; 
+                    border-bottom: 1px solid #ddd; 
+                }
+                th { 
+                    background: #f6f8fa;
+                    font-weight: 600; 
+                    color: #586069;
+                }
+                tr:hover {
+                    background-color: #f6f8fa;
+                }
+                .summary-section {
+                    background: #f6f8fa;
+                    padding: 20px;
+                    border-radius: 6px;
+                    margin-bottom: 30px;
+                    border-left: 4px solid #0366d6;
+                }
+                .stats-container {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 20px;
+                    margin-top: 20px;
+                }
+                .stat-card {
+                    background: white;
+                    padding: 20px;
+                    border-radius: 6px;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                    text-align: center;
+                }
+                .stat-title {
+                    color: #586069;
+                    font-size: 14px;
+                    font-weight: 600;
+                    margin-bottom: 8px;
+                }
+                .stat-value {
+                    font-size: 28px;
+                    font-weight: bold;
+                    margin-bottom: 5px;
+                }
+                .stat-match { color: #28a745; }
+                .stat-mismatch { color: #d73a49; }
+                .stat-timestamp { color: #f66a0a; }
+                .stat-info { color: #6f42c1; }
+                .status-match { 
+                    color: #28a745; 
+                    font-weight: 600;
+                }
+                .status-mismatch { 
+                    color: #d73a49; 
+                    font-weight: 600;
+                }
+                .status-timestamp { 
+                    color: #f66a0a; 
+                    font-weight: 600;
+                }
+                .status-db-only { 
+                    color: #6f42c1; 
+                    font-weight: 600;
+                }
+                .status-index-only { 
+                    color: #0366d6; 
+                    font-weight: 600;
+                }
+                .path-cell {
+                    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+                    font-size: 12px;
+                    max-width: 300px;
+                    word-break: break-all;
+                }
+                .type-cell {
+                    font-weight: 500;
+                    color: #6f42c1;
+                }
+                footer {
+                    margin-top: 30px;
+                    padding-top: 20px;
+                    border-top: 1px solid #eee;
+                    text-align: center;
+                    font-size: 14px;
+                    color: #586069;
+                }
+                .section-title {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                }
+                .badge {
+                    display: inline-block;
+                    padding: 3px 8px;
+                    border-radius: 12px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: white;
+                }
+                .badge-total { background-color: #586069; }
+            ");
+            sb.AppendLine("</style>");
+            sb.AppendLine("</head>");
+            sb.AppendLine("<body>");
+            sb.AppendLine("<div class=\"container\">");
+            
+            // Report header
+            sb.AppendLine("<h1>SenseNet Content Comparison Report</h1>");
+            
+            // Summary section with statistics
+            sb.AppendLine("<div class=\"summary-section\">");
+            sb.AppendLine("<h2>Summary</h2>");
+            sb.AppendLine("<div class=\"stats-container\">");
+            
+            sb.AppendLine("<div class=\"stat-card\">");
+            sb.AppendLine("<div class=\"stat-title\">Total Items</div>");
+            sb.AppendLine($"<div class=\"stat-value\">{items.Count:N0}</div>");
+            sb.AppendLine("<small>Unique by path, ID, version</small>");
+            sb.AppendLine("</div>");
+            
+            sb.AppendLine("<div class=\"stat-card\">");
+            sb.AppendLine("<div class=\"stat-title\">Perfect Matches</div>");
+            sb.AppendLine($"<div class=\"stat-value stat-match\">{matchCount:N0}</div>");
+            sb.AppendLine($"<small>{(items.Count > 0 ? (matchCount * 100.0 / items.Count):0.0):F1}% of total</small>");
+            sb.AppendLine("</div>");
+            
+            sb.AppendLine("<div class=\"stat-card\">");
+            sb.AppendLine("<div class=\"stat-title\">ID Mismatches</div>");
+            sb.AppendLine($"<div class=\"stat-value stat-mismatch\">{idMismatchCount:N0}</div>");
+            sb.AppendLine($"<small>{(items.Count > 0 ? (idMismatchCount * 100.0 / items.Count):0.0):F1}% of total</small>");
+            sb.AppendLine("</div>");
+            
+            sb.AppendLine("<div class=\"stat-card\">");
+            sb.AppendLine("<div class=\"stat-title\">Timestamp Mismatches</div>");
+            sb.AppendLine($"<div class=\"stat-value stat-timestamp\">{timestampMismatchCount:N0}</div>");
+            sb.AppendLine($"<small>{(items.Count > 0 ? (timestampMismatchCount * 100.0 / items.Count):0.0):F1}% of total</small>");
+            sb.AppendLine("</div>");
+            
+            sb.AppendLine("<div class=\"stat-card\">");
+            sb.AppendLine("<div class=\"stat-title\">Database Only</div>");
+            sb.AppendLine($"<div class=\"stat-value stat-info\">{dbOnlyCount:N0}</div>");
+            sb.AppendLine($"<small>{(items.Count > 0 ? (dbOnlyCount * 100.0 / items.Count):0.0):F1}% of total</small>");
+            sb.AppendLine("</div>");
+            
+            sb.AppendLine("</div>"); // End of stats-container
+            sb.AppendLine("</div>"); // End of summary-section
+            
+            // Detailed results table
+            sb.AppendLine("<div class=\"section\">");
+            sb.AppendLine("<div class=\"section-title\">");
+            sb.AppendLine("<h2>Detailed Comparison Results</h2>");
+            sb.AppendLine($"<span class=\"badge badge-total\">{items.Count} items</span>");
+            sb.AppendLine("</div>");
+            
+            sb.AppendLine("<table>");
+            sb.AppendLine("<thead>");
+            sb.AppendLine("<tr>");
+            sb.AppendLine("<th>Status</th>");
+            sb.AppendLine("<th>DB NodeId</th>");
+            sb.AppendLine("<th>DB VerID</th>");
+            sb.AppendLine("<th>Index NodeId</th>");
+            sb.AppendLine("<th>Index VerID</th>");
+            sb.AppendLine("<th>DB Timestamp</th>");
+            sb.AppendLine("<th>Index Timestamp</th>");
+            sb.AppendLine("<th>Path</th>");
+            sb.AppendLine("<th>Type</th>");
+            sb.AppendLine("</tr>");
+            sb.AppendLine("</thead>");
+            sb.AppendLine("<tbody>");
+            
+            foreach (var item in items.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
+            {
+                var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
+                var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
+                var dbTimestamp = item.InDatabase && item.Timestamp.HasValue ? item.Timestamp.Value.ToString("yyyy-MM-dd HH:mm:ss") : "-";
+                var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
+                var idxVerID = item.InIndex ? item.IndexVersionId : "-";
+                var idxTimestamp = item.InIndex ? (item.IndexTimestamp ?? "-") : "-";
+                
+                var statusClass = item.Status switch
+                {
+                    "Match" => "status-match",
+                    "ID mismatch" => "status-mismatch",
+                    "Timestamp mismatch" => "status-timestamp",
+                    "DB Only" => "status-db-only",
+                    "Index Only" => "status-index-only",
+                    _ => ""
+                };
+                
+                sb.AppendLine("<tr>");
+                sb.AppendLine($"<td class=\"{statusClass}\">{item.Status}</td>");
+                sb.AppendLine($"<td>{dbNodeId}</td>");
+                sb.AppendLine($"<td>{dbVerID}</td>");
+                sb.AppendLine($"<td>{idxNodeId}</td>");
+                sb.AppendLine($"<td>{idxVerID}</td>");
+                sb.AppendLine($"<td>{dbTimestamp}</td>");
+                sb.AppendLine($"<td>{idxTimestamp}</td>");
+                sb.AppendLine($"<td class=\"path-cell\">{System.Web.HttpUtility.HtmlEncode(item.Path)}</td>");
+                sb.AppendLine($"<td class=\"type-cell\">{item.NodeType}</td>");
+                sb.AppendLine("</tr>");
+            }
+            
+            sb.AppendLine("</tbody>");
+            sb.AppendLine("</table>");
+            sb.AppendLine("</div>");
+            
+            // Footer
+            sb.AppendLine("<footer>");
+            sb.AppendLine($"<p>Generated by SenseNet Index Maintenance Suite on {DateTime.Now:yyyy-MM-dd HH:mm:ss}</p>");
+            sb.AppendLine("</footer>");
+
+            // Close HTML document
+            sb.AppendLine("</div>"); // End container
+            sb.AppendLine("</body>");
+            sb.AppendLine("</html>");
+
+            return sb.ToString();
         }
     }
 }
