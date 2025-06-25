@@ -105,7 +105,8 @@ namespace SenseNetIndexTools
 
                     // Get items from index
                     var indexItems = GetContentItemsFromIndex(indexPath, repositoryPath, recursive, depth)
-                        .Select(i => { i.InIndex = true; return i; });                    // Combine and group items by normalized path, type, NodeId/IndexNodeId AND version for side-by-side display
+                        .Select(i => { i.InIndex = true; return i; });
+                    // Combine and group items by normalized path, type, NodeId/IndexNodeId AND version for side-by-side display
                     var items = dbItems.Union(indexItems)
                         .GroupBy(i => new { 
                             Path = i.Path.ToLowerInvariant(),
@@ -126,6 +127,8 @@ namespace SenseNetIndexTools
                                 dbItem.InIndex = true;
                                 dbItem.IndexNodeId = indexItem.IndexNodeId;
                                 dbItem.IndexVersionId = indexItem.IndexVersionId;
+                                dbItem.IndexTimestamp = indexItem.IndexTimestamp;
+                                dbItem.IndexVersionTimestamp = indexItem.IndexVersionTimestamp;
                                 return dbItem;
                             }
                             
@@ -186,11 +189,10 @@ namespace SenseNetIndexTools
             sb.AppendLine($"- Database only: {dbOnlyCount}");
             sb.AppendLine($"- Index only: {indexOnlyCount}");
             sb.AppendLine();
-            
-            sb.AppendLine("## Comparison Results");
+              sb.AppendLine("## Comparison Results");
             sb.AppendLine();
-            sb.AppendLine("| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | Path | Type |");
-            sb.AppendLine("|---------|-----------|----------|--------------|-------------|------|------|");
+            sb.AppendLine("| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | Index VerTimestamp | Path | Type |");
+            sb.AppendLine("|---------|-----------|----------|--------------|-------------|-------------------|------|------|");
 
             foreach (var item in items.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
             {
@@ -198,8 +200,9 @@ namespace SenseNetIndexTools
                 var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
                 var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
                 var idxVerID = item.InIndex ? item.IndexVersionId : "-";
+                var idxVerTimestamp = item.InIndex ? (item.IndexVersionTimestamp ?? "-") : "-";
                 
-                sb.AppendLine($"| {item.Status} | {dbNodeId} | {dbVerID} | {idxNodeId} | {idxVerID} | {item.Path} | {item.NodeType} |");
+                sb.AppendLine($"| {item.Status} | {dbNodeId} | {dbVerID} | {idxNodeId} | {idxVerID} | {idxVerTimestamp} | {item.Path} | {item.NodeType} |");
             }
 
             // Always show summary on console
@@ -330,22 +333,26 @@ namespace SenseNetIndexTools
                         foreach (var hitDoc in searchHits)
                         {
                             var doc = searcher.Doc(hitDoc.Doc);
-                            
-                            var nodeId = doc.Get("Id") ?? doc.Get("NodeId") ?? "0";
+                              var nodeId = doc.Get("Id") ?? doc.Get("NodeId") ?? "0";
                             var versionId = doc.Get("Version_") ?? doc.Get("VersionId") ?? "0";
                             var docPath = doc.Get("Path") ?? string.Empty;
-                            var type = doc.Get("Type") ?? doc.Get("NodeType") ?? "Unknown";
+                            var type = (doc.Get("Type") ?? doc.Get("NodeType") ?? "Unknown").ToLowerInvariant();
+                            var timestamp = doc.Get("NodeTimestamp") ?? string.Empty;
+                            var versionTimeStamp = doc.Get("VersionTimestamp") ?? string.Empty;
 
-                        items.Add(new ContentItem
-                        {                            NodeId = 0,  // We'll update this if we find a matching DB item
-                            VersionId = 0, // We'll update this if we find a matching DB item
-                            Path = docPath,
-                            NodeType = type,
-                            InDatabase = false,
-                            InIndex = true,
-                            IndexNodeId = nodeId,
-                            IndexVersionId = versionId
-                        });
+                            items.Add(new ContentItem
+                            {
+                                NodeId = 0,  // We'll update this if we find a matching DB item
+                                VersionId = 0, // We'll update this if we find a matching DB item
+                                Path = docPath,
+                                NodeType = type,
+                                InDatabase = false,
+                                InIndex = true,
+                                IndexNodeId = nodeId,
+                                IndexVersionId = versionId,
+                                IndexTimestamp = timestamp,
+                                IndexVersionTimestamp = versionTimeStamp
+                            });
                         }
                         
                         totalProcessed += searchHits.Length;
@@ -377,14 +384,14 @@ namespace SenseNetIndexTools
                 .Select(g =>
                 {
                     var dbItem = g.FirstOrDefault(i => i.InDatabase);
-                    var indexItem = g.FirstOrDefault(i => i.InIndex);
-
-                    if (dbItem != null && indexItem != null)
+                    var indexItem = g.FirstOrDefault(i => i.InIndex);                    if (dbItem != null && indexItem != null)
                     {
                         // Found in both - merge the index data into the DB item
                         dbItem.InIndex = true;
                         dbItem.IndexNodeId = indexItem.IndexNodeId;
                         dbItem.IndexVersionId = indexItem.IndexVersionId;
+                        dbItem.IndexTimestamp = indexItem.IndexTimestamp;
+                        dbItem.IndexVersionTimestamp = indexItem.IndexVersionTimestamp;
                         return dbItem;
                     }
                     
