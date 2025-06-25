@@ -89,3 +89,4 @@ post-cleanup-check.html
 preversion/*
 timestamp-fix-verification*
 ts-cleanup-check*
+.github/*.md

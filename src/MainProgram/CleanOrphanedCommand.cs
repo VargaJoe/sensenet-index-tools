@@ -86,7 +86,6 @@ namespace SenseNetIndexTools
                     var backup = context.ParseResult.GetValueForOption(backupOption);
                     var offline = context.ParseResult.GetValueForOption(offlineOption);
                     var backupPath = context.ParseResult.GetValueForOption(backupPathOption);
-
                     Console.WriteLine($"Starting orphaned index entries cleanup for path: {repositoryPath}");
                     ContentComparer.VerboseLogging = verbose;
 
@@ -237,7 +236,7 @@ namespace SenseNetIndexTools
             return command;
         }
 
-        private static void DeleteOrphanedEntry(IndexWriter writer, ContentItem entry, bool verbose)
+        private static void DeleteOrphanedEntry(IndexWriter writer, ContentComparer.ContentItem entry, bool verbose)
         {
             using (var searcher = new IndexSearcher(writer.GetReader()))
             {
