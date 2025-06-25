@@ -12,8 +12,7 @@ namespace SenseNetIndexTools
     public class ContentComparer
     {
         public static bool VerboseLogging { get; set; } = false;
-        
-        public class ContentItem
+          public class ContentItem
         {
             public int NodeId { get; set; }
             public int VersionId { get; set; }
@@ -27,15 +26,44 @@ namespace SenseNetIndexTools
             public string? IndexVersionTimestamp { get; set; }
             public long? DbTimestamp { get; set; }
             public long? DbVersionTimestamp { get; set; }
+            public DateTime? Timestamp { get; set; }
             
-            public string Status => 
-                InDatabase && InIndex 
-                    ? (NodeId.ToString() != IndexNodeId || VersionId.ToString() != IndexVersionId)
-                        ? "ID Mismatch"
-                        : "Match"
-                    : InDatabase 
-                        ? "DB Only" 
-                        : "Index Only";
+            public string Status 
+            {
+                get
+                {
+                    if (!InDatabase && !InIndex) return "Unknown";
+                    if (!InDatabase) return "Index Only";
+                    if (!InIndex) return "DB Only";
+
+                    // Both exist - check for mismatches
+                    bool idsMatch = string.Equals(NodeId.ToString(), IndexNodeId) &&
+                                   string.Equals(VersionId.ToString(), IndexVersionId);
+                    bool timestampMatch = true;
+
+                    // Compare timestamps if both exist
+                    if (Timestamp.HasValue && !string.IsNullOrEmpty(IndexTimestamp))
+                    {
+                        if (DateTime.TryParse(IndexTimestamp, out DateTime indexTime))
+                        {
+                            timestampMatch = Math.Abs((Timestamp.Value - indexTime).TotalSeconds) < 1; // Allow 1 second difference  
+                        }
+                    }
+
+                    if (!idsMatch) return "ID mismatch";
+                    if (!timestampMatch) return "Timestamp mismatch";
+                    return "Match";
+                }
+            }
+
+            public override string ToString()
+            {
+                return $"{(InDatabase ? NodeId.ToString() : "-")}\t{(InDatabase ? VersionId.ToString() : "-")}\t" +
+                       $"{(InIndex ? IndexNodeId : "-")}\t{(InIndex ? IndexVersionId : "-")}\t" +
+                       $"{(InDatabase ? Timestamp?.ToString("yyyy-MM-dd HH:mm:ss") : "-")}\t" +
+                       $"{(InIndex ? IndexTimestamp : "-")}\t" +
+                       $"{Path}\t{NodeType}\t{Status}";
+            }
         }
 
         public static Command Create()
@@ -168,12 +196,11 @@ namespace SenseNetIndexTools
             }, indexPathOption, connectionStringOption, repositoryPathOption, recursiveOption, depthOption, orderByOption, outputOption);
 
             return command;
-        }
-
-        private static void GenerateReport(List<ContentItem> items, string? outputPath)
+        }        private static void GenerateReport(List<ContentItem> items, string? outputPath)
         {
             var matchCount = items.Count(i => i.InDatabase && i.InIndex && i.Status == "Match");
-            var mismatchCount = items.Count(i => i.InDatabase && i.InIndex && i.Status == "ID Mismatch");
+            var idMismatchCount = items.Count(i => i.InDatabase && i.InIndex && i.Status == "ID mismatch");
+            var timestampMismatchCount = items.Count(i => i.InDatabase && i.InIndex && i.Status == "Timestamp mismatch");
             var dbOnlyCount = items.Count(i => i.InDatabase && !i.InIndex);
             var indexOnlyCount = items.Count(i => !i.InDatabase && i.InIndex);
 
@@ -185,30 +212,30 @@ namespace SenseNetIndexTools
             sb.AppendLine();
             sb.AppendLine($"- Total unique items: {items.Count} (unique by path, ID, and version)");
             sb.AppendLine($"- Perfect matches: {matchCount}");
-            sb.AppendLine($"- ID mismatches: {mismatchCount}");
+            sb.AppendLine($"- ID mismatches: {idMismatchCount}");
+            sb.AppendLine($"- Timestamp mismatches: {timestampMismatchCount}");
             sb.AppendLine($"- Database only: {dbOnlyCount}");
             sb.AppendLine($"- Index only: {indexOnlyCount}");
             sb.AppendLine();
-              sb.AppendLine("## Comparison Results");
+            sb.AppendLine("## Comparison Results");
             sb.AppendLine();
-            sb.AppendLine("| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | Index VerTimestamp | Path | Type |");
-            sb.AppendLine("|---------|-----------|----------|--------------|-------------|-------------------|------|------|");
+            sb.AppendLine("| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | DB Timestamp | Index Timestamp | Path | Type |");
+            sb.AppendLine("|---------|-----------|----------|--------------|-------------|--------------|-----------------|------|------|");
 
             foreach (var item in items.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
-            {
-                var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
+            {                var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
                 var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
+                var dbTimestamp = item.InDatabase && item.Timestamp.HasValue ? item.Timestamp.Value.ToString("yyyy-MM-dd HH:mm:ss") : "-";
                 var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
                 var idxVerID = item.InIndex ? item.IndexVersionId : "-";
-                var idxVerTimestamp = item.InIndex ? (item.IndexVersionTimestamp ?? "-") : "-";
+                var idxTimestamp = item.InIndex ? (item.IndexTimestamp ?? "-") : "-";
                 
-                sb.AppendLine($"| {item.Status} | {dbNodeId} | {dbVerID} | {idxNodeId} | {idxVerID} | {idxVerTimestamp} | {item.Path} | {item.NodeType} |");
-            }
-
-            // Always show summary on console
+                sb.AppendLine($"| {item.Status} | {dbNodeId} | {dbVerID} | {idxNodeId} | {idxVerID} | {dbTimestamp} | {idxTimestamp} | {item.Path} | {item.NodeType} |");
+            }            // Always show summary on console
             Console.WriteLine($"\nFound {items.Count} unique content items (by path, ID, and version):");
             Console.WriteLine($"Perfect matches: {matchCount}");
-            Console.WriteLine($"ID mismatches: {mismatchCount}");
+            Console.WriteLine($"ID mismatches: {idMismatchCount}");
+            Console.WriteLine($"Timestamp mismatches: {timestampMismatchCount}");
             Console.WriteLine($"Database only: {dbOnlyCount}");
             Console.WriteLine($"Index only: {indexOnlyCount}");
 
@@ -217,12 +244,11 @@ namespace SenseNetIndexTools
             {
                 File.WriteAllText(outputPath, sb.ToString());
                 Console.WriteLine($"\nDetailed report saved to: {outputPath}");
-            }
-            else
+            }            else
             {
                 // Show items on console in a simpler format
-                Console.WriteLine("\nDB_NodeId\tDB_VerID\tIdx_NodeId\tIdx_VerID\tPath\tNodeType\tStatus");
-                Console.WriteLine(new string('-', 120));
+                Console.WriteLine("\nDB_NodeId\tDB_VerID\tIdx_NodeId\tIdx_VerID\tDB_Timestamp\tIdx_Timestamp\tPath\tNodeType\tStatus");
+                Console.WriteLine(new string('-', 140));
 
                 foreach (var item in items)
                 {
@@ -234,16 +260,14 @@ namespace SenseNetIndexTools
         private static List<ContentItem> GetContentItemsFromDatabase(string connectionString, string path, bool recursive, int depth)
         {
             var items = new List<ContentItem>();
-            string sanitizedPath = path.Replace("'", "''");
-
-            string sql = recursive
-                ? @"SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName 
+            string sanitizedPath = path.Replace("'", "''");            string sql = recursive
+                ? @"SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName, V.ModificationDate as Timestamp 
                     FROM Nodes N
                     JOIN Versions V ON N.NodeId = V.NodeId
                     JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
                     WHERE (LOWER(N.Path) = LOWER(@path) OR LOWER(N.Path) LIKE LOWER(@pathPattern))
                     ORDER BY N.Path"
-                : @"SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName 
+                : @"SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName, V.ModificationDate as Timestamp 
                     FROM Nodes N
                     JOIN Versions V ON N.NodeId = V.NodeId
                     JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
@@ -271,6 +295,7 @@ namespace SenseNetIndexTools
                                 VersionId = reader.GetInt32(reader.GetOrdinal("VersionId")),
                                 Path = reader.GetString(reader.GetOrdinal("Path")),
                                 NodeType = reader.GetString(reader.GetOrdinal("NodeTypeName")),
+                                Timestamp = reader.GetDateTime(reader.GetOrdinal("Timestamp")),
                                 InDatabase = true,
                                 InIndex = false
                             });
