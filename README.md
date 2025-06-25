@@ -37,6 +37,9 @@ dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "
 
 # Check specific path without recursion and save detailed report
 dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path/To/Check" --recursive false --detailed --output "report.md"
+
+# Clean up orphaned index entries (items that exist in index but not in database)
+dotnet run -- clean-orphaned --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path/To/Check"
 ```
 
 ## PowerShell Helper Scripts
@@ -75,6 +78,21 @@ Initializes a LastActivityId in a Lucene index that doesn't have one yet. This i
 ```bash
 dotnet run -- lastactivityid-init --path "<path-to-index>" --id <initial-value> [--backup false] [--backup-path "<custom-backup-location>"]
 ```
+
+### clean-orphaned
+
+Clean up orphaned index entries that exist in the index but not in the database.
+
+```bash 
+dotnet run -- clean-orphaned --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path" [options]
+```
+
+Options:
+- `--recursive`: Process all content items under the specified path (default: true)
+- `--verbose`: Enable detailed logging of the cleanup process (default: false)
+- `--dry-run`: Only show what would be deleted without making changes (default: true)
+- `--backup`: Create a backup of the index before making changes (default: true)
+- `--offline`: Confirm that the index is not in use and can be safely modified (required for actual cleanup)
 
 ## Options
 
