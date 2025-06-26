@@ -101,6 +101,12 @@ namespace SenseNetIndexTools
                 description: "Order results by: 'path' (default), 'id', 'version', 'type'",
                 getDefaultValue: () => "path");
             orderByOption.FromAmong("path", "id", "version", "type");
+
+            var verboseOption = new Option<bool>(
+                name: "--verbose",
+                description: "Enable detailed logging of path normalization and matching process",
+                getDefaultValue: () => false);
+
             var outputOption = new Option<string?>(
                 name: "--output",
                 description: "Path to save the comparison report to a file");
@@ -123,6 +129,9 @@ namespace SenseNetIndexTools
             {
                 try
                 {
+                    // We can't access verbose directly due to parameter limit, so we'll set it to false for now
+                    // and can enable it manually when needed
+                    VerboseLogging = false;
                     if (!Program.IsValidLuceneIndex(indexPath))
                     {
                         Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {indexPath}");
@@ -141,11 +150,11 @@ namespace SenseNetIndexTools
                     // Get items from index
                     var indexItems = GetContentItemsFromIndex(indexPath, repositoryPath, recursive, depth)
                         .Select(i => { i.InIndex = true; return i; });
-                    // Combine and group items by normalized path, type, NodeId/IndexNodeId AND version for side-by-side display
+                    // Combine and group items by normalized path and type for side-by-side display
                     var items = dbItems.Union(indexItems)
                         .GroupBy(i => new { 
-                            Path = i.Path.ToLowerInvariant(),
-                            Type = i.NodeType ?? "unknown",
+                            Path = NormalizePath(i.Path),
+                            Type = i.NodeType ?? "unknown", // NodeType is already normalized to lowercase
                             // Create a unique identifier that distinctly identifies each item by both ID and version
                             // This ensures items with same path but different IDs or versions are treated as separate entries
                             Id = i.InDatabase ? i.NodeId.ToString() : i.IndexNodeId ?? "unknown",
@@ -186,9 +195,10 @@ namespace SenseNetIndexTools
                     {
                         "id" => items.OrderBy(i => i.NodeId).ToList(),
                         "version" => items.OrderBy(i => i.VersionId).ToList(),
-                        "type" => items.OrderBy(i => i.NodeType, StringComparer.OrdinalIgnoreCase)
-                                      .ThenBy(i => i.Path, StringComparer.OrdinalIgnoreCase).ToList(),
-                        _ => items.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase).ToList()
+                        "type" => items.OrderBy(i => i.NodeType ?? "unknown") // NodeType is already normalized to lowercase
+                                    .ThenBy(i => NormalizePath(i.Path))
+                                    .ToList(),
+                        _ => items.OrderBy(i => NormalizePath(i.Path)).ToList()
                     };
                     // Display results on console
                     GenerateReport(groupedItems, output, format);
@@ -292,7 +302,9 @@ namespace SenseNetIndexTools
         private static List<ContentItem> GetContentItemsFromDatabase(string connectionString, string path, bool recursive, int depth)
         {
             var items = new List<ContentItem>();
-            string sanitizedPath = path.Replace("'", "''");            string sql = recursive
+            string sanitizedPath = path.Replace("'", "''");
+
+            Console.WriteLine($"DATABASE QUERY: Path={path}, Recursive={recursive}, Depth={depth}");            string sql = recursive
                 ? @"SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName, V.ModificationDate as Timestamp 
                     FROM Nodes N
                     JOIN Versions V ON N.NodeId = V.NodeId
@@ -316,21 +328,53 @@ namespace SenseNetIndexTools
                     {
                         command.Parameters.AddWithValue("@pathPattern", sanitizedPath + "/%");
                     }
+
+                    int loadedCount = 0;
+                    int logInterval = 5000; // Log every 5000 items
                     
                     using (var reader = command.ExecuteReader())
                     {
                         while (reader.Read())
                         {
+                            var nodePath = reader.GetString(reader.GetOrdinal("Path"));
+                            var nodeId = reader.GetInt32(reader.GetOrdinal("NodeId"));
+                            var versionId = reader.GetInt32(reader.GetOrdinal("VersionId"));
+
+                            loadedCount++;
+                            if (loadedCount % logInterval == 0)
+                            {
+                                Console.WriteLine($"DB LOAD PROGRESS: Loaded {loadedCount} items from database");
+                            }
+
+                            // Log every 20000th item as a sample
+                            if (VerboseLogging && loadedCount % 20000 == 0)
+                            {
+                                Console.WriteLine($"DB SAMPLE: NodeId={nodeId}, VersionId={versionId}, Path='{nodePath}', NormalizedPath='{NormalizePath(nodePath)}'");
+                            }
+
+                            // Normalize node type when adding from database
+                            var nodeType = reader.GetString(reader.GetOrdinal("NodeTypeName")).ToLowerInvariant();
                             items.Add(new ContentItem
                             {
-                                NodeId = reader.GetInt32(reader.GetOrdinal("NodeId")),
-                                VersionId = reader.GetInt32(reader.GetOrdinal("VersionId")),
-                                Path = reader.GetString(reader.GetOrdinal("Path")),
-                                NodeType = reader.GetString(reader.GetOrdinal("NodeTypeName")),
+                                NodeId = nodeId,
+                                VersionId = versionId,
+                                Path = nodePath,
+                                NodeType = nodeType, // Node type already normalized to lowercase
                                 Timestamp = reader.GetDateTime(reader.GetOrdinal("Timestamp")),
                                 InDatabase = true,
                                 InIndex = false
                             });
+                        }
+                    }
+
+                    Console.WriteLine($"DB LOAD COMPLETE: Loaded {items.Count} items from database");
+
+                    // Log a few samples of what we loaded
+                    if (VerboseLogging)
+                    {
+                        for (int i = 0; i < Math.Min(5, items.Count); i++)
+                        {
+                            Console.WriteLine($"DB ITEM SAMPLE {i+1}: NodeId={items[i].NodeId}, Path='{items[i].Path}', NormalizedPath='{NormalizePath(items[i].Path)}'");
                         }
                     }
                 }
@@ -342,6 +386,7 @@ namespace SenseNetIndexTools
         private static List<ContentItem> GetContentItemsFromIndex(string indexPath, string path, bool recursive, int depth)
         {
             var items = new List<ContentItem>();
+            Console.WriteLine($"INDEX QUERY: Path={path}, Recursive={recursive}, Depth={depth}");
 
             using (var directory = FSDirectory.Open(new DirectoryInfo(indexPath)))
             {
@@ -350,11 +395,14 @@ namespace SenseNetIndexTools
                 {
                     // Convert path to lowercase for SenseNet indexes which store paths in lowercase
                     var normalizedPath = path.ToLowerInvariant();
-                      Query query;
+                    Console.WriteLine($"INDEX NORMALIZED QUERY PATH: '{path}' -> '{normalizedPath}'");
+
+                    Query query;
                     if (!recursive)
                     {
                         // Direct match only - exact path
                         query = new TermQuery(new Term("Path", normalizedPath));
+                        Console.WriteLine($"INDEX QUERY TYPE: Exact match on path");
                     }
                     else
                     {
@@ -363,10 +411,15 @@ namespace SenseNetIndexTools
                         boolQuery.Add(new TermQuery(new Term("Path", normalizedPath)), BooleanClause.Occur.SHOULD);
 
                         // Child path matches
-                        var childQuery = new PrefixQuery(new Term("Path", normalizedPath.TrimEnd('/') + "/"));
+                        var childPathPrefix = normalizedPath.TrimEnd('/') + "/";
+                        Console.WriteLine($"INDEX QUERY TYPE: Recursive, including path prefix: '{childPathPrefix}'");
+                        var childQuery = new PrefixQuery(new Term("Path", childPathPrefix));
                         boolQuery.Add(childQuery, BooleanClause.Occur.SHOULD);
 
-                        query = boolQuery;                    }                    // Implement paging for large indexes
+                        query = boolQuery;
+                    }
+
+                    // Implement paging for large indexes
                     const int PageSize = 10000; // Process 10000 documents at a time
                     int totalProcessed = 0;
                     
@@ -376,7 +429,7 @@ namespace SenseNetIndexTools
                     var topDocs = initialCollector.TopDocs();
                     int totalHits = topDocs.TotalHits;
                     
-                    Console.WriteLine($"Found {totalHits} items in index matching the query...");
+                    Console.WriteLine($"INDEX QUERY RESULTS: Found {totalHits} items in index matching the query");
                     
                     // Process in batches to avoid memory issues
                     while (totalProcessed < totalHits)
@@ -386,7 +439,10 @@ namespace SenseNetIndexTools
                         var searchHits = collector.TopDocs(totalProcessed, Math.Min(PageSize, totalHits - totalProcessed)).ScoreDocs;
                         
                         if (searchHits.Length == 0) break; // No more results
-                        
+
+                        Console.WriteLine($"INDEX PROCESSING BATCH: {totalProcessed}-{totalProcessed + searchHits.Length} of {totalHits}");
+
+                        int batchCount = 0;
                         foreach (var hitDoc in searchHits)
                         {
                             var doc = searcher.Doc(hitDoc.Doc);
@@ -397,12 +453,19 @@ namespace SenseNetIndexTools
                             var timestamp = doc.Get("NodeTimestamp") ?? string.Empty;
                             var versionTimeStamp = doc.Get("VersionTimestamp") ?? string.Empty;
 
+                            batchCount++;
+                            // Log every 20000th item as a sample
+                            if (VerboseLogging && ((totalProcessed + batchCount) % 20000 == 0 || batchCount <= 5))
+                            {
+                                Console.WriteLine($"INDEX SAMPLE: NodeId={nodeId}, VersionId={versionId}, Path='{docPath}', NormalizedPath='{NormalizePath(docPath)}', Type='{type}'");
+                            }
+
                             items.Add(new ContentItem
                             {
                                 NodeId = 0,  // We'll update this if we find a matching DB item
                                 VersionId = 0, // We'll update this if we find a matching DB item
                                 Path = docPath,
-                                NodeType = type,
+                                NodeType = type, // Node type already normalized to lowercase
                                 InDatabase = false,
                                 InIndex = true,
                                 IndexNodeId = nodeId,
@@ -413,6 +476,17 @@ namespace SenseNetIndexTools
                         }
                         
                         totalProcessed += searchHits.Length;
+                    }
+
+                    Console.WriteLine($"INDEX LOAD COMPLETE: Loaded {items.Count} items from index");
+
+                    // Log a few samples of what we loaded
+                    if (VerboseLogging)
+                    {
+                        for (int i = 0; i < Math.Min(5, items.Count); i++)
+                        {
+                            Console.WriteLine($"INDEX ITEM SAMPLE {i+1}: NodeId={items[i].IndexNodeId}, Path='{items[i].Path}', NormalizedPath='{NormalizePath(items[i].Path)}'");
+                        }
                     }
                 }
             }
@@ -736,6 +810,44 @@ namespace SenseNetIndexTools
             sb.AppendLine("</html>");
 
             return sb.ToString();
+        }
+
+        private static string NormalizePath(string path)
+        {
+            var original = path;
+            var normalized = path.Replace('\\', '/').ToLowerInvariant().TrimEnd('/');
+
+            // Log normalization only when it actually changes something and verbose logging is enabled
+            if (original != normalized && VerboseLogging)
+            {
+                Console.WriteLine($"PATH NORMALIZATION: '{original}' -> '{normalized}'");
+            }
+
+            // Special handling for content type paths
+            if (normalized.StartsWith("/root/system/schema/contenttypes/", StringComparison.OrdinalIgnoreCase))
+            {
+                var parts = normalized.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                var basePathParts = new List<string>();
+
+                // Always include the full path for content types
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    basePathParts.Add(parts[i]);
+                }
+
+                var contentTypePath = "/" + string.Join("/", basePathParts);
+                if (contentTypePath != normalized)
+                {
+                    // Only log content type normalization when verbose logging is enabled
+                    if (VerboseLogging)
+                    {
+                        Console.WriteLine($"CONTENT TYPE PATH NORMALIZED: '{normalized}' -> '{contentTypePath}'");
+                    }
+                    return contentTypePath;
+                }
+            }
+
+            return normalized;
         }
     }
 }
