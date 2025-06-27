@@ -232,7 +232,7 @@ namespace SenseNetIndexTools
             return command;
         }
 
-        private static void DeleteOrphanedEntry(IndexWriter writer, ContentComparer.ContentItem entry, bool verbose)
+        private static void DeleteOrphanedEntry(IndexWriter writer, ContentItem entry, bool verbose)
         {
             using (var searcher = new IndexSearcher(writer.GetReader()))
             {

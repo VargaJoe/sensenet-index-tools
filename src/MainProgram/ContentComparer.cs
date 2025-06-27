@@ -13,59 +13,7 @@ namespace SenseNetIndexTools
     public class ContentComparer
     {
         public static bool VerboseLogging { get; set; } = false;
-          public class ContentItem
-        {
-            public int NodeId { get; set; }
-            public int VersionId { get; set; }
-            public string Path { get; set; } = string.Empty;
-            public string NodeType { get; set; } = string.Empty;
-            public bool InDatabase { get; set; }
-            public bool InIndex { get; set; }
-            public string? IndexNodeId { get; set; }
-            public string? IndexVersionId { get; set; }
-            public string? IndexTimestamp { get; set; }
-            public string? IndexVersionTimestamp { get; set; }
-            public long? DbTimestamp { get; set; }
-            public long? DbVersionTimestamp { get; set; }
-            public DateTime? Timestamp { get; set; }
-            
-            public string Status 
-            {
-                get
-                {
-                    if (!InDatabase && !InIndex) return "Unknown";
-                    if (!InDatabase) return "Index Only";
-                    if (!InIndex) return "DB Only";
 
-                    // Both exist - check for mismatches
-                    bool idsMatch = string.Equals(NodeId.ToString(), IndexNodeId) &&
-                                   string.Equals(VersionId.ToString(), IndexVersionId);
-                    bool timestampMatch = true;
-
-                    // Compare timestamps if both exist
-                    if (Timestamp.HasValue && !string.IsNullOrEmpty(IndexTimestamp))
-                    {
-                        if (DateTime.TryParse(IndexTimestamp, out DateTime indexTime))
-                        {
-                            timestampMatch = Math.Abs((Timestamp.Value - indexTime).TotalSeconds) < 1; // Allow 1 second difference  
-                        }
-                    }
-
-                    if (!idsMatch) return "ID mismatch";
-                    if (!timestampMatch) return "Timestamp mismatch";
-                    return "Match";
-                }
-            }
-
-            public override string ToString()
-            {
-                return $"{(InDatabase ? NodeId.ToString() : "-")}\t{(InDatabase ? VersionId.ToString() : "-")}\t" +
-                       $"{(InIndex ? IndexNodeId : "-")}\t{(InIndex ? IndexVersionId : "-")}\t" +
-                       $"{(InDatabase ? Timestamp?.ToString("yyyy-MM-dd HH:mm:ss") : "-")}\t" +
-                       $"{(InIndex ? IndexTimestamp : "-")}\t" +
-                       $"{Path}\t{NodeType}\t{Status}";
-            }
-        }
 
         public static Command Create()
         {
@@ -129,8 +77,8 @@ namespace SenseNetIndexTools
             {
                 try
                 {
-                    // We can't access verbose directly due to parameter limit, so we'll set it to false for now
-                    // and can enable it manually when needed
+                    // Note: Verbose logging can be enabled by setting VerboseLogging = true in code
+                    // We can't add it as a parameter due to System.CommandLine limitations (max 8 parameters)
                     VerboseLogging = false;
                     if (!Program.IsValidLuceneIndex(indexPath))
                     {
@@ -289,7 +237,7 @@ namespace SenseNetIndexTools
             {
                 var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
                 var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
-                var dbTimestamp = item.InDatabase && item.Timestamp.HasValue ? item.Timestamp.Value.ToString("yyyy-MM-dd HH:mm:ss") : "-";
+                var dbTimestamp = item.InDatabase && item.TimestampNumeric > 0 ? item.TimestampNumeric.ToString() : "-";
                 var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
                 var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                 var idxTimestamp = item.InIndex ? (item.IndexTimestamp ?? "-") : "-";
@@ -305,13 +253,17 @@ namespace SenseNetIndexTools
             string sanitizedPath = path.Replace("'", "''");
 
             Console.WriteLine($"DATABASE QUERY: Path={path}, Recursive={recursive}, Depth={depth}");            string sql = recursive
-                ? @"SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName, V.ModificationDate as Timestamp 
+                ? @"SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName, 
+                           CAST(N.Timestamp as bigint) as TimestampNumeric, 
+                           CAST(V.Timestamp as bigint) as VersionTimestampNumeric
                     FROM Nodes N
                     JOIN Versions V ON N.NodeId = V.NodeId
                     JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
                     WHERE (LOWER(N.Path) = LOWER(@path) OR LOWER(N.Path) LIKE LOWER(@pathPattern))
                     ORDER BY N.Path"
-                : @"SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName, V.ModificationDate as Timestamp 
+                : @"SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName, 
+                           CAST(N.Timestamp as bigint) as TimestampNumeric, 
+                           CAST(V.Timestamp as bigint) as VersionTimestampNumeric
                     FROM Nodes N
                     JOIN Versions V ON N.NodeId = V.NodeId
                     JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
@@ -360,7 +312,8 @@ namespace SenseNetIndexTools
                                 VersionId = versionId,
                                 Path = nodePath,
                                 NodeType = nodeType, // Node type already normalized to lowercase
-                                Timestamp = reader.GetDateTime(reader.GetOrdinal("Timestamp")),
+                                TimestampNumeric = reader.GetInt64(reader.GetOrdinal("TimestampNumeric")),
+                                VersionTimestampNumeric = reader.GetInt64(reader.GetOrdinal("VersionTimestampNumeric")),
                                 InDatabase = true,
                                 InIndex = false
                             });
@@ -767,7 +720,7 @@ namespace SenseNetIndexTools
             {
                 var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
                 var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
-                var dbTimestamp = item.InDatabase && item.Timestamp.HasValue ? item.Timestamp.Value.ToString("yyyy-MM-dd HH:mm:ss") : "-";
+                var dbTimestamp = item.InDatabase && item.TimestampNumeric > 0 ? item.TimestampNumeric.ToString() : "-";
                 var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
                 var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                 var idxTimestamp = item.InIndex ? (item.IndexTimestamp ?? "-") : "-";
