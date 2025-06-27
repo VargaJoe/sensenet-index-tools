@@ -61,9 +61,9 @@ namespace SenseNetIndexTools
 
             var reportFormatOption = new Option<string>(
                 name: "--report-format",
-                description: "Format of the report: 'default' (statistics only), 'detailed' (with content type breakdown), 'tree' (with hierarchical view), or 'full' (all information)",
-                getDefaultValue: () => "default");
-            reportFormatOption.FromAmong("default", "detailed", "tree", "full");
+                description: "Level of detail for the report: 'summary', 'detailed', or 'full' (default: 'summary')",
+                getDefaultValue: () => "summary");
+            reportFormatOption.FromAmong("summary", "detailed", "full");
 
             var formatOption = new Option<string>(
                 name: "--format",
