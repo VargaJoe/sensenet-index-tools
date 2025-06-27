@@ -230,19 +230,21 @@ namespace SenseNetIndexTools
             sb.AppendLine();
             sb.AppendLine("## Comparison Results");
             sb.AppendLine();
-            sb.AppendLine("| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | DB Timestamp | Index Timestamp | Path | Type |");
-            sb.AppendLine("|---------|-----------|----------|--------------|-------------|--------------|-----------------|------|------|");
+            sb.AppendLine("| Status | DB NodeId | DB VerID | DB Timestamp | DB VerTimestamp | Index NodeId | Index VerID | Index Timestamp | Index VerTimestamp | Path |");
+            sb.AppendLine("|---------|-----------|----------|--------------|-----------------|--------------|-------------|-----------------|-------------------|------|");
 
             foreach (var item in items.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
             {
                 var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
                 var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
                 var dbTimestamp = item.InDatabase && item.TimestampNumeric > 0 ? item.TimestampNumeric.ToString() : "-";
+                var dbVerTimestamp = item.InDatabase && item.VersionTimestampNumeric > 0 ? item.VersionTimestampNumeric.ToString() : "-";
                 var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
                 var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                 var idxTimestamp = item.InIndex ? (item.IndexTimestamp ?? "-") : "-";
+                var idxVerTimestamp = item.InIndex ? (item.IndexVersionTimestamp ?? "-") : "-";
                 
-                sb.AppendLine($"| {item.Status} | {dbNodeId} | {dbVerID} | {idxNodeId} | {idxVerID} | {dbTimestamp} | {idxTimestamp} | {item.Path} | {item.NodeType} |");
+                sb.AppendLine($"| {item.Status} | {dbNodeId} | {dbVerID} | {dbTimestamp} | {dbVerTimestamp} | {idxNodeId} | {idxVerID} | {idxTimestamp} | {idxVerTimestamp} | {item.Path} |");
             }
             return sb.ToString();
         }
@@ -706,12 +708,13 @@ namespace SenseNetIndexTools
             sb.AppendLine("<th>Status</th>");
             sb.AppendLine("<th>DB NodeId</th>");
             sb.AppendLine("<th>DB VerID</th>");
+            sb.AppendLine("<th>DB Timestamp</th>");
+            sb.AppendLine("<th>DB VerTimestamp</th>");
             sb.AppendLine("<th>Index NodeId</th>");
             sb.AppendLine("<th>Index VerID</th>");
-            sb.AppendLine("<th>DB Timestamp</th>");
             sb.AppendLine("<th>Index Timestamp</th>");
+            sb.AppendLine("<th>Index VerTimestamp</th>");
             sb.AppendLine("<th>Path</th>");
-            sb.AppendLine("<th>Type</th>");
             sb.AppendLine("</tr>");
             sb.AppendLine("</thead>");
             sb.AppendLine("<tbody>");
@@ -721,9 +724,11 @@ namespace SenseNetIndexTools
                 var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
                 var dbVerID = item.InDatabase ? item.VersionId.ToString() : "-";
                 var dbTimestamp = item.InDatabase && item.TimestampNumeric > 0 ? item.TimestampNumeric.ToString() : "-";
+                var dbVerTimestamp = item.InDatabase && item.VersionTimestampNumeric > 0 ? item.VersionTimestampNumeric.ToString() : "-";
                 var idxNodeId = item.InIndex ? item.IndexNodeId : "-";
                 var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                 var idxTimestamp = item.InIndex ? (item.IndexTimestamp ?? "-") : "-";
+                var idxVerTimestamp = item.InIndex ? (item.IndexVersionTimestamp ?? "-") : "-";
                 
                 var statusClass = item.Status switch
                 {
@@ -739,12 +744,13 @@ namespace SenseNetIndexTools
                 sb.AppendLine($"<td class=\"{statusClass}\">{item.Status}</td>");
                 sb.AppendLine($"<td>{dbNodeId}</td>");
                 sb.AppendLine($"<td>{dbVerID}</td>");
+                sb.AppendLine($"<td>{dbTimestamp}</td>");
+                sb.AppendLine($"<td>{dbVerTimestamp}</td>");
                 sb.AppendLine($"<td>{idxNodeId}</td>");
                 sb.AppendLine($"<td>{idxVerID}</td>");
-                sb.AppendLine($"<td>{dbTimestamp}</td>");
                 sb.AppendLine($"<td>{idxTimestamp}</td>");
+                sb.AppendLine($"<td>{idxVerTimestamp}</td>");
                 sb.AppendLine($"<td class=\"path-cell\">{System.Web.HttpUtility.HtmlEncode(item.Path)}</td>");
-                sb.AppendLine($"<td class=\"type-cell\">{item.NodeType}</td>");
                 sb.AppendLine("</tr>");
             }
             
