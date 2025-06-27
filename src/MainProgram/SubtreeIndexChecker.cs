@@ -18,8 +18,8 @@ namespace SenseNetIndexTools
             public int DatabaseItemsCount { get; set; }
             public int IndexDocCount { get; set; }
             public int MatchedItemsCount { get; set; }
-            public List<ContentComparer.ContentItem> MismatchedItems { get; set; } = new List<ContentComparer.ContentItem>();
-            public List<ContentComparer.ContentItem> MatchedItems { get; set; } = new List<ContentComparer.ContentItem>();
+            public List<ContentItem> MismatchedItems { get; set; } = new List<ContentItem>();
+            public List<ContentItem> MatchedItems { get; set; } = new List<ContentItem>();
             public Dictionary<string, int> ContentTypeStats { get; set; } = new Dictionary<string, int>();
             public Dictionary<string, int> MismatchesByType { get; set; } = new Dictionary<string, int>();
             public string Summary { get; set; } = string.Empty;
@@ -120,7 +120,7 @@ namespace SenseNetIndexTools
             return command;
         }
 
-        private static void ProcessResults(List<ContentComparer.ContentItem> results, CheckReport report, bool detailed)
+        private static void ProcessResults(List<ContentItem> results, CheckReport report, bool detailed)
         {
             report.DatabaseItemsCount = results.Count(r => r.InDatabase);
             report.IndexDocCount = results.Count(r => r.InIndex);
