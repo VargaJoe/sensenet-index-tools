@@ -283,92 +283,162 @@ namespace SenseNetIndexTools
         private static string GenerateHtmlReport(CheckReport report, string reportFormat)
         {
             var sb = new StringBuilder();
+            // Start HTML document
             sb.AppendLine("<!DOCTYPE html>");
             sb.AppendLine("<html lang=\"en\">");
             sb.AppendLine("<head>");
-            sb.AppendLine("    <meta charset=\"UTF-8\">");
-            sb.AppendLine("    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
-            sb.AppendLine("    <title>Subtree Index Check Report</title>");
-            sb.AppendLine("    <style>");
-            sb.AppendLine("        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; margin: 40px; line-height: 1.6; color: #333; }");
-            sb.AppendLine("        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }");
-            sb.AppendLine("        h2 { color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 8px; margin-top: 30px; }");
-            sb.AppendLine("        h3 { color: #7f8c8d; margin-top: 25px; }");
-            sb.AppendLine("        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin: 20px 0; }");
-            sb.AppendLine("        .info-item { background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #3498db; }");
-            sb.AppendLine("        .info-label { font-weight: bold; color: #2c3e50; }");
-            sb.AppendLine("        .summary-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }");
-            sb.AppendLine("        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }");
-            sb.AppendLine("        .stat-number { font-size: 2em; font-weight: bold; margin-bottom: 5px; }");
-            sb.AppendLine("        .stat-label { font-size: 0.9em; opacity: 0.9; }");
-            sb.AppendLine("        table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }");
-            sb.AppendLine("        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e9ecef; }");
-            sb.AppendLine("        th { background: #f8f9fa; font-weight: 600; color: #495057; position: sticky; top: 0; }");
-            sb.AppendLine("        tr:hover { background-color: #f8f9fa; }");
-            sb.AppendLine("        .status-match { color: #28a745; font-weight: bold; }");
-            sb.AppendLine("        .status-mismatch { color: #dc3545; font-weight: bold; }");
-            sb.AppendLine("        .status-missing { color: #fd7e14; font-weight: bold; }");
-            sb.AppendLine("        .match-rate-high { color: #28a745; font-weight: bold; }");
-            sb.AppendLine("        .match-rate-medium { color: #ffc107; font-weight: bold; }");
-            sb.AppendLine("        .match-rate-low { color: #dc3545; font-weight: bold; }");
-            sb.AppendLine("        .path-cell { font-family: 'Courier New', monospace; font-size: 0.9em; }");
-            sb.AppendLine("    </style>");
+            sb.AppendLine("<meta charset=\"utf-8\">");
+            sb.AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+            sb.AppendLine("<title>SenseNet Index Check Report</title>");
+            sb.AppendLine("<style>");
+            sb.AppendLine(@"
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, ""Helvetica Neue"", Arial, sans-serif;    
+                    line-height: 1.6;
+                    max-width: 1200px;
+                    margin: 0 auto;
+                    padding: 20px;
+                    color: #333;
+                }
+                h1, h2 {
+                    border-bottom: 1px solid #eee;
+                    padding-bottom: 0.3em;
+                    margin-top: 1.5em;
+                }
+                table {
+                    border-collapse: collapse;
+                    width: 100%;
+                    margin: 1em 0;
+                }
+                th, td {
+                    padding: 12px;
+                    text-align: left;
+                    border-bottom: 1px solid #ddd;
+                }
+                th {
+                    background: #f8f9fa;
+                    font-weight: 600;
+                }
+                .summary-section {
+                    background: #f8f9fa;
+                    padding: 20px;
+                    border-radius: 4px;
+                    margin-bottom: 20px;
+                }
+                .stats-container {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 20px;
+                    margin-top: 20px;
+                }
+                .stat-card {
+                    background: white;
+                    padding: 15px;
+                    border-radius: 4px;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                }
+                .stat-title {
+                    color: #666;
+                    font-size: 14px;
+                }
+                .stat-value {
+                    font-size: 24px;
+                    font-weight: bold;
+                    margin-top: 5px;
+                }
+                footer {
+                    margin-top: 30px;
+                    padding-top: 10px;
+                    border-top: 1px solid #eee;
+                    font-size: 14px;
+                    color: #777;
+                }
+            ");
+            sb.AppendLine("</style>");
             sb.AppendLine("</head>");
             sb.AppendLine("<body>");
             
-            sb.AppendLine("    <h1>🔍 Subtree Index Check Report</h1>");
+            // Report header
+            sb.AppendLine("<header>");
+            sb.AppendLine("<h1>SenseNet Index Check Report</h1>");
+            sb.AppendLine("<div class=\"report-meta\">");
+            sb.AppendLine($"<p><strong>Repository Path:</strong> {report.RepositoryPath}</p>");
+            sb.AppendLine($"<p><strong>Recursive:</strong> {(report.Recursive ? "Yes" : "No")}</p>");
+            sb.AppendLine($"<p><strong>Start Time:</strong> {report.StartTime}</p>");
+            sb.AppendLine($"<p><strong>End Time:</strong> {report.EndTime}</p>");
+            sb.AppendLine($"<p><strong>Duration:</strong> {(report.EndTime - report.StartTime).TotalSeconds:F2} seconds</p>");      
+            sb.AppendLine("</div>");
+            sb.AppendLine("</header>");
             
-            sb.AppendLine("    <h2>📋 Check Information</h2>");
-            sb.AppendLine("    <div class=\"info-grid\">");
-            sb.AppendLine($"        <div class=\"info-item\"><span class=\"info-label\">Repository Path:</span><br>{report.RepositoryPath}</div>");
-            sb.AppendLine($"        <div class=\"info-item\"><span class=\"info-label\">Recursive:</span><br>{report.Recursive}</div>");
-            sb.AppendLine($"        <div class=\"info-item\"><span class=\"info-label\">Start Time:</span><br>{report.StartTime:yyyy-MM-dd HH:mm:ss}</div>");
-            sb.AppendLine($"        <div class=\"info-item\"><span class=\"info-label\">End Time:</span><br>{report.EndTime:yyyy-MM-dd HH:mm:ss}</div>");
-            sb.AppendLine($"        <div class=\"info-item\"><span class=\"info-label\">Duration:</span><br>{(report.EndTime - report.StartTime).TotalSeconds:F2} seconds</div>");
-            sb.AppendLine("    </div>");
-            
-            sb.AppendLine("    <h2>📊 Summary</h2>");
-            sb.AppendLine("    <div class=\"summary-stats\">");
-            sb.AppendLine($"        <div class=\"stat-card\"><div class=\"stat-number\">{report.DatabaseItemsCount}</div><div class=\"stat-label\">Items in Database</div></div>");
-            sb.AppendLine($"        <div class=\"stat-card\"><div class=\"stat-number\">{report.IndexDocCount}</div><div class=\"stat-label\">Items in Index</div></div>");
-            sb.AppendLine($"        <div class=\"stat-card\"><div class=\"stat-number\">{report.MatchedItemsCount}</div><div class=\"stat-label\">Matched Items</div></div>");
-            sb.AppendLine($"        <div class=\"stat-card\"><div class=\"stat-number\">{report.MismatchedItems.Count}</div><div class=\"stat-label\">Mismatched Items</div></div>");
-            sb.AppendLine("    </div>");
+            // Summary section with statistics
+            sb.AppendLine("<div class=\"summary-section\">");
+            sb.AppendLine("<h2>Summary</h2>");
+            sb.AppendLine("<div class=\"stats-container\">");
+            sb.AppendLine("<div class=\"stat-card\">");
+            sb.AppendLine("<div class=\"stat-title\">Items in Database</div>");
+            sb.AppendLine($"<div class=\"stat-value\">{report.DatabaseItemsCount:N0}</div>");
+            sb.AppendLine("</div>");
+            sb.AppendLine("<div class=\"stat-card\">");
+            sb.AppendLine("<div class=\"stat-title\">Items in Index</div>");
+            sb.AppendLine($"<div class=\"stat-value\">{report.IndexDocCount:N0}</div>");
+            sb.AppendLine("</div>");
+            sb.AppendLine("<div class=\"stat-card\">");
+            sb.AppendLine("<div class=\"stat-title\">Matched Items</div>");
+            sb.AppendLine($"<div class=\"stat-value\">{report.MatchedItemsCount:N0}</div>");
+            sb.AppendLine("</div>");
+            sb.AppendLine("<div class=\"stat-card\">");
+            sb.AppendLine("<div class=\"stat-title\">Mismatched Items</div>");
+            sb.AppendLine($"<div class=\"stat-value\">{report.MismatchedItems.Count:N0}</div>");
+            sb.AppendLine("</div>");
+            sb.AppendLine("</div>"); // End of stats-container
+            sb.AppendLine("</div>"); // End of summary-section
 
-            if (reportFormat != "default")
+            // Content type distribution
+            if (reportFormat != "default" && report.ContentTypeStats.Any())
             {
-                // Content Type Statistics
-                sb.AppendLine("    <h2>📈 Content Type Statistics</h2>");
-                sb.AppendLine("    <table>");
-                sb.AppendLine("        <thead>");
-                sb.AppendLine("            <tr><th>Type</th><th>Total Items</th><th>Mismatches</th><th>Match Rate</th></tr>");
-                sb.AppendLine("        </thead>");
-                sb.AppendLine("        <tbody>");
+                sb.AppendLine("<div class=\"section\">");
+                sb.AppendLine("<h2>Content Type Distribution</h2>");
+                sb.AppendLine("<table>");
+                sb.AppendLine("<thead>");
+                sb.AppendLine("<tr>");
+                sb.AppendLine("<th>Content Type</th>");
+                sb.AppendLine("<th>Total Items</th>");
+                sb.AppendLine("<th>Mismatches</th>");
+                sb.AppendLine("<th>Match Rate</th>");
+                sb.AppendLine("</tr>");
+                sb.AppendLine("</thead>");
+                sb.AppendLine("<tbody>");
                 foreach (var type in report.ContentTypeStats.Keys.OrderBy(k => k))
                 {
                     report.MismatchesByType.TryGetValue(type, out int mismatches);
                     var total = report.ContentTypeStats[type];
                     var matchRate = (total - mismatches) * 100.0 / total;
-                    var matchRateClass = matchRate >= 95 ? "match-rate-high" : matchRate >= 80 ? "match-rate-medium" : "match-rate-low";
-                    sb.AppendLine($"            <tr><td>{type}</td><td>{total}</td><td>{mismatches}</td><td class=\"{matchRateClass}\">{matchRate:F1}%</td></tr>");
+                    sb.AppendLine("<tr>");
+                    sb.AppendLine($"<td>{type}</td>");
+                    sb.AppendLine($"<td>{total:N0}</td>");
+                    sb.AppendLine($"<td>{mismatches:N0}</td>");
+                    sb.AppendLine($"<td>{matchRate:F1}%</td>");
+                    sb.AppendLine("</tr>");
                 }
-                sb.AppendLine("        </tbody>");
-                sb.AppendLine("    </table>");
+                sb.AppendLine("</tbody>");
+                sb.AppendLine("</table>");
+                sb.AppendLine("</div>");
 
                 if (report.MismatchedItems.Any())
                 {
                     var mismatchesByType = report.MismatchedItems
                         .GroupBy(x => x.NodeType)
                         .OrderByDescending(g => g.Count());
-                    sb.AppendLine("    <h2>⚠️ Mismatches by Content Type</h2>");
+                    sb.AppendLine("<div class=\"section\">");
+                    sb.AppendLine("<h2>Mismatches by Content Type</h2>");
                     foreach (var typeGroup in mismatchesByType)
                     {
-                        sb.AppendLine($"    <h3>{typeGroup.Key} ({typeGroup.Count()} items)</h3>");
-                        sb.AppendLine("    <table>");
-                        sb.AppendLine("        <thead>");
-                        sb.AppendLine("            <tr><th>Status</th><th>DB NodeId</th><th>DB VerID</th><th>DB Timestamp</th><th>DB VerTimestamp</th><th>Index NodeId</th><th>Index VerID</th><th>Index Timestamp</th><th>Index VerTimestamp</th><th>Path</th></tr>");
-                        sb.AppendLine("        </thead>");
-                        sb.AppendLine("        <tbody>");
+                        sb.AppendLine($"<h3>{typeGroup.Key} ({typeGroup.Count()} items)</h3>");
+                        sb.AppendLine("<table>");
+                        sb.AppendLine("<thead>");
+                        sb.AppendLine("<tr><th>Status</th><th>DB NodeId</th><th>DB VerID</th><th>DB Timestamp</th><th>DB VerTimestamp</th><th>Index NodeId</th><th>Index VerID</th><th>Index Timestamp</th><th>Index VerTimestamp</th><th>Path</th></tr>");
+                        sb.AppendLine("</thead>");
+                        sb.AppendLine("<tbody>");
                         
                         foreach (var item in typeGroup.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
                         {
@@ -380,22 +450,23 @@ namespace SenseNetIndexTools
                             var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                             var idxTimestamp = item.InIndex ? item.IndexTimestamp : "-";
                             var idxVerTimestamp = item.InIndex ? item.IndexVersionTimestamp : "-";
-                            var statusClass = item.Status == "Match" ? "status-match" : "status-mismatch";
-                            sb.AppendLine($"            <tr><td class=\"{statusClass}\">{item.Status}</td><td>{dbNodeId}</td><td>{dbVerID}</td><td>{dbTimestamp}</td><td>{dbVerTimestamp}</td><td>{idxNodeId}</td><td>{idxVerID}</td><td>{idxTimestamp}</td><td>{idxVerTimestamp}</td><td class=\"path-cell\">{item.Path}</td></tr>");
+                            sb.AppendLine($"<tr><td>{item.Status}</td><td>{dbNodeId}</td><td>{dbVerID}</td><td>{dbTimestamp}</td><td>{dbVerTimestamp}</td><td>{idxNodeId}</td><td>{idxVerID}</td><td>{idxTimestamp}</td><td>{idxVerTimestamp}</td><td>{item.Path}</td></tr>");
                         }
-                        sb.AppendLine("        </tbody>");
-                        sb.AppendLine("    </table>");
+                        sb.AppendLine("</tbody>");
+                        sb.AppendLine("</table>");
                     }
+                    sb.AppendLine("</div>");
                 }
                 
                 if (reportFormat == "full")
                 {
-                    sb.AppendLine("    <h2>📝 Complete Item List</h2>");
-                    sb.AppendLine("    <table>");
-                    sb.AppendLine("        <thead>");
-                    sb.AppendLine("            <tr><th>Status</th><th>DB NodeId</th><th>DB VerID</th><th>DB Timestamp</th><th>DB VerTimestamp</th><th>Index NodeId</th><th>Index VerID</th><th>Index Timestamp</th><th>Index VerTimestamp</th><th>Path</th><th>Type</th></tr>");
-                    sb.AppendLine("        </thead>");
-                    sb.AppendLine("        <tbody>");
+                    sb.AppendLine("<div class=\"section\">");
+                    sb.AppendLine("<h2>Complete Item List</h2>");
+                    sb.AppendLine("<table>");
+                    sb.AppendLine("<thead>");
+                    sb.AppendLine("<tr><th>Status</th><th>DB NodeId</th><th>DB VerID</th><th>DB Timestamp</th><th>DB VerTimestamp</th><th>Index NodeId</th><th>Index VerID</th><th>Index Timestamp</th><th>Index VerTimestamp</th><th>Path</th><th>Type</th></tr>");
+                    sb.AppendLine("</thead>");
+                    sb.AppendLine("<tbody>");
 
                     var allItems = report.MismatchedItems.ToList();
                     if (report.MatchedItems != null)
@@ -413,11 +484,11 @@ namespace SenseNetIndexTools
                         var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                         var idxTimestamp = item.InIndex ? item.IndexTimestamp : "-";
                         var idxVerTimestamp = item.InIndex ? item.IndexVersionTimestamp : "-";
-                        var statusClass = item.Status == "Match" ? "status-match" : "status-mismatch";
-                        sb.AppendLine($"            <tr><td class=\"{statusClass}\">{item.Status}</td><td>{dbNodeId}</td><td>{dbVerID}</td><td>{dbTimestamp}</td><td>{dbVerTimestamp}</td><td>{idxNodeId}</td><td>{idxVerID}</td><td>{idxTimestamp}</td><td>{idxVerTimestamp}</td><td class=\"path-cell\">{item.Path}</td><td>{item.NodeType}</td></tr>");
+                        sb.AppendLine($"<tr><td>{item.Status}</td><td>{dbNodeId}</td><td>{dbVerID}</td><td>{dbTimestamp}</td><td>{dbVerTimestamp}</td><td>{idxNodeId}</td><td>{idxVerID}</td><td>{idxTimestamp}</td><td>{idxVerTimestamp}</td><td>{item.Path}</td><td>{item.NodeType}</td></tr>");
                     }
-                    sb.AppendLine("        </tbody>");
-                    sb.AppendLine("    </table>");
+                    sb.AppendLine("</tbody>");
+                    sb.AppendLine("</table>");
+                    sb.AppendLine("</div>");
                 }
             }
 
