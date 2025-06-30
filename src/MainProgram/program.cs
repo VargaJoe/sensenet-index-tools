@@ -34,6 +34,11 @@ namespace SenseNetIndexTools
                 name: "--backup-path",
                 description: "Custom path for storing backups. If not specified, backups will be stored in an 'IndexBackups' folder at the same level as the index parent folder");
 
+            var offlineOption = new Option<bool>(
+                name: "--offline",
+                description: "Confirm that the index is not in use and can be safely modified. Required for write operations to protect live indexes.",
+                getDefaultValue: () => false);
+
             var rootCommand = new RootCommand("SenseNet Index Maintenance Suite - Tools for managing SenseNet Lucene indices");
             var getCommand = new Command("lastactivityid-get", "Get current LastActivityId from index");
             var setCommand = new Command("lastactivityid-set", "Set LastActivityId in index");
@@ -45,10 +50,12 @@ namespace SenseNetIndexTools
             setCommand.AddOption(idOption);
             setCommand.AddOption(backupOption);
             setCommand.AddOption(backupPathOption);
+            setCommand.AddOption(offlineOption); // Add offline flag to set command
             initCommand.AddOption(pathOption);
             initCommand.AddOption(idOption);
             initCommand.AddOption(backupOption);
             initCommand.AddOption(backupPathOption);
+            initCommand.AddOption(offlineOption); // Add offline flag to init command
             rootCommand.AddCommand(getCommand);
             rootCommand.AddCommand(setCommand);
             rootCommand.AddCommand(initCommand);
@@ -139,7 +146,7 @@ namespace SenseNetIndexTools
                 }
             }, pathOption);
 
-            setCommand.SetHandler(async (string path, long id, bool backup, string? backupPath) =>
+            setCommand.SetHandler(async (string path, long id, bool backup, string? backupPath, bool offline) =>
             {
                 try
                 {
@@ -341,10 +348,10 @@ namespace SenseNetIndexTools
                     Console.Error.WriteLine($"Stack trace: {ex.StackTrace}");
                     Environment.Exit(1);
                 }
-            }, pathOption, idOption, backupOption, backupPathOption);
+            }, pathOption, idOption, backupOption, backupPathOption, offlineOption);
 
             // New command specifically for initializing a non-SenseNet index
-            initCommand.SetHandler(async (string path, long id, bool backup, string? backupPath) =>
+            initCommand.SetHandler(async (string path, long id, bool backup, string? backupPath, bool offline) =>
             {
                 try
                 {
@@ -538,7 +545,7 @@ namespace SenseNetIndexTools
                     Console.Error.WriteLine($"Stack trace: {ex.StackTrace}");
                     Environment.Exit(1);
                 }
-            }, pathOption, idOption, backupOption, backupPathOption);
+            }, pathOption, idOption, backupOption, backupPathOption, offlineOption);
 
             return await rootCommand.InvokeAsync(args);
         }

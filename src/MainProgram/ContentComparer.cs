@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Invocation;
 using System.Data.SqlClient;
 using System.Text;
 using System.Web;
@@ -71,15 +72,25 @@ namespace SenseNetIndexTools
             command.AddOption(recursiveOption);
             command.AddOption(depthOption);
             command.AddOption(orderByOption);
+            command.AddOption(verboseOption);
             command.AddOption(outputOption);
             command.AddOption(formatOption);
-            command.SetHandler((string indexPath, string connectionString, string repositoryPath, bool recursive, int depth, string orderBy, string? output, string format) =>
+            command.SetHandler((System.CommandLine.Invocation.InvocationContext context) =>
             {
+                var indexPath = context.ParseResult.GetValueForOption(indexPathOption)!;
+                var connectionString = context.ParseResult.GetValueForOption(connectionStringOption)!;
+                var repositoryPath = context.ParseResult.GetValueForOption(repositoryPathOption)!;
+                var recursive = context.ParseResult.GetValueForOption(recursiveOption);
+                var depth = context.ParseResult.GetValueForOption(depthOption);
+                var orderBy = context.ParseResult.GetValueForOption(orderByOption) ?? "path";
+                var verbose = context.ParseResult.GetValueForOption(verboseOption);
+                var output = context.ParseResult.GetValueForOption(outputOption);
+                var format = context.ParseResult.GetValueForOption(formatOption) ?? "md";
+
                 try
                 {
-                    // Note: Verbose logging can be enabled by setting VerboseLogging = true in code
-                    // We can't add it as a parameter due to System.CommandLine limitations (max 8 parameters)
-                    VerboseLogging = false;
+                    VerboseLogging = verbose;
+                    
                     if (!Program.IsValidLuceneIndex(indexPath))
                     {
                         Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {indexPath}");
@@ -157,7 +168,7 @@ namespace SenseNetIndexTools
                     Console.Error.WriteLine(ex.StackTrace);
                     Environment.Exit(1);
                 }
-            }, indexPathOption, connectionStringOption, repositoryPathOption, recursiveOption, depthOption, orderByOption, outputOption, formatOption);
+            });
 
             return command;
         }

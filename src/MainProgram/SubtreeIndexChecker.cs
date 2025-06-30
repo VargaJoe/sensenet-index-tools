@@ -61,9 +61,9 @@ namespace SenseNetIndexTools
 
             var reportFormatOption = new Option<string>(
                 name: "--report-format",
-                description: "Level of detail for the report: 'summary', 'detailed', or 'full' (default: 'summary')",
+                description: "Level of detail for the report: 'summary'/'default', 'detailed', 'full', or 'tree' (default: 'summary')",
                 getDefaultValue: () => "summary");
-            reportFormatOption.FromAmong("summary", "detailed", "full");
+            reportFormatOption.FromAmong("summary", "detailed", "full", "default", "tree");
 
             var formatOption = new Option<string>(
                 name: "--format",
@@ -85,6 +85,13 @@ namespace SenseNetIndexTools
             {
                 try
                 {
+                    // Map old parameter values to new ones for backward compatibility
+                    if (reportFormat == "default")
+                        reportFormat = "summary";
+                    // Note: "tree" format is not supported in current implementation, map to "detailed"
+                    if (reportFormat == "tree")
+                        reportFormat = "detailed";
+                    
                     if (!IODirectory.Exists(indexPath))
                     {
                         Console.Error.WriteLine($"Index directory not found: {indexPath}");
@@ -104,7 +111,7 @@ namespace SenseNetIndexTools
                     var results = comparer.CompareContent(indexPath, connectionString, repositoryPath, recursive, depth);
 
                     // Process results for the report
-                    ProcessResults(results, report, reportFormat != "default");
+                    ProcessResults(results, report, reportFormat != "summary");
 
                     report.EndTime = DateTime.Now;
                     GenerateReport(report, output, reportFormat, format);
@@ -203,7 +210,7 @@ namespace SenseNetIndexTools
             sb.AppendLine($"- Mismatched Items: {report.MismatchedItems.Count}");
             sb.AppendLine();
 
-            if (reportFormat != "default")
+            if (reportFormat != "summary")
             {
                 // Content Type Statistics
                 sb.AppendLine("## Content Type Statistics");
@@ -394,7 +401,7 @@ namespace SenseNetIndexTools
             sb.AppendLine("</div>"); // End of summary-section
 
             // Content type distribution
-            if (reportFormat != "default" && report.ContentTypeStats.Any())
+            if (reportFormat != "summary" && report.ContentTypeStats.Any())
             {
                 sb.AppendLine("<div class=\"section\">");
                 sb.AppendLine("<h2>Content Type Distribution</h2>");
