@@ -95,8 +95,8 @@ namespace TestSubtreeChecker
                     
                     // Document 5: Uses InTree field
                     var doc5 = new Document();
-                    doc5.Add(new Field("Id", NumericUtils.IntToPrefixCoded(105), Field.Store.YES, Field.Index.NOT_ANALYZED));                    doc5.Add(new Field("Version_", NumericUtils.IntToPrefixCoded(1005), Field.Store.YES, Field.Index.NOT_ANALYZED));
                     doc5.Add(new Field("Id", NumericUtils.IntToPrefixCoded(105), Field.Store.YES, Field.Index.NOT_ANALYZED));
+                    doc5.Add(new Field("Version_", NumericUtils.IntToPrefixCoded(1005), Field.Store.YES, Field.Index.NOT_ANALYZED));
                     doc5.Add(new Field("Path", "/Root/Test/Document5", Field.Store.YES, Field.Index.NOT_ANALYZED));
                     doc5.Add(new Field("InTree", "/Root/Test", Field.Store.YES, Field.Index.NOT_ANALYZED));
                     writer.AddDocument(doc5);
@@ -159,7 +159,7 @@ namespace TestSubtreeChecker
             try
             {
                 var result = method.Invoke(null, new object[] { reader, nodeId, versionId, path });
-                bool success = (bool)result == expectedResult;
+                bool success = result != null && (bool)result == expectedResult;
                 
                 Console.WriteLine($"  {testName}: {(success ? "PASSED" : "FAILED")} (expected: {expectedResult}, got: {result})");
             }

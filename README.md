@@ -137,3 +137,39 @@ The output will be in the `bin/Release/net8.0/publish` directory.
 ## Repository
 
 This tool is available on GitHub: [VargaJoe/sensenet-index-tools](https://github.com/VargaJoe/sensenet-index-tools)
+
+## Test Projects
+
+The solution includes several test and diagnostic projects:
+
+### TestDuplicatePaths
+Tests handling of duplicate paths with different IDs in the Lucene index. This helps verify the ContentComparer's behavior when the index contains multiple entries for the same path.
+
+```bash
+# Run the duplicate paths test
+dotnet run --project src/TestDuplicatePaths/TestDuplicatePaths.csproj
+```
+
+### TestIndexLoader
+Loads and validates Lucene indexes using SenseNet's indexing engine. Useful for testing index compatibility and diagnosing loading issues.
+
+```bash
+# Test loading an index
+dotnet run --project src/TestIndexLoader/TestIndexLoader.csproj -- "path/to/index"
+```
+
+### TestSubtreeChecker
+Tests the enhanced search functionality in SubtreeIndexChecker with generated test data. Verifies different indexing patterns and search strategies.
+
+```bash
+# Run the subtree checker tests
+dotnet run --project src/TestSubtreeChecker/TestSubtreeChecker.csproj
+```
+
+These test projects are valuable for:
+- Regression testing after changes
+- Debugging edge cases and indexing issues
+- Verifying compatibility with different index structures
+- Understanding how the tools handle various data patterns
+
+## Project Structure
