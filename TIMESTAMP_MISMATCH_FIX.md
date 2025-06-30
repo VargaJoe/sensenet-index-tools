@@ -71,7 +71,9 @@ The fix implements the following changes:
    // Console output format
    $"{(InDatabase ? NodeId.ToString() : "-")}\t{(InDatabase ? VersionId.ToString() : "-")}\t" +
    $"{(InDatabase ? Timestamp.ToString("yyyy-MM-dd HH:mm:ss") : "-")}\t{(InDatabase ? TimestampNumeric.ToString() : "-")}\t" +
-   ...
+   $"{(InIndex ? IndexNodeId : "-")}\t{(InIndex ? IndexVersionId : "-")}\t" +
+   $"{(InIndex ? IndexTimestamp : "-")}\t" +
+   $"{Path}\t{NodeType}\t{Status}";
    ```
 
 ## Verification Results

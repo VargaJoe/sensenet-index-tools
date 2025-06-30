@@ -1,6 +1,4 @@
-# SenseNet Index Maintenance Web Application
-
-## Overview
+# WEB APPLICATION PLAN
 
 This document outlines the plan to expand the SenseNet Index Maintenance Suite with a web-based interface, allowing users to run index maintenance operations and view reports through a browser.
 

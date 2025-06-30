@@ -1,4 +1,4 @@
-// Solution for timestamp mismatches
+# Solution for timestamp mismatches
 
 /*
 The correct approach appears to be:

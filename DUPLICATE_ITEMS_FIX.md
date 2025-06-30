@@ -14,10 +14,6 @@ Items with different IDs and versions at the same path were either:
 - Incorrectly shown as duplicates (same items repeated)
 - Or incorrectly matched (database item with ID 194348 matched with wrong index item)
 
-```
-[✗ ID mismatch]	194348	204925	194348	203550	/Root/Content/Data/ISIN/hu/2025/02/Maros_Fele_valid_2025_ISIN.csv
-[✗ Index only]	-	-	194348	204925	/root/content/Data/isin/hu/2025/02/maros_fele_valid_2025_isin.csv
-```
 
 ## Changes Made
 
