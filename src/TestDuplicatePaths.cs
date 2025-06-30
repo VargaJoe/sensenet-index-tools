@@ -44,9 +44,9 @@ namespace TestDuplicatePaths
             Console.WriteLine("\nTest completed.");
         }
         
-        static System.Collections.Generic.List<ContentComparer.ContentItem> GetItemsFromIndex(string indexPath, string path)
+        static System.Collections.Generic.List<ContentItem> GetItemsFromIndex(string indexPath, string path)
         {
-            var items = new System.Collections.Generic.List<ContentComparer.ContentItem>();
+            var items = new System.Collections.Generic.List<ContentItem>();
             
             Console.WriteLine($"Loading index items from: {indexPath}");
             Console.WriteLine($"For path: {path}");
@@ -81,7 +81,7 @@ namespace TestDuplicatePaths
                         var docPath = doc.Get("Path") ?? string.Empty;
                         var type = (doc.Get("Type") ?? doc.Get("NodeType") ?? "Unknown").ToLowerInvariant();
                         
-                        items.Add(new ContentComparer.ContentItem
+                        items.Add(new ContentItem
                         {
                             NodeId = 0,
                             VersionId = 0,

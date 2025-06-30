@@ -1,0 +1,228 @@
+@page "/lastactivityid"
+@using WebApp.Services
+@inject LastActivityIdService LastActivityService
+@inject ILogger<LastActivityId> Logger
+
+<PageTitle>LastActivityId Management</PageTitle>
+
+<div class="sensenet-header mb-4">
+    <div class="d-flex align-items-center mb-3">
+        <img src="_content/WebApp/images/sensenet-logo.png" alt="SenseNet Logo" height="40" class="me-3" />
+        <h1 class="mb-0">LastActivityId Management</h1>
+    </div>
+    <div class="alert alert-info" role="alert">
+        <i class="bi bi-info-circle-fill me-2"></i>
+        Manage LastActivityId values in sensenet Lucene indexes. Read operations are safe for live indexes.
+        Write operations require the index to be offline.
+    </div>
+</div>
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title">
+            <i class="bi bi-folder2-open me-2"></i>
+            Index Path
+        </h5>
+        <div class="input-group mb-3">
+            <span class="input-group-text">
+                <i class="bi bi-folder"></i>
+            </span>
+            <input type="text" 
+                   class="form-control" 
+                   @bind="IndexPath"
+                   @bind:event="oninput"
+                   @onkeyup="HandlePathKeyUp"
+                   placeholder="Enter the path to your sensenet index" />
+            <button class="btn btn-primary" 
+                    @onclick="GetLastActivityId" 
+                    disabled="@(!IsValidPath)">
+                <i class="bi bi-search me-2"></i>
+                Get LastActivityId
+            </button>
+        </div>
+        @if (!string.IsNullOrEmpty(IndexPath) && !IsValidPath)
+        {
+            <div class="text-danger small mt-2">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                The specified path does not exist
+            </div>
+        }
+    </div>
+</div>
+
+@if (LastActivityInfo != null)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Current LastActivityId</h5>
+            <p class="card-text">
+                <strong>LastActivityId:</strong> @LastActivityInfo.LastActivityId
+            </p>
+            @if (LastActivityInfo.Gaps != null && LastActivityInfo.Gaps.Any())
+            {
+                <p class="card-text">
+                    <strong>Gaps:</strong> @string.Join(", ", LastActivityInfo.Gaps)
+                </p>
+            }
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Modify LastActivityId</h5>
+            <div class="alert alert-warning" role="alert">
+                ⚠️ These operations require the index to be offline!
+            </div>
+            <div class="mb-3">
+                <label for="newId" class="form-label">New LastActivityId Value</label>
+                <input type="number" class="form-control" id="newId" @bind="NewId" />
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="backup" @bind="CreateBackup">
+                <label class="form-check-label" for="backup">Create Backup</label>
+            </div>
+            @if (CreateBackup)
+            {
+                <div class="mb-3">
+                    <label for="backupPath" class="form-label">Backup Path (optional)</label>
+                    <input type="text" class="form-control" id="backupPath" @bind="BackupPath" placeholder="Leave empty for default backup location" />
+                </div>
+            }
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="offline" @bind="IsOffline">
+                <label class="form-check-label" for="offline">I confirm the index is offline</label>
+            </div>
+            <button class="btn btn-warning me-2" @onclick="SetLastActivityId" disabled="@(!CanModify)">
+                Set LastActivityId
+            </button>
+            <button class="btn btn-danger" @onclick="InitLastActivityId" disabled="@(!CanModify)">
+                Initialize LastActivityId
+            </button>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <div class="alert alert-danger" role="alert">
+        @ErrorMessage
+    </div>
+}
+
+@code {
+    private string _indexPath = string.Empty;
+    private string IndexPath
+    {
+        get => _indexPath;
+        set
+        {
+            if (_indexPath != value)
+            {
+                _indexPath = value;
+                _isValidPathCache = null;
+                InvokeAsync(() => ValidatePathAsync());
+            }
+        }
+    }
+    private bool CreateBackup { get; set; } = true;
+    private string? BackupPath { get; set; }
+    private bool IsOffline { get; set; }
+    private long NewId { get; set; }
+    private string? ErrorMessage { get; set; }
+    private LastActivityInfo? LastActivityInfo { get; set; }
+    private bool? _isValidPathCache;
+    private System.Threading.CancellationTokenSource? _validationCts;
+
+    private bool IsValidPath => _isValidPathCache ?? false;
+    private bool CanModify => IsValidPath && IsOffline && NewId >= 0;
+
+    private async Task HandlePathKeyUp(KeyboardEventArgs e)
+    {
+        await ValidatePathAsync();
+    }
+
+    private async Task ValidatePathAsync()
+    {
+        try
+        {
+            // Cancel any pending validation
+            _validationCts?.Cancel();
+            _validationCts?.Dispose();
+            _validationCts = new System.Threading.CancellationTokenSource();
+            var token = _validationCts.Token;
+
+            // Small delay to avoid too frequent validation
+            await Task.Delay(300, token);
+
+            if (!token.IsCancellationRequested)
+            {
+                _isValidPathCache = LastActivityService.ValidatePath(IndexPath);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (System.Threading.Tasks.TaskCanceledException)
+        {
+            // Ignore cancellation
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error validating path: {Path}", IndexPath);
+            _isValidPathCache = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task GetLastActivityId()
+    {
+        try
+        {
+            ErrorMessage = null;
+            Logger.LogInformation("Attempting to get LastActivityId from {IndexPath}", IndexPath);
+            
+            if (!LastActivityService.ValidatePath(IndexPath))
+            {
+                ErrorMessage = $"The index directory does not exist: {IndexPath}";
+                Logger.LogWarning("Index directory does not exist: {IndexPath}", IndexPath);
+                return;
+            }
+            
+            LastActivityInfo = await LastActivityService.GetLastActivityIdAsync(IndexPath);
+            Logger.LogInformation("Successfully retrieved LastActivityId from {IndexPath}", IndexPath);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error getting LastActivityId: {ex.Message}";
+            Logger.LogError(ex, "Error getting LastActivityId from {IndexPath}", IndexPath);
+        }
+    }
+
+    private async Task SetLastActivityId()
+    {
+        try
+        {
+            ErrorMessage = null;
+            await LastActivityService.SetLastActivityIdAsync(IndexPath, NewId, CreateBackup, BackupPath);
+            await GetLastActivityId(); // Refresh the display
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error setting LastActivityId: {ex.Message}";
+            Logger.LogError(ex, "Error setting LastActivityId to {NewId} in {IndexPath}", NewId, IndexPath);
+        }
+    }
+
+    private async Task InitLastActivityId()
+    {
+        try
+        {
+            ErrorMessage = null;
+            await LastActivityService.InitializeLastActivityIdAsync(IndexPath, NewId, CreateBackup, BackupPath);
+            await GetLastActivityId(); // Refresh the display
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error initializing LastActivityId: {ex.Message}";
+            Logger.LogError(ex, "Error initializing LastActivityId to {NewId} in {IndexPath}", NewId, IndexPath);
+        }
+    }
+}
