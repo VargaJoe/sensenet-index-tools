@@ -1,7 +1,7 @@
 @page "/lastactivityid"
-@using WebApp.Services
 @inject LastActivityIdService LastActivityService
 @inject ILogger<LastActivityId> Logger
+@inject IJSRuntime JS
 
 <PageTitle>LastActivityId Management</PageTitle>
 
@@ -33,6 +33,9 @@
                    @bind:event="oninput"
                    @onkeyup="HandlePathKeyUp"
                    placeholder="Enter the path to your sensenet index" />
+            <label class="btn btn-outline-secondary mb-0" for="folderInput">
+                <i class="bi bi-folder2-open"></i>
+            </label>
             <button class="btn btn-primary" 
                     @onclick="GetLastActivityId" 
                     disabled="@(!IsValidPath)">
@@ -40,6 +43,7 @@
                 Get LastActivityId
             </button>
         </div>
+        <input id="folderInput" type="file" style="display:none" webkitdirectory directory multiple @onchange="OnFolderPicked" />
         @if (!string.IsNullOrEmpty(IndexPath) && !IsValidPath)
         {
             <div class="text-danger small mt-2">
@@ -223,6 +227,26 @@
         {
             ErrorMessage = $"Error initializing LastActivityId: {ex.Message}";
             Logger.LogError(ex, "Error initializing LastActivityId to {NewId} in {IndexPath}", NewId, IndexPath);
+        }
+    }
+
+    private async Task OnFolderPicked(ChangeEventArgs e)
+    {
+        var files = e.Value as IReadOnlyList<IBrowserFile>;
+        if (files != null && files.Count > 0)
+        {
+            // Get the folder path from the first file's web-relative path
+            var firstFile = files[0];
+            var relativePath = firstFile.Name;
+            
+            // Extract the folder path (everything before the first file name)
+            var pathSegments = relativePath.Split('/');
+            if (pathSegments.Length > 1)
+            {
+                // Join all segments except the last one (which is the file name)
+                var folderPath = string.Join("/", pathSegments.Take(pathSegments.Length - 1));
+                IndexPath = folderPath;
+            }
         }
     }
 }
