@@ -85,7 +85,9 @@ namespace SenseNetIndexTools
                     var dryRun = context.ParseResult.GetValueForOption(dryRunOption);
                     var backup = context.ParseResult.GetValueForOption(backupOption);
                     var offline = context.ParseResult.GetValueForOption(offlineOption);
-                    var backupPath = context.ParseResult.GetValueForOption(backupPathOption);                    Console.WriteLine($"Starting orphaned index entries cleanup for path: {repositoryPath}");
+                    var backupPath = context.ParseResult.GetValueForOption(backupPathOption);
+                    Console.WriteLine($"Starting orphaned index entries cleanup for path: {repositoryPath}");
+                    ContentComparer.VerboseLogging = verbose;
 
                     // Validation checks
                     if (!Program.IsValidLuceneIndex(indexPath))
@@ -110,7 +112,9 @@ namespace SenseNetIndexTools
 
                     // Compare content to find orphaned entries
                     var comparer = new ContentComparer();
-                    var results = comparer.CompareContent(indexPath, connectionString, repositoryPath, recursive, 0);                    // Filter for orphaned entries (index-only items)
+                    var results = comparer.CompareContent(indexPath, connectionString, repositoryPath, recursive, 0);
+
+                    // Filter for orphaned entries (index-only items)
                     var orphanedEntries = results.Where(r => !r.InDatabase && r.InIndex).ToList();
 
                     Console.WriteLine($"\nFound {orphanedEntries.Count} orphaned index entries:");

@@ -2,19 +2,15 @@
 
 This document provides guidance on using the `check-subtree` command from the SenseNet Index Maintenance Suite to verify synchronization between content in the SenseNet database and the Lucene search index.
 
+When using the `check-subtree` command, you'll get output in two forms:
+1. Console output - Always displayed, showing basic statistics and summary information
+2. File output - Optional detailed report, controlled by `--output` and `--report-format` flags
+
 ## Quick Start
 
 ### Basic Command
 
 Run a basic check to verify if content items in a specific subtree exist in the index:
-
-```bash
-dotnet run -- check-subtree --index-path "D:\path\to\lucene\index" --connection-string "Data Source=server;Initial Catalog=sensenet;Integrated Security=True" --repository-path "/Root/Content/Path" --report-format default
-```
-
-### Using the PowerShell Script
-
-For convenience, you can use the included PowerShell script:
 
 ```powershell
 ./CheckSubtree.ps1 -indexPath "D:\path\to\lucene\index" -connectionString "Data Source=server;Initial Catalog=sensenet;Integrated Security=True" -repositoryPath "/Root/Content/Path" -reportFormat "default"
@@ -31,87 +27,169 @@ For convenience, you can use the included PowerShell script:
 | `--depth` | Limit checking to specified depth (1=direct children only, 0=all descendants) |
 | `--output` | Path to save the check report to a file |
 | `--report-format` | Format of the report: 'default', 'detailed', 'tree', or 'full' (default: 'default') |
+| `--format` | Format of the output file: 'md' (Markdown) or 'html' (HTML) (default: 'md') |
 
-## Report Formats
+## Output and Report Formats
 
-The tool supports different report formats through the `--report-format` option:
+The tool provides two types of output:
 
-### 1. Default Format (--report-format default)
-- Basic summary statistics
-- Overall counts and matching percentages
-- Quick overview of mismatches by content type
+### Console Output (Always Shown)
+Console output is always displayed and includes:
+```
+Subtree Check Summary:
+Items in Database: 150
+Items in Index: 148
+Matched Items: 148
+Mismatched Items: 2
 
-### 2. Detailed Format (--report-format detailed)
-- Everything in default format
-- Content type distribution with match rates
-- Detailed breakdown of mismatches by content type
-- Performance metrics and timing information
+Mismatch Summary by Type:
+Document: 1 mismatches
+Folder: 1 mismatches
+```
 
-### 3. Tree Format (--report-format tree)
-- Everything in detailed format
-- Hierarchical view of content structure
-- Clear visualization of where mismatches occur in the content tree
+### File Output (Optional)
+To get detailed reports saved to a file, you must use **both**:
+1. `--output` flag to specify the output file path
+2. `--report-format` flag to specify the level of detail
 
-### 4. Full Format (--report-format full)
-- Everything in detailed format
-- Complete item-by-item comparison
-- All matches and mismatches listed
-- Comprehensive content type analysis
-- All available metadata and statistics
+Available report formats:
 
-The report provides insights such as:
-- Content types with high mismatch rates (indicating possible indexing configuration issues)
-- Version state analysis (published vs. draft versions missing from the index)
-- Path patterns where content is consistently missing
-- Match rates for each content type
+#### 1. Default Format (--report-format default)
+Basic report with summary information:
+```markdown
+# Subtree Index Check Report
+
+## Check Information
+- Repository Path: /Root/Content
+- Recursive: true
+- Start Time: 2023-11-15 10:30:15
+- End Time: 2023-11-15 10:30:18
+- Duration: 3.25 seconds
+
+## Summary
+- Items in Database: 150
+- Items in Index: 148
+- Matched Items: 148
+- Mismatched Items: 2
+```
+
+#### 2. Detailed Format (--report-format detailed)
+Everything in default format plus content type analysis and detailed status information:
+```markdown
+## Content Type Statistics
+| Type | Total Items | Mismatches | Match Rate |
+|------|-------------|------------|------------|
+| Document | 75 | 1 | 98.7% |
+| Folder | 45 | 1 | 97.8% |
+| Image | 30 | 0 | 100.0% |
+
+## Mismatches by Content Type
+### Documents
+| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | Path |
+|--------|-----------|----------|--------------|-------------|------|
+| [✗ DB Only] | 12345 | 1 | - | - | /Root/Content/MyDoc.docx |
+```
+
+#### 3. Tree Format (--report-format tree)
+Hierarchical view with enhanced status visualization:
+```markdown
+## Content Tree
+/Root/Content/ [✓] (95% match, 150 items)
+├── Folder1/ [✓] (100% match, 10 items)
+│   ├── Document1.docx [✓]
+│   └── Image1.jpg [✓]
+└── Folder2/ [✗ Index Only] (50% match, 2 items)
+    ├── Document2.docx [✗ DB Only]
+    └── Document3.docx [✗ ID Mismatch]
+```
+
+Status indicators show:
+- `[✓]` - Item matches in both database and index
+- `[✗ DB Only]` - Item exists only in database
+- `[✗ Index Only]` - Item exists only in index
+- `[✗ ID Mismatch]` - Item exists in both but with different IDs
+- `[✗ Version Mismatch]` - Item exists in both but with different versions
+
+Folder statistics show:
+- Match percentage for the folder and its descendants
+- Total number of items in the subtree
+- Visual tree structure with proper indentation
+
+#### 4. Full Format (--report-format full)
+Everything from detailed format plus complete item list:
+```markdown
+## Complete Item List
+| Status | DB NodeId | DB VerID | Index NodeId | Index VerID | Path | Type |
+|--------|-----------|----------|--------------|-------------|------|------|
+| [✓] | 12345 | 1 | 12345 | 1 | /Root/Content/Doc1.docx | Document |
+| [✗ DB Only] | 12346 | 1 | - | - | /Root/Content/Doc2.docx | Document |
+| [✗ Version Mismatch] | 12347 | 2 | 12347 | 1 | /Root/Content/Doc3.docx | Document |
+```
+
+### HTML Output (--format html)
+When using HTML format, the report includes:
+- Color-coded status indicators (green for matches, red for mismatches)
+- Interactive tree view with expandable folders
+- Styled tables with sorting capability
+- Branch statistics in a readable format
+- Proper indentation and visual hierarchy
 
 ## Common Scenarios
 
 ### 1. Quick Content Validation
-
-Verify if specific content is properly indexed:
-
 ```powershell
-./CheckSubtree.ps1 -indexPath "D:\path\to\index" -connectionString "..." -repositoryPath "/Root/Sites/Default_Site/MyImportantDocument" -recursive $false -reportFormat "default"
+./CheckSubtree.ps1 -indexPath "D:\path\to\index" -connectionString "..." -repositoryPath "/Root/Sites/Default_Site/MyDocument" -recursive $false -reportFormat "default"
 ```
 
 ### 2. Full Site Validation with Details
-
-Check an entire site structure with detailed reporting:
-
 ```powershell
-./CheckSubtree.ps1 -indexPath "D:\path\to\index" -connectionString "..." -repositoryPath "/Root/Sites/Default_Site" -reportFormat "full" -outputPath "site_validation_report.md"
+./CheckSubtree.ps1 -indexPath "D:\path\to\index" -connectionString "..." -repositoryPath "/Root/Sites/Default_Site" -reportFormat "full" -outputPath "site_validation.html" -format "html"
 ```
 
-### 3. Limited Depth Check
-
-Check only immediate children of a path:
-
+### 3. Tree View for Visual Analysis
 ```powershell
-./CheckSubtree.ps1 -indexPath "D:\path\to\index" -connectionString "..." -repositoryPath "/Root/Content" -depth 1 -reportFormat "detailed"
+./CheckSubtree.ps1 -indexPath "D:\path\to\index" -connectionString "..." -repositoryPath "/Root/Content" -reportFormat "tree" -outputPath "content_tree.md"
 ```
 
-### 4. Scheduled Validation
+## Testing Different Depths
 
-Create a scheduled task to regularly validate your index:
+You can control the depth of checking with two parameters:
+1. `--recursive` - Check all content items under the specified path (default: true)
+2. `--depth` - Limit checking to specified depth (1=direct children only, 0=all descendants)
 
+### Example Depth Control Scenarios
+
+1. Check only direct children:
 ```powershell
-# Create a scheduled task that runs weekly
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-File D:\path\to\CheckSubtree.ps1 -indexPath '...' -connectionString '...' -repositoryPath '/Root' -outputPath 'D:\reports\weekly_validation.md'"
-$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At "2:00 AM"
-Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "SenseNet Weekly Index Validation" -Description "Validates SenseNet index against database content"
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
+    --index-path $TestIndex `
+    --connection-string $TestDb `
+    --repository-path $RepositoryPath `
+    --depth 1 `
+    --report-format tree `
+    --output "direct-children.md"
 ```
 
-## Connection String Formats
+2. Check all descendants (default):
+```powershell
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
+    --index-path $TestIndex `
+    --connection-string $TestDb `
+    --repository-path $RepositoryPath `
+    --recursive `
+    --report-format tree `
+    --output "all-descendants.md"
+```
 
-### SQL Server with Windows Authentication
-```
-Data Source=myserver;Initial Catalog=sensenet;Integrated Security=True
-```
-
-### SQL Server with SQL Authentication
-```
-Data Source=myserver;Initial Catalog=sensenet;User ID=username;Password=password;TrustServerCertificate=True
+3. Check limited depth with detailed report:
+```powershell
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
+    --index-path $TestIndex `
+    --connection-string $TestDb `
+    --repository-path $RepositoryPath `
+    --depth 2 `
+    --report-format detailed `
+    --output "depth-2-detailed.md"
 ```
 
 ## Analyzing Results
@@ -128,34 +206,74 @@ The report includes different levels of detail based on the chosen format:
    - Mismatch rates per content type
    - Type-specific patterns
 
-3. **Detailed Mismatches** (detailed and full formats)
+3. **Detailed Mismatches**
    - Full path information
    - Node IDs and Version IDs
    - Content types
-   - Mismatch reasons
+   - Specific mismatch type (DB Only, Index Only, ID Mismatch, Version Mismatch)
 
-4. **Complete Item List** (full format only)
-   - All items from both database and index
-   - Side-by-side comparison
-   - Full metadata for each item
+4. **Tree View Analysis**
+   - Hierarchical content structure
+   - Visual status indicators
+   - Branch statistics (match rates, total items)
+   - Easy identification of problem areas
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Timeout errors**: For large subtrees, try:
-   - Checking smaller sections individually
-   - Using the `--depth` parameter to limit scope
-   - Running during off-peak hours
+1. **High mismatches**: If over 10% of content is missing:
+   - Check status types ([✗ DB Only], [✗ Index Only], etc.) to identify patterns
+   - Look for common parent folders with low match rates
+   - Consider focusing on specific content types showing high mismatch rates
 
-2. **Permission errors**: Ensure the account has:
-   - Read access to the index directory
-   - Query permissions on the database
-   - Sufficient SQL timeout settings
+2. **Understanding Status Types**:
+   - `[✗ DB Only]`: Content exists in database but not in index (may need reindexing)
+   - `[✗ Index Only]`: Content exists in index but not in database (may be orphaned)
+   - `[✗ ID Mismatch]`: Same content with different IDs (possible content restore issue)
+   - `[✗ Version Mismatch]`: Different versions in DB and index (possible sync issue)
 
-3. **High mismatches**: If over 10% of content is missing:
-   - Check index rebuild dates
-   - Verify content publication status
-   - Consider a full reindex
+## Scheduling Index Checks
 
-For detailed technical information about the index structure and validation process, refer to the main [DOCUMENTATION.md](DOCUMENTATION.md) file.
+While the tool doesn't include built-in scheduling, you can set up periodic checks using your preferred task scheduler:
+
+### Windows Task Scheduler
+
+Create a scheduled task to run index validation:
+
+```batch
+REM validate.bat
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj validate ^
+    --path "%INDEX_PATH%" ^
+    --detailed ^
+    --output "validation_%date:~-4,4%%date:~-10,2%%date:~-7,2%.md"
+```
+
+### Linux Cron
+
+Add a cron entry to run periodic checks:
+
+```bash
+# /etc/cron.d/index-validation
+0 2 * * * youruser dotnet run --project /path/to/sn-index-maintenance-suite.csproj validate --path "$INDEX_PATH" --detailed --output "validation_$(date +\%Y\%m\%d).md"
+```
+
+### CI/CD Pipeline Integration
+
+For automated environments, include validation in your CI/CD pipeline:
+
+```yaml
+steps:
+  - name: Validate Index
+    run: |
+      dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj validate \
+        --path "${{ env.INDEX_PATH }}" \
+        --detailed \
+        --output validation-report.md
+```
+
+The validation command is designed to be automation-friendly:
+- Exits with non-zero code on validation failures
+- Generates structured reports
+- Safe to run on live indexes (read-only)
+- Configurable validation depth and sampling

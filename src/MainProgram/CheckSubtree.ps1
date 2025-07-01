@@ -27,9 +27,13 @@ param(
 
 # Default output path if not specified
 if ([string]::IsNullOrEmpty($outputPath)) {
-    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-    $sanitizedPath = $repositoryPath -replace '[\\\/\:\*\?"<>\|]', '_'
-    $outputPath = "subtree_check_${sanitizedPath}_${timestamp}.md"
+    $outputPath = "subtree-report.md"
+}
+
+# Determine the format based on file extension
+$format = "md"
+if ($outputPath -match "\.html$") {
+    $format = "html"
 }
 
 # Build command arguments
@@ -48,11 +52,16 @@ if (-not $recursive) {
 }
 
 if ($detailed) {
-    $commandArgs += "--detailed"
+    $commandArgs += "--report-format"
+    $commandArgs += "detailed"
 }
 
 $commandArgs += "--output"
 $commandArgs += $outputPath
+
+# Add format parameter
+$commandArgs += "--format"
+$commandArgs += $format
 
 # Display info
 Write-Host "Starting subtree index check:" -ForegroundColor Cyan

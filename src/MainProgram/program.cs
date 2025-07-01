@@ -1,8 +1,9 @@
 using System.CommandLine;
-using System.CommandLine.Builder;
-using System.CommandLine.Parsing;
+using Lucene.Net.Analysis.Standard;
+using Lucene.Net.Documents;
 using Lucene.Net.Index;
 using Lucene.Net.Store;
+using Lucene.Net.Util;
 using System.Collections.Generic;
 using SenseNet.Search;
 using SenseNet.Search.Indexing;
@@ -13,8 +14,13 @@ namespace SenseNetIndexTools
 {
     public partial class Program
     {
+        private const string COMMITFIELDNAME = "$#COMMIT";
+        private const string COMMITDATAFIELDNAME = "$#DATA";
+
         public static async Task<int> Main(string[] args)
         {
+            var rootCommand = new RootCommand("SenseNet Index Maintenance Suite - Tools for managing SenseNet Lucene indices");
+
             var pathOption = new Option<string>(
                 name: "--path",
                 description: "Path to the Lucene index directory");
@@ -39,7 +45,6 @@ namespace SenseNetIndexTools
                 description: "Confirm that the index is not in use and can be safely modified. Required for write operations to protect live indexes.",
                 getDefaultValue: () => false);
 
-            var rootCommand = new RootCommand("SenseNet Index Maintenance Suite - Tools for managing SenseNet Lucene indices");
             var getCommand = new Command("lastactivityid-get", "Get current LastActivityId from index");
             var setCommand = new Command("lastactivityid-set", "Set LastActivityId in index");
             var initCommand = new Command("lastactivityid-init", "Initialize LastActivityId in a non-SenseNet Lucene index");
@@ -150,10 +155,16 @@ namespace SenseNetIndexTools
             {
                 try
                 {
-                    // First verify this is a valid Lucene index
                     if (!IsValidLuceneIndex(path))
                     {
                         Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {path}");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    if (!offline)
+                    {
+                        Console.Error.WriteLine("The --offline flag is required for modifying indexes. This protects live indexes from accidental modification.");
                         Environment.Exit(1);
                         return;
                     }
@@ -163,64 +174,42 @@ namespace SenseNetIndexTools
                         CreateBackup(path, backupPath);
                     }
 
-                    Console.WriteLine($"Opening index directory: {path}");
-
                     // First try using SenseNet API method
                     bool useSenseNetApi = false;
-                    IndexingActivityStatus currentStatus = null;
 
                     try
                     {
                         var directory = new IndexDirectory(path);
                         var engine = new Lucene29LocalIndexingEngine(directory);
 
-                        Console.WriteLine("Attempting to read current activity status using SenseNet API...");
-                        currentStatus = await engine.ReadActivityStatusFromIndexAsync(CancellationToken.None);
-                        Console.WriteLine($"Current LastActivityId: {currentStatus.LastActivityId}");
-                        if (currentStatus.Gaps?.Any() == true)
-                            Console.WriteLine($"Current activity gaps: {string.Join(", ", currentStatus.Gaps)}");
+                        // Get current status to preserve gaps
+                        var currentStatus = await engine.ReadActivityStatusFromIndexAsync(CancellationToken.None);
+
+                        // Create a new status, preserving gaps if they exist
+                        var newStatus = new IndexingActivityStatus
+                        {
+                            LastActivityId = (int)id,
+                            Gaps = currentStatus?.Gaps ?? Array.Empty<int>()
+                        };
+
+                        Console.WriteLine("Writing updated activity status to index using SenseNet API...");
+                        await engine.WriteActivityStatusToIndexAsync(newStatus, CancellationToken.None);
+                        Console.WriteLine($"Successfully set LastActivityId to {id}");
+
+                        // Verify the change
+                        var verificationStatus = await engine.ReadActivityStatusFromIndexAsync(CancellationToken.None);
+                        if (verificationStatus.LastActivityId == (int)id)
+                            Console.WriteLine("Verification successful: LastActivityId was properly updated.");
+                        else
+                            Console.WriteLine($"Warning: Verification returned different value: {verificationStatus.LastActivityId}");
 
                         useSenseNetApi = true;
+                        return;
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"SenseNet API method failed: {ex.Message}");
+                        Console.WriteLine($"Failed to write LastActivityId using SenseNet API: {ex.Message}");
                         Console.WriteLine("Falling back to direct Lucene.NET access method...");
-                    }
-
-                    if (useSenseNetApi)
-                    {
-                        try
-                        {
-                            // Use the SenseNet API to update
-                            var directory = new IndexDirectory(path);
-                            var engine = new Lucene29LocalIndexingEngine(directory);
-
-                            // Create a new status, preserving gaps if they exist
-                            var newStatus = new IndexingActivityStatus
-                            {
-                                LastActivityId = (int)id,
-                                Gaps = currentStatus?.Gaps ?? Array.Empty<int>()
-                            };
-
-                            Console.WriteLine("Writing updated activity status to index using SenseNet API...");
-                            await engine.WriteActivityStatusToIndexAsync(newStatus, CancellationToken.None);
-                            Console.WriteLine($"Successfully set LastActivityId to {id}");
-
-                            // Verify the change
-                            var verificationStatus = await engine.ReadActivityStatusFromIndexAsync(CancellationToken.None);
-                            if (verificationStatus.LastActivityId == (int)id)
-                                Console.WriteLine("Verification successful: LastActivityId was properly updated.");
-                            else
-                                Console.WriteLine($"Warning: Verification returned different value: {verificationStatus.LastActivityId}");
-
-                            return;
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.Error.WriteLine($"Failed to write LastActivityId using SenseNet API: {ex.Message}");
-                            Console.Error.WriteLine("Falling back to direct Lucene.NET access method...");
-                        }
                     }
 
                     // Fall back to direct Lucene.NET access
@@ -275,24 +264,20 @@ namespace SenseNetIndexTools
                                                                        false, // don't create a new index
                                                                        IndexWriter.MaxFieldLength.UNLIMITED))
                                 {
-                                    // Following SenseNet pattern: Add a fake document to make sure changes are written
-                                    const string COMMITFIELDNAME = "$#COMMIT";
-                                    const string COMMITDATAFIELDNAME = "$#DATA";
-
-                                    // Create and add a fake document with a unique value
+                                    // Create and add commit document
                                     var value = Guid.NewGuid().ToString();
-                                    var doc = new Lucene.Net.Documents.Document();
-                                    doc.Add(new Lucene.Net.Documents.Field(COMMITFIELDNAME, COMMITFIELDNAME,
-                                        Lucene.Net.Documents.Field.Store.YES,
-                                        Lucene.Net.Documents.Field.Index.NOT_ANALYZED,
-                                        Lucene.Net.Documents.Field.TermVector.NO));
-                                    doc.Add(new Lucene.Net.Documents.Field(COMMITDATAFIELDNAME, value,
-                                        Lucene.Net.Documents.Field.Store.YES,
-                                        Lucene.Net.Documents.Field.Index.NOT_ANALYZED,
-                                        Lucene.Net.Documents.Field.TermVector.NO));
+                                    var doc = new Document();
+                                    doc.Add(new Field(COMMITFIELDNAME, COMMITFIELDNAME,
+                                        Field.Store.YES,
+                                        Field.Index.NOT_ANALYZED,
+                                        Field.TermVector.NO));
+                                    doc.Add(new Field(COMMITDATAFIELDNAME, value,
+                                        Field.Store.YES,
+                                        Field.Index.NOT_ANALYZED,
+                                        Field.TermVector.NO));
 
                                     // Update the document by term to ensure it replaces any existing one
-                                    indexWriter.UpdateDocument(new Lucene.Net.Index.Term(COMMITFIELDNAME, COMMITFIELDNAME), doc);
+                                    indexWriter.UpdateDocument(new Term(COMMITFIELDNAME, COMMITFIELDNAME), doc);
 
                                     // Commit the changes with the updated user data
                                     Console.WriteLine($"Committing LastActivityId = {id} to index...");
@@ -359,6 +344,13 @@ namespace SenseNetIndexTools
                     if (!IsValidLuceneIndex(path))
                     {
                         Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {path}");
+                        Environment.Exit(1);
+                        return;
+                    }
+
+                    if (!offline)
+                    {
+                        Console.Error.WriteLine("The --offline flag is required for modifying indexes. This protects live indexes from accidental modification.");
                         Environment.Exit(1);
                         return;
                     }
@@ -451,44 +443,27 @@ namespace SenseNetIndexTools
                         {
                             if (IndexReader.IndexExists(directory))
                             {
-                                // Check for locks first
-                                bool isLocked = IndexWriter.IsLocked(directory);
-                                if (isLocked)
-                                {
-                                    Console.WriteLine("Index is locked. Attempting to unlock...");
-                                    IndexWriter.Unlock(directory);
-                                    Console.WriteLine("Index unlocked successfully.");
-                                }
-
+                                // Create a new commit document
                                 using (var indexWriter = new IndexWriter(directory,
-                                                                       new Lucene.Net.Analysis.Standard.StandardAnalyzer(Lucene.Net.Util.Version.LUCENE_29),
-                                                                       false, // don't create a new index
-                                                                       IndexWriter.MaxFieldLength.UNLIMITED))
+                                                                        new StandardAnalyzer(Lucene.Net.Util.Version.LUCENE_29),
+                                                                        false, // don't create a new index
+                                                                        IndexWriter.MaxFieldLength.UNLIMITED))
                                 {
-                                    // Create a new commit user data dictionary with the LastActivityId
-                                    var commitUserData = new Dictionary<string, string>
-                                    {
-                                        ["LastActivityId"] = id.ToString()
-                                    };
-
-                                    // Following SenseNet pattern: Add a fake document to make sure changes are written
-                                    const string COMMITFIELDNAME = "$#COMMIT";
-                                    const string COMMITDATAFIELDNAME = "$#DATA";
-
-                                    // Create and add a fake document with a unique value
+                                    // Create commit document for storing LastActivityId
+                                    var commitUserData = new Dictionary<string, string> { ["LastActivityId"] = id.ToString() };
                                     var value = Guid.NewGuid().ToString();
-                                    var doc = new Lucene.Net.Documents.Document();
-                                    doc.Add(new Lucene.Net.Documents.Field(COMMITFIELDNAME, COMMITFIELDNAME,
-                                        Lucene.Net.Documents.Field.Store.YES,
-                                        Lucene.Net.Documents.Field.Index.NOT_ANALYZED,
-                                        Lucene.Net.Documents.Field.TermVector.NO));
-                                    doc.Add(new Lucene.Net.Documents.Field(COMMITDATAFIELDNAME, value,
-                                        Lucene.Net.Documents.Field.Store.YES,
-                                        Lucene.Net.Documents.Field.Index.NOT_ANALYZED,
-                                        Lucene.Net.Documents.Field.TermVector.NO));
+                                    var doc = new Document();
+                                    doc.Add(new Field(COMMITFIELDNAME, COMMITFIELDNAME,
+                                        Field.Store.YES,
+                                        Field.Index.NOT_ANALYZED,
+                                        Field.TermVector.NO));
+                                    doc.Add(new Field(COMMITDATAFIELDNAME, value,
+                                        Field.Store.YES,
+                                        Field.Index.NOT_ANALYZED,
+                                        Field.TermVector.NO));
 
-                                    // Update the document by term to ensure it replaces any existing one
-                                    indexWriter.UpdateDocument(new Lucene.Net.Index.Term(COMMITFIELDNAME, COMMITFIELDNAME), doc);
+                                    // Add the commit document to the index
+                                    indexWriter.UpdateDocument(new Term(COMMITFIELDNAME, COMMITFIELDNAME), doc);
 
                                     // Commit the changes with the updated user data
                                     Console.WriteLine($"Committing LastActivityId = {id} to index...");
@@ -502,7 +477,7 @@ namespace SenseNetIndexTools
 
                                 Console.WriteLine($"Successfully initialized LastActivityId to {id} in commit user data.");
 
-                                // Verify the change - use a new reader after closing the writer
+                                // Verify the change
                                 Console.WriteLine("Verifying change with a new reader...");
                                 using (var reader = IndexReader.Open(directory, true))
                                 {
@@ -513,7 +488,7 @@ namespace SenseNetIndexTools
                                         Console.WriteLine($"Verification: LastActivityId = {lastActivityId}");
 
                                         if (lastActivityId == id.ToString())
-                                            Console.WriteLine("Verification successful: LastActivityId was properly updated.");
+                                            Console.WriteLine("Verification successful: LastActivityId was properly initialized.");
                                         else
                                             Console.WriteLine($"Warning: LastActivityId value is different from what was expected: {lastActivityId} vs {id}");
                                     }
