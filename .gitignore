@@ -90,3 +90,9 @@ preversion/*
 timestamp-fix-verification*
 ts-cleanup-check*
 .github/*.md
+IndexBackups*
+**/*.zip
+**/report.html
+**/*-check-*.md
+temp_*
+subtree-*.*
