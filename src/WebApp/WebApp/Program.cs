@@ -1,4 +1,3 @@
-using WebApp.Client.Pages;
 using WebApp.Components;
 using WebApp.Services;
 using Microsoft.AspNetCore.Hosting;
