@@ -85,3 +85,9 @@ subtree-report.md
 validation-report.md
 subtree-check-report*.md
 .github/*.md
+IndexBackups*
+**/*.zip
+**/report.html
+**/*-check-*.md
+temp_*
+subtree-*.*
