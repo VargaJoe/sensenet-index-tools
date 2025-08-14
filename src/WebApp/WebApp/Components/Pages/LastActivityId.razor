@@ -1,7 +1,9 @@
 @page "/lastactivityid"
+@rendermode InteractiveServer
 @inject LastActivityIdService LastActivityService
 @inject ILogger<LastActivityId> Logger
 @inject IJSRuntime JS
+@using WebApp.Components
 
 <PageTitle>LastActivityId Management</PageTitle>
 
@@ -32,10 +34,11 @@
                    @bind="IndexPath"
                    @bind:event="oninput"
                    @onkeyup="HandlePathKeyUp"
-                   placeholder="Enter the path to your sensenet index" />
-            <label class="btn btn-outline-secondary mb-0" for="folderInput">
-                <i class="bi bi-folder2-open"></i>
-            </label>
+                   placeholder="Enter the path to your sensenet index (e.g., D:\indexes\myindex)" />
+            <button class="btn btn-outline-secondary" @onclick="OpenFolderPicker" title="Browse for index folder">
+                <i class="bi bi-folder2-open me-1"></i>
+                Browse
+            </button>
             <button class="btn btn-primary" 
                     @onclick="GetLastActivityId" 
                     disabled="@(!IsValidPath)">
@@ -43,8 +46,14 @@
                 Get LastActivityId
             </button>
         </div>
-        <input id="folderInput" type="file" style="display:none" webkitdirectory directory multiple @onchange="OnFolderPicked" />
-        @if (!string.IsNullOrEmpty(IndexPath) && !IsValidPath)
+        <div class="form-text mb-2">
+            <small class="text-muted">
+                <i class="bi bi-info-circle me-1"></i>
+                Type the full path to your index folder (e.g., <code>D:\indexes\myindex</code>). 
+                For security reasons, web browsers limit folder browsing capabilities.
+            </small>
+        </div>
+    @if (!string.IsNullOrEmpty(IndexPath) && !IsValidPath)
         {
             <div class="text-danger small mt-2">
                 <i class="bi bi-exclamation-triangle-fill me-1"></i>
@@ -53,6 +62,12 @@
         }
     </div>
 </div>
+
+<ServerFolderPicker 
+    Show="_showFolderPicker" 
+    ShowChanged="OnPickerShowChanged"
+    InitialPath="@IndexPath"
+    OnSelected="OnFolderSelected" />
 
 @if (LastActivityInfo != null)
 {
@@ -136,6 +151,13 @@
     private LastActivityInfo? LastActivityInfo { get; set; }
     private bool? _isValidPathCache;
     private System.Threading.CancellationTokenSource? _validationCts;
+    private bool _showFolderPicker;
+    private Task OnPickerShowChanged(bool value)
+    {
+        _showFolderPicker = value;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
 
     private bool IsValidPath => _isValidPathCache ?? false;
     private bool CanModify => IsValidPath && IsOffline && NewId >= 0;
@@ -230,23 +252,14 @@
         }
     }
 
-    private async Task OnFolderPicked(ChangeEventArgs e)
+    private void OpenFolderPicker()
     {
-        var files = e.Value as IReadOnlyList<IBrowserFile>;
-        if (files != null && files.Count > 0)
-        {
-            // Get the folder path from the first file's web-relative path
-            var firstFile = files[0];
-            var relativePath = firstFile.Name;
-            
-            // Extract the folder path (everything before the first file name)
-            var pathSegments = relativePath.Split('/');
-            if (pathSegments.Length > 1)
-            {
-                // Join all segments except the last one (which is the file name)
-                var folderPath = string.Join("/", pathSegments.Take(pathSegments.Length - 1));
-                IndexPath = folderPath;
-            }
-        }
+        _showFolderPicker = true;
+    }
+
+    private async Task OnFolderSelected(string path)
+    {
+        IndexPath = path;
+        await ValidatePathAsync();
     }
 }
