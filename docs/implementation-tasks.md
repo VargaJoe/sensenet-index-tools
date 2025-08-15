@@ -16,8 +16,8 @@ _None yet._
 - [x] Implement LastActivityId management page and service
 - [x] Implement Dashboard page (overview, quick actions, recent reports)
 - [x] Remove template/sample pages (Weather, Counter)
-- [ ] Implement Index Validation operation page (with options: detailed, backup, sample size)
-- [ ] Implement Subtree Checking operation page
+- [x] Implement Index Validation operation page (with options: detailed, backup, sample size)
+- [x] Implement Subtree Checking operation page (COMPLETED: Service, UI, navigation integration, error fixes)
 - [ ] Implement Content Listing operation page
 - [ ] Implement Report Viewing (view, download, compare reports)
 - [ ] Implement Settings/Configuration page

@@ -27,6 +27,9 @@ builder.Services.AddScoped<LastActivityIdService>();
 // Add IndexValidationService
 builder.Services.AddScoped<IndexValidationService>();
 
+// Add SubtreeCheckingService
+builder.Services.AddScoped<SubtreeCheckingService>();
+
 // Add logging
 builder.Services.AddLogging(logging =>
 {
