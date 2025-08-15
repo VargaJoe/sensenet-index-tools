@@ -11,6 +11,8 @@ using Lucene.Net.Index;
 using System.Collections.Generic;
 using LuceneDirectory = Lucene.Net.Store.Directory;
 using IODirectory = System.IO.Directory;
+using Lucene.Net.Documents;
+using Lucene.Net.Analysis.Standard;
 
 namespace WebApp.Services;
 
@@ -116,6 +118,7 @@ public class LastActivityIdService
             CreateBackup(indexPath, backupPath);
         }
 
+        // First try using SenseNet API method
         try
         {
             var directory = new IndexDirectory(indexPath);
@@ -138,6 +141,20 @@ public class LastActivityIdService
             {
                 throw new InvalidOperationException($"Verification failed: LastActivityId was not properly updated. Expected {id}, got {verificationStatus.LastActivityId}");
             }
+            
+            _logger.LogInformation("Successfully set LastActivityId using SenseNet API: {LastActivityId}", id);
+            return;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SenseNet API method failed for SetLastActivityId, falling back to direct Lucene.NET access");
+        }
+
+        // Fall back to direct Lucene.NET access
+        try
+        {
+            await SetLastActivityIdDirectAsync(indexPath, id);
+            _logger.LogInformation("Successfully set LastActivityId using direct Lucene access: {LastActivityId}", id);
         }
         catch (Exception ex)
         {
@@ -153,6 +170,7 @@ public class LastActivityIdService
             CreateBackup(indexPath, backupPath);
         }
 
+        // First try using SenseNet API method
         try
         {
             var directory = new IndexDirectory(indexPath);
@@ -186,12 +204,115 @@ public class LastActivityIdService
             {
                 throw new InvalidOperationException($"Verification failed: LastActivityId was not properly initialized. Expected {id}, got {verificationStatus.LastActivityId}");
             }
+            
+            _logger.LogInformation("Successfully initialized LastActivityId using SenseNet API: {LastActivityId}", id);
+            return;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SenseNet API method failed for InitializeLastActivityId, falling back to direct Lucene.NET access");
+        }
+
+        // Fall back to direct Lucene.NET access
+        try
+        {
+            await SetLastActivityIdDirectAsync(indexPath, id);
+            _logger.LogInformation("Successfully initialized LastActivityId using direct Lucene access: {LastActivityId}", id);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error initializing LastActivityId in index: {Path}", indexPath);
             throw;
         }
+    }
+
+    private async Task SetLastActivityIdDirectAsync(string indexPath, long id)
+    {
+        await Task.Run(() =>
+        {
+            using var directory = FSDirectory.Open(new DirectoryInfo(indexPath));
+            if (!IndexReader.IndexExists(directory))
+            {
+                throw new InvalidOperationException("Index does not exist or cannot be opened.");
+            }
+
+            // Check if index is locked and unlock if necessary
+            if (IndexWriter.IsLocked(directory))
+            {
+                _logger.LogInformation("Index is locked. Attempting to unlock...");
+                IndexWriter.Unlock(directory);
+                _logger.LogInformation("Index unlocked successfully.");
+            }
+
+            // Get existing commit user data first
+            var commitUserData = new Dictionary<string, string>();
+            try
+            {
+                using var reader = IndexReader.Open(directory, true);
+                var existingData = reader.GetCommitUserData();
+                if (existingData != null)
+                {
+                    foreach (var entry in existingData)
+                    {
+                        commitUserData[entry.Key] = entry.Value;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not read existing commit data, continuing with empty data");
+            }
+
+            // Update the LastActivityId
+            commitUserData["LastActivityId"] = id.ToString();
+            _logger.LogInformation("Preparing to write LastActivityId = {LastActivityId} to index...", id);
+
+            // Open the index writer with create=false (don't overwrite the existing index)
+            using var indexWriter = new IndexWriter(directory,
+                                                   new StandardAnalyzer(Lucene.Net.Util.Version.LUCENE_29),
+                                                   false, // don't create a new index
+                                                   IndexWriter.MaxFieldLength.UNLIMITED);
+
+            // Create and add commit document
+            const string COMMITFIELDNAME = "CommitMarker";
+            const string COMMITDATAFIELDNAME = "CommitData";
+            
+            var value = Guid.NewGuid().ToString();
+            var doc = new Document();
+            doc.Add(new Field(COMMITFIELDNAME, COMMITFIELDNAME,
+                Field.Store.YES,
+                Field.Index.NOT_ANALYZED,
+                Field.TermVector.NO));
+            doc.Add(new Field(COMMITDATAFIELDNAME, value,
+                Field.Store.YES,
+                Field.Index.NOT_ANALYZED,
+                Field.TermVector.NO));
+
+            // Update the document by term to ensure it replaces any existing one
+            indexWriter.UpdateDocument(new Term(COMMITFIELDNAME, COMMITFIELDNAME), doc);
+
+            // Commit the changes with the updated user data
+            _logger.LogInformation("Committing LastActivityId = {LastActivityId} to index...", id);
+            indexWriter.Commit(commitUserData);
+            _logger.LogInformation("Commit successful.");
+
+            // Verify the change - use a new reader after closing the writer
+            _logger.LogInformation("Verifying change with a new reader...");
+            using var verifyReader = IndexReader.Open(directory, true);
+            var verifyCommitUserData = verifyReader.GetCommitUserData();
+            if (verifyCommitUserData != null && verifyCommitUserData.TryGetValue("LastActivityId", out var lastActivityId))
+            {
+                _logger.LogInformation("Verification: LastActivityId = {LastActivityId}", lastActivityId);
+                if (lastActivityId != id.ToString())
+                {
+                    throw new InvalidOperationException($"Verification failed: LastActivityId value is different from expected: {lastActivityId} vs {id}");
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException("LastActivityId not found in commit user data during verification.");
+            }
+        });
     }
 
     private void CreateBackup(string indexPath, string? backupPath)
