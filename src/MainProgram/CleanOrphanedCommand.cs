@@ -90,7 +90,7 @@ namespace SenseNetIndexTools
                     ContentComparer.VerboseLogging = verbose;
 
                     // Validation checks
-                    if (!Program.IsValidLuceneIndex(indexPath))
+                    if (!IndexUtilities.IsValidLuceneIndex(indexPath))
                     {
                         Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {indexPath}");
                         Environment.Exit(1);
@@ -107,7 +107,7 @@ namespace SenseNetIndexTools
                     // Create a backup if requested
                     if (!dryRun && backup)
                     {
-                        Program.CreateBackup(indexPath, backupPath);
+                        IndexUtilities.CreateBackup(indexPath, backupPath);
                     }
 
                     // Compare content to find orphaned entries

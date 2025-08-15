@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @using WebApp.Services
 @using WebApp.Components
+@using SenseNetIndexTools
 @inject IndexValidationService ValidationService
 @inject IJSRuntime JSRuntime
 @inject ILogger<Validation> Logger
@@ -383,8 +384,8 @@
 
 @code {
     private ValidationOptions validationOptions = new();
-    private ValidationResult? validationResult;
-    private ValidationResult? lastValidationResult;
+    private ValidationServiceResult? validationResult;
+    private ValidationServiceResult? lastValidationResult;
     private bool isValidating = false;
     private bool showAdvancedOptions = false;
     private bool showFolderPicker = false;
@@ -474,7 +475,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error during validation");
-            validationResult = new ValidationResult
+            validationResult = new ValidationServiceResult
             {
                 IndexPath = validationOptions.IndexPath,
                 Success = false,
@@ -490,7 +491,7 @@
         }
     }
 
-    private async Task ViewReport(ValidationResult result)
+    private async Task ViewReport(ValidationServiceResult result)
     {
         try
         {
@@ -505,7 +506,7 @@
         }
     }
 
-    private async Task DownloadReport(ValidationResult result)
+    private async Task DownloadReport(ValidationServiceResult result)
     {
         try
         {

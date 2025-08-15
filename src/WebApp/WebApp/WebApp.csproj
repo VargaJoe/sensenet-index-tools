@@ -10,6 +10,10 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="9.0.1" />
     <PackageReference Include="SenseNet.Tools" Version="3.3.0" />
     <PackageReference Include="SenseNet.Search.Lucene29" Version="7.5.1" />
+    <PackageReference Include="System.Data.SqlClient" Version="4.8.6" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\SenseNetIndexTools.Core\SenseNetIndexTools.Core.csproj" />
   </ItemGroup>
 
 </Project>

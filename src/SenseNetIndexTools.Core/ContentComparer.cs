@@ -91,7 +91,7 @@ namespace SenseNetIndexTools
                 {
                     VerboseLogging = verbose;
                     
-                    if (!Program.IsValidLuceneIndex(indexPath))
+                    if (!IndexUtilities.IsValidLuceneIndex(indexPath))
                     {
                         Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {indexPath}");
                         Environment.Exit(1);
@@ -462,7 +462,7 @@ namespace SenseNetIndexTools
 
         public List<ContentItem> CompareContent(string indexPath, string connectionString, string repositoryPath, bool recursive, int depth)
         {
-            if (!Program.IsValidLuceneIndex(indexPath))
+            if (!IndexUtilities.IsValidLuceneIndex(indexPath))
             {
                 throw new InvalidOperationException($"The directory does not appear to be a valid Lucene index: {indexPath}");
             }

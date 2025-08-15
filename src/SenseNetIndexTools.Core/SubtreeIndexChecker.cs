@@ -11,6 +11,26 @@ namespace SenseNetIndexTools
 {
     public class SubtreeIndexChecker
     {
+        /// <summary>
+        /// Performs subtree check and returns database and index items for comparison
+        /// </summary>
+        /// <param name="indexPath">Path to the Lucene index</param>
+        /// <param name="connectionString">Database connection string</param>
+        /// <param name="repositoryPath">Repository path to check</param>
+        /// <param name="recursive">Whether to check recursively</param>
+        /// <param name="depth">Maximum depth (0 for unlimited)</param>
+        /// <returns>Tuple containing database items and index items</returns>
+        public (List<ContentItem> DatabaseItems, List<ContentItem> IndexItems) CheckSubtree(
+            string indexPath, string connectionString, string repositoryPath, bool recursive = true, int depth = 0)
+        {
+            var comparer = new ContentComparer();
+            var results = comparer.CompareContent(indexPath, connectionString, repositoryPath, recursive, depth);
+            
+            var databaseItems = results.Where(r => r.InDatabase).ToList();
+            var indexItems = results.Where(r => r.InIndex).ToList();
+            
+            return (databaseItems, indexItems);
+        }
         private class BranchStats
         {
             public int Total { get; set; }

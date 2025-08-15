@@ -31,7 +31,7 @@ public class IndexValidationService
         }
     }
 
-    public async Task<ValidationResult> ValidateIndexAsync(ValidationOptions options)
+    public async Task<ValidationServiceResult> ValidateIndexAsync(ValidationOptions options)
     {
         _logger.LogInformation("Starting index validation for: {Path}", options.IndexPath);
 
@@ -42,7 +42,7 @@ public class IndexValidationService
                 throw new DirectoryNotFoundException($"Index directory not found: {options.IndexPath}");
             }
 
-            var result = new ValidationResult
+            var result = new ValidationServiceResult
             {
                 IndexPath = options.IndexPath,
                 StartTime = DateTime.UtcNow,
@@ -78,7 +78,7 @@ public class IndexValidationService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during index validation: {Path}", options.IndexPath);
-            return new ValidationResult
+            return new ValidationServiceResult
             {
                 IndexPath = options.IndexPath,
                 StartTime = DateTime.UtcNow,
@@ -92,88 +92,155 @@ public class IndexValidationService
 
     private async Task ExecuteValidationAsync(ValidationOptions options, string outputPath)
     {
-        // This would ideally call the validation logic directly, but for now we'll simulate it
-        // In a production implementation, you'd extract the validation logic from ValidateCommand
-        // and call it directly rather than using the CLI
-        
         _logger.LogInformation("Executing validation with options: {Options}", JsonSerializer.Serialize(options));
         
-        // For now, create a placeholder report indicating that validation would be performed
-        var reportContent = GeneratePlaceholderReport(options);
-        await File.WriteAllTextAsync(outputPath, reportContent);
+        try
+        {
+            // Verify this is a valid Lucene index
+            if (!IndexUtilities.IsValidLuceneIndex(options.IndexPath))
+            {
+                throw new InvalidOperationException($"The directory does not appear to be a valid Lucene index: {options.IndexPath}");
+            }
+
+            if (options.CreateBackup)
+            {
+                IndexUtilities.CreateBackup(options.IndexPath, options.BackupPath);
+            }
+
+            // Parse custom fields if provided
+            string[]? customFields = null;
+            if (!string.IsNullOrEmpty(options.RequiredFields))
+            {
+                try
+                {
+                    customFields = JsonSerializer.Deserialize<string[]>(options.RequiredFields);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"Failed to parse required fields JSON: {ex.Message}");
+                }
+            }
+
+            // Create validator and execute validation
+            var validator = new IndexValidator(options.IndexPath)
+            {
+                SampleSize = options.SampleSize ?? 10
+            };
+            
+            if (customFields != null)
+            {
+                validator.RequiredFields = customFields;
+            }
+            
+            var results = validator.Validate(options.Detailed);
+
+            // Generate report based on format
+            if (options.Format == "html")
+            {
+                await GenerateHtmlReportAsync(results, outputPath, options.ReportFormat);
+            }
+            else
+            {
+                await GenerateMarkdownReportAsync(results, outputPath, options.ReportFormat);
+            }
+
+            _logger.LogInformation("Validation completed successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during index validation");
+            throw;
+        }
     }
 
-    private string GeneratePlaceholderReport(ValidationOptions options)
+    private async Task GenerateMarkdownReportAsync(IEnumerable<ValidationResult> results, string outputPath, string reportFormat)
     {
-        if (options.Format == "html")
+        using (var writer = new StreamWriter(outputPath, false))
         {
-            return $@"
-<!DOCTYPE html>
-<html lang=""en"">
-<head>
-    <meta charset=""utf-8"">
-    <title>Index Validation Report</title>
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 20px; }}
-        .header {{ background: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px; }}
-        .summary {{ background: white; border: 1px solid #dee2e6; border-radius: 5px; padding: 15px; }}
-        .status-success {{ color: #28a745; }}
-        .status-warning {{ color: #ffc107; }}
-        .status-error {{ color: #dc3545; }}
-    </style>
-</head>
-<body>
-    <div class=""header"">
-        <h1>Index Validation Report</h1>
-        <p><strong>Index Path:</strong> {options.IndexPath}</p>
-        <p><strong>Validation Level:</strong> {(options.Detailed ? "Detailed" : "Basic")}</p>
-        <p><strong>Report Format:</strong> {options.ReportFormat}</p>
-        <p><strong>Generated:</strong> {DateTime.Now:yyyy-MM-dd HH:mm:ss}</p>
-    </div>
-    
-    <div class=""summary"">
-        <h2>Validation Summary</h2>
-        <p class=""status-success"">✅ Index validation would be performed here</p>
-        <p><strong>Sample Size:</strong> {(options.SampleSize.HasValue ? options.SampleSize.Value.ToString() : "Full validation")}</p>
-        <p><strong>Backup Created:</strong> {(options.CreateBackup ? "Yes" : "No")}</p>
-        
-        <h3>Note</h3>
-        <p>This is a placeholder report. In a production implementation, this would contain actual validation results including:</p>
-        <ul>
-            <li>Index structure integrity checks</li>
-            <li>Document field validation</li>
-            <li>Segment analysis</li>
-            <li>Required field verification</li>
-            <li>Performance metrics</li>
-        </ul>
-    </div>
-</body>
-</html>";
+            await writer.WriteLineAsync("# SenseNet Index Validation Report");
+            await writer.WriteLineAsync($"Generated: {DateTime.Now}");
+            await writer.WriteLineAsync();
+            await writer.WriteLineAsync("## Summary");
+            await writer.WriteLineAsync($"- Errors: {results.Count(r => r.Severity == ValidationSeverity.Error)}");
+            await writer.WriteLineAsync($"- Warnings: {results.Count(r => r.Severity == ValidationSeverity.Warning)}");
+            await writer.WriteLineAsync($"- Info: {results.Count(r => r.Severity == ValidationSeverity.Info)}");
+            await writer.WriteLineAsync();
+            
+            if (reportFormat != "summary")
+            {
+                // Field info
+                var fieldInfo = results.FirstOrDefault(r => r.Message == "Complete list of index fields");
+                if (fieldInfo != null)
+                {
+                    await writer.WriteLineAsync("## Index Fields");
+                    await writer.WriteLineAsync("All fields present in the index:");
+                    await writer.WriteLineAsync("```");
+                    await writer.WriteLineAsync(fieldInfo.Details);
+                    await writer.WriteLineAsync("```");
+                    await writer.WriteLineAsync();
+                }
+            }
+            
+            await writer.WriteLineAsync("## Validation Details");
+            foreach (var result in results.OrderByDescending(r => r.Severity))
+            {
+                if (result.Message == "Complete list of index fields" && reportFormat != "full")
+                    continue;
+                await writer.WriteLineAsync($"### [{result.Severity}] {result.Message}");
+                if (!string.IsNullOrEmpty(result.Details) && reportFormat != "summary")
+                {
+                    await writer.WriteLineAsync($"Details: {result.Details}");
+                }
+                await writer.WriteLineAsync();
+            }
         }
-        else
+    }
+
+    private async Task GenerateHtmlReportAsync(IEnumerable<ValidationResult> results, string outputPath, string reportFormat)
+    {
+        using (var writer = new StreamWriter(outputPath, false))
         {
-            return $@"# Index Validation Report
-
-## Summary
-- **Index Path**: {options.IndexPath}
-- **Validation Level**: {(options.Detailed ? "Detailed" : "Basic")}
-- **Report Format**: {options.ReportFormat}
-- **Generated**: {DateTime.Now:yyyy-MM-dd HH:mm:ss}
-
-## Results
-✅ Index validation would be performed here
-
-- **Sample Size**: {(options.SampleSize.HasValue ? options.SampleSize.Value.ToString() : "Full validation")}
-- **Backup Created**: {(options.CreateBackup ? "Yes" : "No")}
-
-## Note
-This is a placeholder report. In a production implementation, this would contain actual validation results including:
-- Index structure integrity checks
-- Document field validation  
-- Segment analysis
-- Required field verification
-- Performance metrics
-";
+            await writer.WriteLineAsync("<!DOCTYPE html>");
+            await writer.WriteLineAsync("<html lang=\"en\">");
+            await writer.WriteLineAsync("<head>");
+            await writer.WriteLineAsync("<meta charset=\"utf-8\">");
+            await writer.WriteLineAsync("<title>SenseNet Index Validation Report</title>");
+            await writer.WriteLineAsync("<style>");
+            await writer.WriteLineAsync(@"body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: #fafbfc; color: #333; max-width: 900px; margin: 0 auto; padding: 24px; } h1, h2 { border-bottom: 1px solid #eee; padding-bottom: 0.3em; margin-top: 1.5em; color: #24292e; } .summary { background: #f6f8fa; padding: 20px; border-radius: 6px; margin-bottom: 30px; border-left: 4px solid #0366d6; } .error { color: #d73a49; font-weight: bold; } .warning { color: #f66a0a; font-weight: bold; } .info { color: #0366d6; font-weight: bold; } .details { margin-left: 1em; color: #555; font-size: 0.97em; } table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 14px; } th, td { padding: 10px 8px; border-bottom: 1px solid #ddd; } th { background: #f6f8fa; font-weight: 600; color: #586069; } tr:hover { background-color: #f6f8fa; } .field-list { background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 13px; } .section { margin-bottom: 2em; }");
+            await writer.WriteLineAsync("</style>");
+            await writer.WriteLineAsync("</head><body>");
+            await writer.WriteLineAsync("<h1>SenseNet Index Validation Report</h1>");
+            await writer.WriteLineAsync($"<div class='summary'><h2>Summary</h2><ul><li><span class='error'>Errors:</span> {results.Count(r => r.Severity == ValidationSeverity.Error)}</li><li><span class='warning'>Warnings:</span> {results.Count(r => r.Severity == ValidationSeverity.Warning)}</li><li><span class='info'>Info:</span> {results.Count(r => r.Severity == ValidationSeverity.Info)}</li></ul></div>");
+            
+            if (reportFormat != "summary")
+            {
+                var fieldInfo = results.FirstOrDefault(r => r.Message == "Complete list of index fields");
+                if (fieldInfo != null)
+                {
+                    await writer.WriteLineAsync("<div class='section'><h2>Index Fields</h2><div class='field-list'>");
+                    await writer.WriteLineAsync(fieldInfo.Details.Replace("\n", "<br>"));
+                    await writer.WriteLineAsync("</div></div>");
+                }
+            }
+            
+            await writer.WriteLineAsync("<div class='section'><h2>Validation Details</h2><table><thead><tr><th>Severity</th><th>Message</th>");
+            if (reportFormat != "summary") await writer.WriteLineAsync("<th>Details</th>");
+            await writer.WriteLineAsync("</tr></thead><tbody>");
+            
+            foreach (var result in results.OrderByDescending(r => r.Severity))
+            {
+                if (result.Message == "Complete list of index fields" && reportFormat != "full")
+                    continue;
+                var sevClass = result.Severity == ValidationSeverity.Error ? "error" : result.Severity == ValidationSeverity.Warning ? "warning" : "info";
+                await writer.WriteAsync($"<tr><td class='{sevClass}'>{result.Severity}</td><td>{System.Net.WebUtility.HtmlEncode(result.Message)}</td>");
+                if (reportFormat != "summary")
+                    await writer.WriteAsync($"<td class='details'>{System.Net.WebUtility.HtmlEncode(result.Details)}</td>");
+                await writer.WriteLineAsync("</tr>");
+            }
+            
+            await writer.WriteLineAsync("</tbody></table></div>");
+            await writer.WriteLineAsync($"<footer style='margin-top:2em;font-size:13px;color:#888;'>Generated: {DateTime.Now}</footer>");
+            await writer.WriteLineAsync("</body></html>");
         }
     }
 }
@@ -185,13 +252,14 @@ public class ValidationOptions
     public string? OutputPath { get; set; }
     public string ReportFormat { get; set; } = "summary";
     public string Format { get; set; } = "md";
+    public bool Backup { get; set; } = true;
     public bool CreateBackup { get; set; } = true;
     public string? BackupPath { get; set; }
     public int? SampleSize { get; set; } = 10;
     public string? RequiredFields { get; set; }
 }
 
-public class ValidationResult
+public class ValidationServiceResult
 {
     public string IndexPath { get; set; } = string.Empty;
     public DateTime StartTime { get; set; }
