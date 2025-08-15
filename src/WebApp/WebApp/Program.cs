@@ -24,6 +24,9 @@ builder.Services.Configure<RouteOptions>(options =>
 // Add LastActivityIdService
 builder.Services.AddScoped<LastActivityIdService>();
 
+// Add IndexValidationService
+builder.Services.AddScoped<IndexValidationService>();
+
 // Add logging
 builder.Services.AddLogging(logging =>
 {
