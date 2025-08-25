@@ -542,6 +542,10 @@
             {
                 validationOptions.OutputPath = configuration.DefaultOutputPath;
             }
+            
+            // Set configuration info for better report naming
+            validationOptions.ConfigurationId = configuration.Id.ToString();
+            validationOptions.ConfigurationName = configuration.Name;
 
             StateHasChanged();
             

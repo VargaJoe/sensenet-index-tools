@@ -462,6 +462,10 @@
             {
                 checkOptions.OutputPath = configuration.DefaultOutputPath;
             }
+            
+            // Set configuration info for better report naming
+            checkOptions.ConfigurationId = configuration.Id.ToString();
+            checkOptions.ConfigurationName = configuration.Name;
 
             StateHasChanged();
             

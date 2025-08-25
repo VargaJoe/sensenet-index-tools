@@ -310,13 +310,20 @@ public class IndexValidationService
 
     private string GenerateValidationReportName(string indexPath, ValidationOptions options, string? configurationName = null)
     {
-        var indexName = Path.GetFileName(indexPath.TrimEnd('\\', '/'));
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
         var validationType = options.Detailed ? "Detailed" : "Basic";
         
-        // Include configuration name if available for better differentiation
-        var configSuffix = !string.IsNullOrEmpty(configurationName) ? $" ({configurationName})" : "";
-        return $"Validation ({validationType}) - {indexName}{configSuffix} - {timestamp}";
+        // Use configuration name from options first, then fall back to parameter, then to path-based naming
+        var effectiveConfigName = options.ConfigurationName ?? configurationName;
+        
+        if (!string.IsNullOrEmpty(effectiveConfigName))
+        {
+            return $"Validation ({validationType}) - {effectiveConfigName} - {timestamp}";
+        }
+        
+        // Fallback to path-based naming when no configuration is used
+        var indexName = Path.GetFileName(indexPath.TrimEnd('\\', '/'));
+        return $"Validation ({validationType}) - {indexName} - {timestamp}";
     }
 }
 
@@ -332,6 +339,10 @@ public class ValidationOptions
     public string? BackupPath { get; set; }
     public int? SampleSize { get; set; } = 10;
     public string? RequiredFields { get; set; }
+    
+    // Configuration tracking for better report naming
+    public string? ConfigurationId { get; set; }
+    public string? ConfigurationName { get; set; }
 }
 
 public class ValidationServiceResult

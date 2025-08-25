@@ -212,8 +212,6 @@ public class SubtreeCheckingService
 
     private string GenerateSubtreeReportName(string indexPath, string repositoryPath, SubtreeCheckOptions options)
     {
-        var indexName = Path.GetFileName(indexPath.TrimEnd('\\', '/'));
-        var repoName = Path.GetFileName(repositoryPath.TrimEnd('\\', '/'));
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
         var reportType = options.ReportFormat switch
         {
@@ -223,8 +221,15 @@ public class SubtreeCheckingService
             _ => "Check"
         };
         
-        // If we have configuration info in the future, we can use it here
-        // For now, use index and repository names for differentiation
+        // Use configuration name when available for better readability
+        if (!string.IsNullOrEmpty(options.ConfigurationName))
+        {
+            return $"Subtree ({reportType}) - {options.ConfigurationName} - {timestamp}";
+        }
+        
+        // Fallback to path-based naming when no configuration is used
+        var indexName = Path.GetFileName(indexPath.TrimEnd('\\', '/'));
+        var repoName = Path.GetFileName(repositoryPath.TrimEnd('\\', '/'));
         return $"Subtree ({reportType}) - {indexName} vs {repoName} - {timestamp}";
     }
 }
@@ -240,6 +245,10 @@ public class SubtreeCheckOptions
     public string ReportFormat { get; set; } = "summary"; // summary, detailed, full, tree
     public string Format { get; set; } = "md"; // md, html
     public string? OutputPath { get; set; }
+    
+    // Configuration tracking for better report naming
+    public string? ConfigurationId { get; set; }
+    public string? ConfigurationName { get; set; }
 }
 
 public class SubtreeCheckResult
