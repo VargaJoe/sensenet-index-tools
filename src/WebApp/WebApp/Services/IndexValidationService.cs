@@ -253,7 +253,7 @@ public class ValidationOptions
     public string ReportFormat { get; set; } = "summary";
     public string Format { get; set; } = "md";
     public bool Backup { get; set; } = true;
-    public bool CreateBackup { get; set; } = true;
+    public bool CreateBackup { get; set; } = false;
     public string? BackupPath { get; set; }
     public int? SampleSize { get; set; } = 10;
     public string? RequiredFields { get; set; }

@@ -31,6 +31,47 @@ namespace SenseNetIndexTools
             
             return (databaseItems, indexItems);
         }
+
+        /// <summary>
+        /// Generates a detailed subtree check report using the same logic as the CLI
+        /// </summary>
+        /// <param name="indexPath">Path to the Lucene index</param>
+        /// <param name="connectionString">Database connection string</param>
+        /// <param name="repositoryPath">Repository path to check</param>
+        /// <param name="recursive">Whether to check recursively</param>
+        /// <param name="depth">Maximum depth (0 for unlimited)</param>
+        /// <param name="reportFormat">Report format: "summary", "detailed", "full", "tree"</param>
+        /// <param name="format">Output format: "md" or "html"</param>
+        /// <returns>Generated report content</returns>
+        public string GenerateSubtreeReport(string indexPath, string connectionString, string repositoryPath, 
+            bool recursive = true, int depth = 0, string reportFormat = "detailed", string format = "md")
+        {
+            var report = new CheckReport
+            {
+                StartTime = DateTime.Now,
+                RepositoryPath = repositoryPath,
+                Recursive = recursive
+            };
+
+            // Use our established ContentComparer to get and compare items
+            var comparer = new ContentComparer();
+            var results = comparer.CompareContent(indexPath, connectionString, repositoryPath, recursive, depth);
+
+            // Process results for the report
+            ProcessResults(results, report, reportFormat != "summary");
+
+            report.EndTime = DateTime.Now;
+
+            // Generate report using the CLI's methods
+            if (format.ToLower() == "html")
+            {
+                return GenerateHtmlReport(report, reportFormat);
+            }
+            else
+            {
+                return GenerateMarkdownReport(report, reportFormat);
+            }
+        }
         private class BranchStats
         {
             public int Total { get; set; }
