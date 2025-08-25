@@ -111,30 +111,29 @@
                                         }
                                         @config.Name
                                     </h6>
-                                    <div class="dropdown">
-                                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
-                                                data-bs-toggle="dropdown">
-                                            <i class="bi bi-three-dots"></i>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button type="button" class="btn btn-outline-secondary" 
+                                                @onclick="@(() => EditConfiguration(config))" 
+                                                title="Edit Configuration">
+                                            <i class="bi bi-pencil"></i>
                                         </button>
-                                        <ul class="dropdown-menu">
-                                            <li><a class="dropdown-item" href="#" @onclick="@(() => EditConfiguration(config))">
-                                                <i class="bi bi-pencil me-2"></i>Edit
-                                            </a></li>
-                                            <li><a class="dropdown-item" href="#" @onclick="@(() => ToggleFavorite(config))">
-                                                @if (config.IsFavorite)
-                                                {
-                                                    <i class="bi bi-star me-2"></i><text>Remove from Favorites</text>
-                                                }
-                                                else
-                                                {
-                                                    <i class="bi bi-star-fill me-2"></i><text>Add to Favorites</text>
-                                                }
-                                            </a></li>
-                                            <li><hr class="dropdown-divider"></li>
-                                            <li><a class="dropdown-item text-danger" href="#" @onclick="@(() => DeleteConfiguration(config))">
-                                                <i class="bi bi-trash me-2"></i>Delete
-                                            </a></li>
-                                        </ul>
+                                        <button type="button" class="btn btn-outline-secondary" 
+                                                @onclick="@(() => ToggleFavorite(config))"
+                                                title="@(config.IsFavorite ? "Remove from Favorites" : "Add to Favorites")">
+                                            @if (config.IsFavorite)
+                                            {
+                                                <i class="bi bi-star"></i>
+                                            }
+                                            else
+                                            {
+                                                <i class="bi bi-star-fill"></i>
+                                            }
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger" 
+                                                @onclick="@(() => DeleteConfiguration(config))"
+                                                title="Delete Configuration">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
                                     </div>
                                 </div>
                                 <div class="card-body">

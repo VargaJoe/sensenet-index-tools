@@ -19,6 +19,9 @@
     </div>
 </div>
 
+<!-- Configuration Selector -->
+<ConfigurationSelector OnConfigurationApplied="OnConfigurationApplied" />
+
 <div class="card mb-4 shadow-sm">
     <div class="card-body">
         <h5 class="card-title">
@@ -261,5 +264,25 @@
     {
         IndexPath = path;
         await ValidatePathAsync();
+    }
+
+    private void OnConfigurationApplied(SavedConfiguration configuration)
+    {
+        try
+        {
+            // Apply configuration values to the LastActivityId page
+            if (!string.IsNullOrEmpty(configuration.IndexPath))
+            {
+                IndexPath = configuration.IndexPath;
+            }
+
+            StateHasChanged();
+            
+            Logger.LogInformation("Applied configuration: {ConfigurationName}", configuration.Name);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error applying configuration");
+        }
     }
 }
