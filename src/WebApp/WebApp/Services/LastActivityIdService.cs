@@ -13,6 +13,7 @@ using LuceneDirectory = Lucene.Net.Store.Directory;
 using IODirectory = System.IO.Directory;
 using Lucene.Net.Documents;
 using Lucene.Net.Analysis.Standard;
+using System.Data.SqlClient;
 
 namespace WebApp.Services;
 
@@ -109,6 +110,87 @@ public class LastActivityIdService
             _logger.LogError(ex, "Error reading LastActivityId from index: {Path}", indexPath);
             throw;
         }
+    }
+
+    public async Task<long?> GetLastActivityIdFromDatabaseAsync(string connectionString)
+    {
+        _logger.LogInformation("Getting LastActivityId from database with connection: {ConnectionString}", 
+            connectionString?.Substring(0, Math.Min(50, connectionString?.Length ?? 0)) + "...");
+        
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new ArgumentException("Connection string cannot be null or empty", nameof(connectionString));
+        }
+
+        try
+        {
+            using var connection = new SqlConnection(connectionString);
+            await connection.OpenAsync();
+            
+            var query = "SELECT TOP 1 [IndexingActivityId] FROM [dbo].[IndexingActivities] ORDER BY IndexingActivityId DESC";
+            using var command = new SqlCommand(query, connection);
+            
+            var result = await command.ExecuteScalarAsync();
+            
+            if (result == null || result == DBNull.Value)
+            {
+                _logger.LogWarning("No IndexingActivityId found in database");
+                return null;
+            }
+            
+            var lastActivityId = Convert.ToInt64(result);
+            _logger.LogInformation("Successfully retrieved LastActivityId from database: {LastActivityId}", lastActivityId);
+            return lastActivityId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting LastActivityId from database");
+            throw;
+        }
+    }
+
+    public async Task<LastActivityIdComparison> CompareLastActivityIdAsync(string indexPath, string connectionString)
+    {
+        _logger.LogInformation("Comparing LastActivityId between index and database");
+        
+        var comparison = new LastActivityIdComparison
+        {
+            IndexPath = indexPath,
+            ConnectionString = connectionString
+        };
+
+        // Get index value
+        try
+        {
+            var indexInfo = await GetLastActivityIdAsync(indexPath);
+            comparison.IndexValue = indexInfo.LastActivityId;
+            comparison.IndexGaps = indexInfo.Gaps;
+            comparison.IndexRetrievedAt = DateTime.Now;
+            _logger.LogInformation("Index LastActivityId: {IndexValue}", comparison.IndexValue);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting LastActivityId from index");
+            // Continue to try database even if index fails
+        }
+
+        // Get database value
+        try
+        {
+            comparison.DatabaseValue = await GetLastActivityIdFromDatabaseAsync(connectionString);
+            comparison.DatabaseRetrievedAt = DateTime.Now;
+            _logger.LogInformation("Database LastActivityId: {DatabaseValue}", comparison.DatabaseValue);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting LastActivityId from database");
+            // Continue even if database fails
+        }
+
+        _logger.LogInformation("Comparison result - Index: {IndexValue}, Database: {DatabaseValue}, Status: {Status}", 
+            comparison.IndexValue, comparison.DatabaseValue, comparison.Status);
+
+        return comparison;
     }
 
     public async Task SetLastActivityIdAsync(string indexPath, long id, bool backup = true, string? backupPath = null)
