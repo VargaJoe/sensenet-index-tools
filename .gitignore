@@ -97,4 +97,4 @@ IndexBackups*
 temp_*
 subtree-*.*
 src/WebApp/WebApp/Data/*
-
+src/WebApp/out/
