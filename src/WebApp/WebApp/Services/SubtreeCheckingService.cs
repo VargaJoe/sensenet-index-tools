@@ -1,15 +1,18 @@
 using Microsoft.Extensions.Logging;
 using SenseNetIndexTools;
+using WebApp.Models;
 
 namespace WebApp.Services;
 
 public class SubtreeCheckingService
 {
     private readonly ILogger<SubtreeCheckingService> _logger;
+    private readonly ReportStorageService _reportStorage;
 
-    public SubtreeCheckingService(ILogger<SubtreeCheckingService> logger)
+    public SubtreeCheckingService(ILogger<SubtreeCheckingService> logger, ReportStorageService reportStorage)
     {
         _logger = logger;
+        _reportStorage = reportStorage;
     }
 
     public bool ValidatePaths(string indexPath, string connectionString, string repositoryPath)
@@ -49,7 +52,7 @@ public class SubtreeCheckingService
 
             _logger.LogInformation("Subtree check completed successfully in {Duration}", duration);
 
-            return new SubtreeCheckResult
+            var subtreeResult = new SubtreeCheckResult
             {
                 IndexPath = options.IndexPath,
                 ConnectionString = options.ConnectionString,
@@ -67,12 +70,17 @@ public class SubtreeCheckingService
                 MatchedItems = result.MatchedItems,
                 MismatchedItems = result.MismatchedItems
             };
+
+            // Save report to storage
+            await SaveReportAsync(subtreeResult, options);
+
+            return subtreeResult;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during subtree check");
             
-            return new SubtreeCheckResult
+            var failedResult = new SubtreeCheckResult
             {
                 IndexPath = options.IndexPath,
                 ConnectionString = options.ConnectionString,
@@ -84,6 +92,11 @@ public class SubtreeCheckingService
                 Message = $"Subtree check failed: {ex.Message}",
                 Options = options
             };
+
+            // Save failed report too
+            await SaveReportAsync(failedResult, options);
+
+            return failedResult;
         }
     }
 
@@ -107,6 +120,7 @@ public class SubtreeCheckingService
             
             var checker = new SubtreeIndexChecker();
             var reportContent = await Task.Run(() => 
+                // Generate report using the shared logic from Core library
                 checker.GenerateSubtreeReport(options.IndexPath, options.ConnectionString, options.RepositoryPath, 
                     options.Recursive, options.Depth, options.ReportFormat, options.Format));
 
@@ -149,7 +163,70 @@ public class SubtreeCheckingService
             _logger.LogError(ex, "Error during real subtree check execution");
             throw;
         }
-}
+    }
+
+    private async Task SaveReportAsync(SubtreeCheckResult result, SubtreeCheckOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(result.ReportContent))
+            return;
+
+        try
+        {
+            var storedReport = new StoredReport
+            {
+                Name = GenerateSubtreeReportName(result.IndexPath, result.RepositoryPath, options),
+                Description = $"Subtree check for {Path.GetFileName(result.RepositoryPath)} vs {Path.GetFileName(result.IndexPath)} - {options.ReportFormat} format",
+                ReportType = "subtree-check",
+                CreatedAt = result.StartTime,
+                Format = options.Format,
+                Content = result.ReportContent,
+                Duration = result.Duration,
+                Success = result.Success,
+                ErrorMessage = result.Success ? null : result.Message,
+                Statistics = new Dictionary<string, object>
+                {
+                    ["DbItems"] = result.ItemsInDatabase,
+                    ["IndexItems"] = result.ItemsInIndex,
+                    ["Matches"] = result.MatchedItems,
+                    ["Mismatches"] = result.MismatchedItems
+                },
+                Parameters = new Dictionary<string, object>
+                {
+                    ["IndexPath"] = result.IndexPath,
+                    ["ConnectionString"] = "***", // Hide sensitive data
+                    ["RepositoryPath"] = result.RepositoryPath,
+                    ["ReportFormat"] = options.ReportFormat,
+                    ["Recursive"] = options.Recursive,
+                    ["Depth"] = options.Depth
+                }
+            };
+
+            await _reportStorage.SaveReportAsync(storedReport);
+            _logger.LogInformation("Saved subtree check report to storage: {ReportId}", storedReport.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save subtree check report to storage");
+        }
+    }
+
+    private string GenerateSubtreeReportName(string indexPath, string repositoryPath, SubtreeCheckOptions options)
+    {
+        var indexName = Path.GetFileName(indexPath.TrimEnd('\\', '/'));
+        var repoName = Path.GetFileName(repositoryPath.TrimEnd('\\', '/'));
+        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+        var reportType = options.ReportFormat switch
+        {
+            "summary" => "Summary",
+            "detailed" => "Detailed", 
+            "full" => "Full",
+            _ => "Check"
+        };
+        
+        // If we have configuration info in the future, we can use it here
+        // For now, use index and repository names for differentiation
+        return $"Subtree ({reportType}) - {indexName} vs {repoName} - {timestamp}";
+    }
 }
 
 // Data models for Subtree Checking

@@ -96,4 +96,5 @@ IndexBackups*
 **/*-check-*.md
 temp_*
 subtree-*.*
-src/WebApp/WebApp/Data/configurations.json
+src/WebApp/WebApp/Data/*
+

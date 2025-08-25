@@ -1,15 +1,18 @@
 using System.Text.Json;
 using SenseNetIndexTools;
+using WebApp.Models;
 
 namespace WebApp.Services;
 
 public class IndexValidationService
 {
     private readonly ILogger<IndexValidationService> _logger;
+    private readonly ReportStorageService _reportStorage;
 
-    public IndexValidationService(ILogger<IndexValidationService> logger)
+    public IndexValidationService(ILogger<IndexValidationService> logger, ReportStorageService reportStorage)
     {
         _logger = logger;
+        _reportStorage = reportStorage;
     }
 
     public bool ValidatePath(string path)
@@ -33,6 +36,11 @@ public class IndexValidationService
 
     public async Task<ValidationServiceResult> ValidateIndexAsync(ValidationOptions options)
     {
+        return await ValidateIndexAsync(options, null, null);
+    }
+
+    public async Task<ValidationServiceResult> ValidateIndexAsync(ValidationOptions options, string? configurationId, string? configurationName)
+    {
         _logger.LogInformation("Starting index validation for: {Path}", options.IndexPath);
 
         try
@@ -46,7 +54,9 @@ public class IndexValidationService
             {
                 IndexPath = options.IndexPath,
                 StartTime = DateTime.UtcNow,
-                Options = options
+                Options = options,
+                ConfigurationId = configurationId,
+                ConfigurationName = configurationName
             };
 
             // Create output file path if not specified
@@ -72,13 +82,16 @@ public class IndexValidationService
             result.Success = true;
             result.Message = "Validation completed successfully";
 
+            // Save report to storage
+            await SaveReportAsync(result, options);
+
             _logger.LogInformation("Index validation completed successfully for: {Path}", options.IndexPath);
             return result;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during index validation: {Path}", options.IndexPath);
-            return new ValidationServiceResult
+            var failedResult = new ValidationServiceResult
             {
                 IndexPath = options.IndexPath,
                 StartTime = DateTime.UtcNow,
@@ -87,6 +100,11 @@ public class IndexValidationService
                 Message = $"Validation failed: {ex.Message}",
                 Options = options
             };
+
+            // Save failed validation report too
+            await SaveReportAsync(failedResult, options);
+            
+            return failedResult;
         }
     }
 
@@ -243,6 +261,63 @@ public class IndexValidationService
             await writer.WriteLineAsync("</body></html>");
         }
     }
+
+    private async Task SaveReportAsync(ValidationServiceResult result, ValidationOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(result.ReportContent))
+            return;
+
+        try
+        {
+            var storedReport = new StoredReport
+            {
+                Name = GenerateValidationReportName(result.IndexPath, options, result.ConfigurationName),
+                Description = $"Validation report for {Path.GetFileName(result.IndexPath)} - {(options.Detailed ? "Detailed" : "Basic")} validation",
+                ReportType = "validation",
+                CreatedAt = result.StartTime,
+                Format = options.Format,
+                Content = result.ReportContent,
+                Duration = result.Duration,
+                Success = result.Success,
+                ErrorMessage = result.Success ? null : result.Message,
+                ConfigurationId = result.ConfigurationId,
+                ConfigurationName = result.ConfigurationName,
+                Statistics = new Dictionary<string, object>
+                {
+                    // These will be extracted from actual validation results later
+                    ["TotalErrors"] = 0,
+                    ["TotalWarnings"] = 0,
+                    ["TotalInfoItems"] = 0
+                },
+                Parameters = new Dictionary<string, object>
+                {
+                    ["IndexPath"] = result.IndexPath,
+                    ["ReportFormat"] = options.ReportFormat,
+                    ["Detailed"] = options.Detailed,
+                    ["CreateBackup"] = options.CreateBackup,
+                    ["SampleSize"] = options.SampleSize ?? 10
+                }
+            };
+
+            await _reportStorage.SaveReportAsync(storedReport);
+            _logger.LogInformation("Saved validation report to storage: {ReportId}", storedReport.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save validation report to storage");
+        }
+    }
+
+    private string GenerateValidationReportName(string indexPath, ValidationOptions options, string? configurationName = null)
+    {
+        var indexName = Path.GetFileName(indexPath.TrimEnd('\\', '/'));
+        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+        var validationType = options.Detailed ? "Detailed" : "Basic";
+        
+        // Include configuration name if available for better differentiation
+        var configSuffix = !string.IsNullOrEmpty(configurationName) ? $" ({configurationName})" : "";
+        return $"Validation ({validationType}) - {indexName}{configSuffix} - {timestamp}";
+    }
 }
 
 public class ValidationOptions
@@ -269,5 +344,7 @@ public class ValidationServiceResult
     public string? ReportContent { get; set; }
     public string? ReportPath { get; set; }
     public ValidationOptions? Options { get; set; }
+    public string? ConfigurationId { get; set; }
+    public string? ConfigurationName { get; set; }
     public TimeSpan Duration => EndTime - StartTime;
 }

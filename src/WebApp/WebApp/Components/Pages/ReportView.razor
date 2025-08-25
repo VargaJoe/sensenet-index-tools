@@ -1,0 +1,364 @@
+@page "/reports/{reportId}"
+@rendermode InteractiveServer
+@inject ReportStorageService ReportService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+@inject ILogger<ReportView> Logger
+
+<div class="container-fluid mt-3">
+    @if (isLoading)
+    {
+        <div class="text-center p-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading report...</span>
+            </div>
+            <p class="mt-2">Loading report...</p>
+        </div>
+    }
+    else if (report == null)
+    {
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            Report not found. It may have been deleted or the ID is invalid.
+            <div class="mt-2">
+                <a href="/reports" class="btn btn-primary">
+                    <i class="bi bi-arrow-left me-1"></i>Back to Reports
+                </a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Page Header -->
+        <div class="row mb-4">
+            <div class="col">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="/reports">Reports</a></li>
+                        <li class="breadcrumb-item active">@report.Name</li>
+                    </ol>
+                </nav>
+                
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h2>
+                            @if (report.IsFavorite)
+                            {
+                                <i class="bi bi-star-fill text-warning me-2"></i>
+                            }
+                            @report.Name
+                        </h2>
+                        @if (!string.IsNullOrWhiteSpace(report.Description))
+                        {
+                            <p class="text-muted">@report.Description</p>
+                        }
+                    </div>
+                    
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-outline-secondary" @onclick="DownloadReport">
+                            <i class="bi bi-download me-1"></i>Download
+                        </button>
+                        <button class="btn @(report.IsFavorite ? "btn-warning" : "btn-outline-warning")" 
+                                @onclick="ToggleFavorite">
+                            <i class="bi @(report.IsFavorite ? "bi-star-fill" : "bi-star") me-1"></i>
+                            @(report.IsFavorite ? "Unfavorite" : "Favorite")
+                        </button>
+                        <a href="/reports" class="btn btn-primary">
+                            <i class="bi bi-arrow-left me-1"></i>Back to Reports
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Metadata -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-info-circle me-2"></i>Report Information
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3 col-6 mb-3">
+                                <strong>Type:</strong><br>
+                                <span class="badge @GetTypeBadgeClass(report.ReportType)">
+                                    @GetTypeDisplayName(report.ReportType)
+                                </span>
+                            </div>
+                            <div class="col-md-3 col-6 mb-3">
+                                <strong>Status:</strong><br>
+                                @if (report.Success)
+                                {
+                                    <span class="badge bg-success">
+                                        <i class="bi bi-check-circle me-1"></i>Success
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">
+                                        <i class="bi bi-x-circle me-1"></i>Failed
+                                    </span>
+                                    @if (!string.IsNullOrWhiteSpace(report.ErrorMessage))
+                                    {
+                                        <div class="mt-1 small text-danger">@report.ErrorMessage</div>
+                                    }
+                                }
+                            </div>
+                            <div class="col-md-3 col-6 mb-3">
+                                <strong>Created:</strong><br>
+                                @report.FormattedCreatedAt
+                            </div>
+                            <div class="col-md-3 col-6 mb-3">
+                                <strong>Duration:</strong><br>
+                                @report.FormattedDuration
+                            </div>
+                            <div class="col-md-3 col-6 mb-3">
+                                <strong>Format:</strong><br>
+                                <span class="badge bg-secondary">@report.Format.ToUpperInvariant()</span>
+                            </div>
+                            <div class="col-md-3 col-6 mb-3">
+                                <strong>Size:</strong><br>
+                                @report.FormattedSize
+                            </div>
+                            <div class="col-md-3 col-6 mb-3">
+                                <strong>Views:</strong><br>
+                                @report.ViewCount
+                                @if (report.LastViewedAt.HasValue)
+                                {
+                                    <div class="small text-muted">Last: @report.LastViewedAt.Value.ToString("yyyy-MM-dd HH:mm")</div>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(report.ConfigurationName))
+                            {
+                                <div class="col-md-3 col-6 mb-3">
+                                    <strong>Configuration:</strong><br>
+                                    <span class="badge bg-info">@report.ConfigurationName</span>
+                                </div>
+                            }
+                        </div>
+
+                        @* Statistics Section *@
+                        @if (report.Statistics.Any())
+                        {
+                            <div class="row border-top pt-3 mt-3">
+                                <div class="col-12">
+                                    <h6><i class="bi bi-bar-chart me-2"></i>Statistics</h6>
+                                    <div class="row">
+                                        @foreach (var stat in report.Statistics)
+                                        {
+                                            <div class="col-md-2 col-6 mb-2">
+                                                <div class="card bg-light">
+                                                    <div class="card-body text-center py-2">
+                                                        <div class="fw-bold">@stat.Value</div>
+                                                        <small class="text-muted">@FormatStatisticName(stat.Key)</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        @* Parameters Section *@
+                        @if (report.Parameters.Any())
+                        {
+                            <div class="row border-top pt-3 mt-3">
+                                <div class="col-12">
+                                    <h6><i class="bi bi-gear me-2"></i>Parameters</h6>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-borderless">
+                                            @foreach (var param in report.Parameters)
+                                            {
+                                                <tr>
+                                                    <td class="fw-medium" style="width: 200px;">@FormatParameterName(param.Key):</td>
+                                                    <td>@FormatParameterValue(param.Key, param.Value)</td>
+                                                </tr>
+                                            }
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Content -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-file-earmark-text me-2"></i>Report Content
+                        </h5>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button class="btn @(viewMode == "rendered" ? "btn-primary" : "btn-outline-primary")" 
+                                    @onclick='() => SetViewMode("rendered")'>
+                                <i class="bi bi-eye me-1"></i>Rendered
+                            </button>
+                            <button class="btn @(viewMode == "source" ? "btn-primary" : "btn-outline-primary")" 
+                                    @onclick='() => SetViewMode("source")'>
+                                <i class="bi bi-code me-1"></i>Source
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        @if (viewMode == "rendered")
+                        {
+                            @if (report.Format == "html")
+                            {
+                                <div class="p-3">
+                                    @((MarkupString)report.Content)
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="p-3">
+                                    <pre class="bg-light p-3 rounded" style="white-space: pre-wrap;">@report.Content</pre>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="p-3">
+                                <pre class="bg-dark text-light p-3 rounded" style="white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 0.9em;">@report.Content</pre>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string ReportId { get; set; } = string.Empty;
+
+    private StoredReport? report;
+    private bool isLoading = true;
+    private string viewMode = "rendered"; // "rendered" or "source"
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReport();
+    }
+
+    private async Task LoadReport()
+    {
+        isLoading = true;
+        try
+        {
+            report = await ReportService.GetReportAsync(ReportId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load report: {ReportId}", ReportId);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task DownloadReport()
+    {
+        if (report != null)
+        {
+            try
+            {
+                var fileName = $"{report.Name.Replace(" ", "_")}_{report.CreatedAt:yyyyMMdd_HHmmss}.{report.Format}";
+                var mimeType = report.Format == "html" ? "text/html" : "text/markdown";
+                
+                await JSRuntime.InvokeVoidAsync("downloadFile", fileName, report.Content, mimeType);
+                Logger.LogInformation("Downloaded report: {ReportId}", ReportId);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to download report: {ReportId}", ReportId);
+            }
+        }
+    }
+
+    private async Task ToggleFavorite()
+    {
+        if (report != null)
+        {
+            try
+            {
+                await ReportService.ToggleFavoriteAsync(report.Id);
+                report.IsFavorite = !report.IsFavorite;
+                Logger.LogInformation("Toggled favorite for report: {ReportId}", ReportId);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to toggle favorite: {ReportId}", ReportId);
+            }
+        }
+    }
+
+    private void SetViewMode(string mode)
+    {
+        viewMode = mode;
+    }
+
+    private string GetTypeBadgeClass(string reportType) => reportType switch
+    {
+        "validation" => "bg-success",
+        "subtree-check" => "bg-info",
+        "content-listing" => "bg-warning",
+        _ => "bg-secondary"
+    };
+
+    private string GetTypeDisplayName(string reportType) => reportType switch
+    {
+        "validation" => "Index Validation",
+        "subtree-check" => "Subtree Check",
+        "content-listing" => "Content Listing",
+        _ => "Unknown"
+    };
+
+    private string FormatStatisticName(string key) => key switch
+    {
+        "DbItems" => "DB Items",
+        "IndexItems" => "Index Items",
+        "Matches" => "Matches",
+        "Mismatches" => "Mismatches",
+        "IndexOnlyItems" => "Index Only",
+        "DbOnlyItems" => "DB Only",
+        "TotalErrors" => "Errors",
+        "TotalWarnings" => "Warnings",
+        "TotalInfoItems" => "Info Items",
+        _ => key
+    };
+
+    private string FormatParameterName(string key) => key switch
+    {
+        "IndexPath" => "Index Path",
+        "ConnectionString" => "Connection String",
+        "RepositoryPath" => "Repository Path",
+        "ReportFormat" => "Report Format",
+        "OutputPath" => "Output Path",
+        "CreateBackup" => "Create Backup",
+        "Detailed" => "Detailed Mode",
+        "Recursive" => "Recursive",
+        "Depth" => "Depth",
+        _ => key
+    };
+
+    private string FormatParameterValue(string key, object value)
+    {
+        if (key == "ConnectionString" && value is string connStr)
+        {
+            // Hide sensitive connection string details
+            return connStr.Length > 50 ? $"{connStr[..47]}..." : connStr;
+        }
+        
+        return value?.ToString() ?? "N/A";
+    }
+}

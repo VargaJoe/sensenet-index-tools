@@ -18,11 +18,11 @@ _None yet._
 - [x] Remove template/sample pages (Weather, Counter)
 - [x] Implement Index Validation operation page (with options: detailed, backup, sample size)
 - [x] Implement Subtree Checking operation page (COMPLETED: Service, UI, navigation integration, error fixes)
+- [x] Implement Report Viewing (view, download, compare reports) - COMPLETED: Report storage, history listing, individual report viewer
 - [ ] Implement Content Listing operation page
-- [ ] Implement Report Viewing (view, download, compare reports)
 - [x] Implement Settings/Configuration page (COMPLETED: Full configuration management system with save/load/apply functionality, edit/delete actions, LastActivityId integration)
-- [ ] Extract shared core logic into a shared library for CLI and web
-- [ ] Implement report storage/history (save, list, retrieve past reports)
+- [x] Extract shared core logic into a shared library for CLI and web (COMPLETED: Both use SenseNetIndexTools.Core)
+- [x] Implement report storage/history (save, list, retrieve past reports) - COMPLETED: Automatic report saving, comprehensive report management
 - [ ] UI/UX polish and error handling
 - [ ] (Optional) Add authentication
 

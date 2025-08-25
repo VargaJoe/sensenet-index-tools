@@ -33,6 +33,9 @@ builder.Services.AddScoped<SubtreeCheckingService>();
 // Add ConfigurationService
 builder.Services.AddScoped<ConfigurationService>();
 
+// Add ReportStorageService
+builder.Services.AddScoped<ReportStorageService>();
+
 // Add logging
 builder.Services.AddLogging(logging =>
 {
