@@ -31,6 +31,9 @@
 
     <div class="row">
         <div class="col-lg-8">
+            <!-- Configuration Selector -->
+            <ConfigurationSelector OnConfigurationApplied="OnConfigurationApplied" />
+            
             <div class="card">
                 <div class="card-header">
                     <h5 class="card-title mb-0">
@@ -522,6 +525,31 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error downloading report");
+        }
+    }
+
+    private void OnConfigurationApplied(SavedConfiguration configuration)
+    {
+        try
+        {
+            // Apply configuration values to the validation options
+            if (!string.IsNullOrEmpty(configuration.IndexPath))
+            {
+                validationOptions.IndexPath = configuration.IndexPath;
+            }
+            
+            if (!string.IsNullOrEmpty(configuration.DefaultOutputPath))
+            {
+                validationOptions.OutputPath = configuration.DefaultOutputPath;
+            }
+
+            StateHasChanged();
+            
+            Logger.LogInformation("Applied configuration: {ConfigurationName}", configuration.Name);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error applying configuration");
         }
     }
 }

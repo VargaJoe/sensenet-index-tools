@@ -30,6 +30,9 @@ builder.Services.AddScoped<IndexValidationService>();
 // Add SubtreeCheckingService
 builder.Services.AddScoped<SubtreeCheckingService>();
 
+// Add ConfigurationService
+builder.Services.AddScoped<ConfigurationService>();
+
 // Add logging
 builder.Services.AddLogging(logging =>
 {

@@ -17,6 +17,9 @@
 
     <div class="row">
         <div class="col-lg-8">
+            <!-- Configuration Selector -->
+            <ConfigurationSelector OnConfigurationApplied="OnConfigurationApplied" />
+            
             <!-- Configuration Card -->
             <div class="card mb-4">
                 <div class="card-header">
@@ -432,6 +435,41 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error downloading report");
+        }
+    }
+    
+    private void OnConfigurationApplied(SavedConfiguration configuration)
+    {
+        try
+        {
+            // Apply configuration values to the subtree check options
+            if (!string.IsNullOrEmpty(configuration.IndexPath))
+            {
+                checkOptions.IndexPath = configuration.IndexPath;
+            }
+            
+            if (!string.IsNullOrEmpty(configuration.ConnectionString))
+            {
+                checkOptions.ConnectionString = configuration.ConnectionString;
+            }
+            
+            if (!string.IsNullOrEmpty(configuration.RepositoryPath))
+            {
+                checkOptions.RepositoryPath = configuration.RepositoryPath;
+            }
+            
+            if (!string.IsNullOrEmpty(configuration.DefaultOutputPath))
+            {
+                checkOptions.OutputPath = configuration.DefaultOutputPath;
+            }
+
+            StateHasChanged();
+            
+            Logger.LogInformation("Applied configuration: {ConfigurationName}", configuration.Name);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error applying configuration");
         }
     }
 }
