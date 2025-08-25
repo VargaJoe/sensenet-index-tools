@@ -3,6 +3,7 @@
 @inject ReportStorageService ReportService
 @inject ConfigurationService ConfigService
 @inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
 @inject ILogger<Reports> Logger
 
 <div class="container-fluid mt-3">
@@ -410,11 +411,10 @@
         await FilterReports();
     }
 
-    private async Task ViewReport(string reportId)
+    private void ViewReport(string reportId)
     {
-        // Navigate to report view page (we'll create this next)
-        // For now, we'll download it
-        await DownloadReport(reportId);
+        // Navigate to report view page
+        Navigation.NavigateTo($"/reports/{reportId}");
     }
 
     private async Task DownloadReport(string reportId)
