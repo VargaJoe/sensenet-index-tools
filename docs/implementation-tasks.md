@@ -40,7 +40,7 @@
 **Goal:** Implement comprehensive index creation capabilities using SenseNet's own indexer.
 
 #### High Priority (Core Functionality)
-- [ ] **US-016**: Index Creation Foundation - Basic index creation from SenseNet content (1-2 weeks)
+- [x] **US-016**: Index Creation Foundation - Basic index creation from SenseNet content (1-2 weeks) - **IN PROGRESS**
 - [ ] **US-017**: Content Type and Field Mapping - SenseNet-specific field mapping (1 week)
 - [ ] **US-018**: Batch Processing and Performance - Efficient processing for large repositories (1 week)
 - [ ] **US-021**: Index Validation and Verification - Post-creation validation (0.5 week)
