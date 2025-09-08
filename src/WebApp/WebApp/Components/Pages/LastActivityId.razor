@@ -1,0 +1,535 @@
+@page "/lastactivityid"
+@rendermode InteractiveServer
+@inject LastActivityIdService LastActivityService
+@inject ILogger<LastActivityId> Logger
+@inject IJSRuntime JS
+@using WebApp.Components
+
+<PageTitle>LastActivityId Management</PageTitle>
+
+<div class="sensenet-header mb-4">
+    <div class="d-flex align-items-center mb-3">
+        <img src="_content/WebApp/images/sensenet-logo.png" alt="SenseNet Logo" height="40" class="me-3" />
+        <h1 class="mb-0">LastActivityId Management</h1>
+    </div>
+    <div class="alert alert-info" role="alert">
+        <i class="bi bi-info-circle-fill me-2"></i>
+        Manage LastActivityId values in sensenet Lucene indexes. Read operations are safe for live indexes.
+        Write operations require the index to be offline.
+    </div>
+</div>
+
+<!-- Configuration Selector -->
+<ConfigurationSelector OnConfigurationApplied="OnConfigurationApplied" />
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title">
+            <i class="bi bi-folder2-open me-2"></i>
+            Index Path
+        </h5>
+        <div class="input-group mb-3">
+            <span class="input-group-text">
+                <i class="bi bi-folder"></i>
+            </span>
+            <input type="text" 
+                   class="form-control" 
+                   @bind="IndexPath"
+                   @bind:event="oninput"
+                   @onkeyup="HandlePathKeyUp"
+                   placeholder="Enter the path to your sensenet index (e.g., D:\indexes\myindex)" />
+            <button class="btn btn-outline-secondary" @onclick="OpenFolderPicker" title="Browse for index folder">
+                <i class="bi bi-folder2-open me-1"></i>
+                Browse
+            </button>
+        </div>
+        <div class="form-text mb-2">
+            <small class="text-muted">
+                <i class="bi bi-info-circle me-1"></i>
+                Type the full path to your index folder (e.g., <code>D:\indexes\myindex</code>). 
+                For security reasons, web browsers limit folder browsing capabilities.
+            </small>
+        </div>
+    @if (!string.IsNullOrEmpty(IndexPath) && !IsValidPath)
+        {
+            <div class="text-danger small mt-2">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                The specified path does not exist
+            </div>
+        }
+    </div>
+</div>
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title">
+            <i class="bi bi-database me-2"></i>
+            Database Connection (Optional)
+        </h5>
+        <div class="input-group mb-3">
+            <span class="input-group-text">
+                <i class="bi bi-server"></i>
+            </span>
+            <input type="text" 
+                   class="form-control" 
+                   @bind="ConnectionString"
+                   placeholder="Enter SQL Server connection string for database comparison" />
+        </div>
+        <div class="form-text mb-2">
+            <small class="text-muted">
+                <i class="bi bi-info-circle me-1"></i>
+                Optional: Provide a connection string to compare index LastActivityId with database IndexingActivities table.
+            </small>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-body text-center">
+        <div class="row">
+            <div class="col-md-6 mb-2">
+                <button class="btn btn-primary w-100" 
+                        @onclick="GetLastActivityId" 
+                        disabled="@(!IsValidPath)">
+                    <i class="bi bi-search me-2"></i>
+                    Get Index LastActivityId
+                </button>
+            </div>
+            <div class="col-md-6 mb-2">
+                <button class="btn btn-info w-100" 
+                        @onclick="GetDatabaseLastActivityId" 
+                        disabled="@(string.IsNullOrWhiteSpace(ConnectionString))">
+                    <i class="bi bi-database me-2"></i>
+                    Get Database LastActivityId
+                </button>
+            </div>
+        </div>
+        <div class="row mt-2">
+            <div class="col-12">
+                <button class="btn btn-success w-100" 
+                        @onclick="CompareLastActivityIds" 
+                        disabled="@(!CanCompare)">
+                    <i class="bi bi-arrow-left-right me-2"></i>
+                    Compare Index vs Database
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<ServerFolderPicker 
+    Show="_showFolderPicker" 
+    ShowChanged="OnPickerShowChanged"
+    InitialPath="@IndexPath"
+    OnSelected="OnFolderSelected" />
+
+@if (LastActivityInfo != null)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">
+                <i class="bi bi-info-circle me-2"></i>
+                Index LastActivityId
+            </h5>
+            <p class="card-text">
+                <strong>LastActivityId:</strong> @LastActivityInfo.LastActivityId
+            </p>
+            @if (LastActivityInfo.Gaps != null && LastActivityInfo.Gaps.Any())
+            {
+                <p class="card-text">
+                    <strong>Gaps:</strong> @string.Join(", ", LastActivityInfo.Gaps)
+                </p>
+            }
+        </div>
+    </div>
+}
+
+@if (DatabaseLastActivityId.HasValue)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">
+                <i class="bi bi-database me-2"></i>
+                Database LastActivityId
+            </h5>
+            <p class="card-text">
+                <strong>IndexingActivityId:</strong> @DatabaseLastActivityId.Value
+            </p>
+        </div>
+    </div>
+}
+
+@if (LastActivityComparison != null)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">
+                <i class="bi bi-arrow-left-right me-2"></i>
+                Index vs Database Comparison
+            </h5>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">
+                                <i class="bi bi-folder me-1"></i>
+                                Index
+                            </h6>
+                            <p class="card-text display-6">
+                                @(LastActivityComparison.IndexValue?.ToString() ?? "N/A")
+                            </p>
+                            @if (LastActivityComparison.IndexRetrievedAt.HasValue)
+                            {
+                                <small class="text-muted">Retrieved: @LastActivityComparison.IndexRetrievedAt.Value.ToString("HH:mm:ss")</small>
+                            }
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">
+                                <i class="bi bi-database me-1"></i>
+                                Database
+                            </h6>
+                            <p class="card-text display-6">
+                                @(LastActivityComparison.DatabaseValue?.ToString() ?? "N/A")
+                            </p>
+                            @if (LastActivityComparison.DatabaseRetrievedAt.HasValue)
+                            {
+                                <small class="text-muted">Retrieved: @LastActivityComparison.DatabaseRetrievedAt.Value.ToString("HH:mm:ss")</small>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row mt-3">
+                <div class="col-12">
+                    <div class="alert @(LastActivityComparison.IsMatch ? "alert-success" : "alert-warning") text-center">
+                        <h5 class="mb-2">
+                            <i class="bi @(LastActivityComparison.IsMatch ? "bi-check-circle-fill" : "bi-exclamation-triangle-fill") me-2"></i>
+                            @LastActivityComparison.Status
+                        </h5>
+                        @if (LastActivityComparison.HasBothValues)
+                        {
+                            @if (!LastActivityComparison.IsMatch)
+                            {
+                                <p class="mb-0">
+                                    <strong>Difference:</strong> @LastActivityComparison.Difference activities
+                                </p>
+                                @if (LastActivityComparison.IndexValue > LastActivityComparison.DatabaseValue)
+                                {
+                                    <small class="text-muted">Index is ahead of database</small>
+                                }
+                                else
+                                {
+                                    <small class="text-muted">Database is ahead of index</small>
+                                }
+                            }
+                            else
+                            {
+                                <p class="mb-0">Index and database are synchronized</p>
+                            }
+                        }
+                        else
+                        {
+                            <p class="mb-0">Unable to compare - missing values</p>
+                        }
+                    </div>
+                </div>
+            </div>
+            
+            @if (LastActivityComparison.IndexGaps != null && LastActivityComparison.IndexGaps.Any())
+            {
+                <div class="mt-3">
+                    <h6>Index Gaps:</h6>
+                    <p>@string.Join(", ", LastActivityComparison.IndexGaps)</p>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (LastActivityInfo != null)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Current LastActivityId</h5>
+            <p class="card-text">
+                <strong>LastActivityId:</strong> @LastActivityInfo.LastActivityId
+            </p>
+            @if (LastActivityInfo.Gaps != null && LastActivityInfo.Gaps.Any())
+            {
+                <p class="card-text">
+                    <strong>Gaps:</strong> @string.Join(", ", LastActivityInfo.Gaps)
+                </p>
+            }
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Modify LastActivityId</h5>
+            <div class="alert alert-warning" role="alert">
+                ⚠️ These operations require the index to be offline!
+            </div>
+            <div class="mb-3">
+                <label for="newId" class="form-label">New LastActivityId Value</label>
+                <input type="number" class="form-control" id="newId" @bind="NewId" />
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="backup" @bind="CreateBackup">
+                <label class="form-check-label" for="backup">Create Backup</label>
+            </div>
+            @if (CreateBackup)
+            {
+                <div class="mb-3">
+                    <label for="backupPath" class="form-label">Backup Path (optional)</label>
+                    <input type="text" class="form-control" id="backupPath" @bind="BackupPath" placeholder="Leave empty for default backup location" />
+                </div>
+            }
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="offline" @bind="IsOffline">
+                <label class="form-check-label" for="offline">I confirm the index is offline</label>
+            </div>
+            <button class="btn btn-warning me-2" @onclick="SetLastActivityId" disabled="@(!CanModify)">
+                Set LastActivityId
+            </button>
+            <button class="btn btn-danger" @onclick="InitLastActivityId" disabled="@(!CanModify)">
+                Initialize LastActivityId
+            </button>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <div class="alert alert-danger" role="alert">
+        @ErrorMessage
+    </div>
+}
+
+@code {
+    private string _indexPath = string.Empty;
+    private string IndexPath
+    {
+        get => _indexPath;
+        set
+        {
+            if (_indexPath != value)
+            {
+                _indexPath = value;
+                _isValidPathCache = null;
+                InvokeAsync(() => ValidatePathAsync());
+            }
+        }
+    }
+    private string _connectionString = string.Empty;
+    private string ConnectionString
+    {
+        get => _connectionString;
+        set => _connectionString = value;
+    }
+    private bool CreateBackup { get; set; } = true;
+    private string? BackupPath { get; set; }
+    private bool IsOffline { get; set; }
+    private long NewId { get; set; }
+    private string? ErrorMessage { get; set; }
+    private LastActivityInfo? LastActivityInfo { get; set; }
+    private long? DatabaseLastActivityId { get; set; }
+    private LastActivityIdComparison? LastActivityComparison { get; set; }
+    private bool? _isValidPathCache;
+    private System.Threading.CancellationTokenSource? _validationCts;
+    private bool _showFolderPicker;
+    private Task OnPickerShowChanged(bool value)
+    {
+        _showFolderPicker = value;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private bool IsValidPath => _isValidPathCache ?? false;
+    private bool CanModify => IsValidPath && IsOffline && NewId >= 0;
+    private bool CanCompare => IsValidPath && !string.IsNullOrWhiteSpace(ConnectionString);
+
+    private async Task HandlePathKeyUp(KeyboardEventArgs e)
+    {
+        await ValidatePathAsync();
+    }
+
+    private async Task ValidatePathAsync()
+    {
+        try
+        {
+            // Cancel any pending validation
+            _validationCts?.Cancel();
+            _validationCts?.Dispose();
+            _validationCts = new System.Threading.CancellationTokenSource();
+            var token = _validationCts.Token;
+
+            // Small delay to avoid too frequent validation
+            await Task.Delay(300, token);
+
+            if (!token.IsCancellationRequested)
+            {
+                _isValidPathCache = LastActivityService.ValidatePath(IndexPath);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (System.Threading.Tasks.TaskCanceledException)
+        {
+            // Ignore cancellation
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error validating path: {Path}", IndexPath);
+            _isValidPathCache = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task GetLastActivityId()
+    {
+        try
+        {
+            ErrorMessage = null;
+            Logger.LogInformation("Attempting to get LastActivityId from {IndexPath}", IndexPath);
+            
+            if (!LastActivityService.ValidatePath(IndexPath))
+            {
+                ErrorMessage = $"The index directory does not exist: {IndexPath}";
+                Logger.LogWarning("Index directory does not exist: {IndexPath}", IndexPath);
+                return;
+            }
+            
+            LastActivityInfo = await LastActivityService.GetLastActivityIdAsync(IndexPath);
+            Logger.LogInformation("Successfully retrieved LastActivityId from {IndexPath}", IndexPath);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error getting LastActivityId: {ex.Message}";
+            Logger.LogError(ex, "Error getting LastActivityId from {IndexPath}", IndexPath);
+        }
+    }
+
+    private async Task GetDatabaseLastActivityId()
+    {
+        try
+        {
+            ErrorMessage = null;
+            Logger.LogInformation("Attempting to get LastActivityId from database");
+            
+            if (string.IsNullOrWhiteSpace(ConnectionString))
+            {
+                ErrorMessage = "Connection string is required for database operations";
+                return;
+            }
+            
+            DatabaseLastActivityId = await LastActivityService.GetLastActivityIdFromDatabaseAsync(ConnectionString);
+            Logger.LogInformation("Successfully retrieved LastActivityId from database: {DatabaseLastActivityId}", DatabaseLastActivityId);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error getting LastActivityId from database: {ex.Message}";
+            Logger.LogError(ex, "Error getting LastActivityId from database");
+        }
+    }
+
+    private async Task CompareLastActivityIds()
+    {
+        try
+        {
+            ErrorMessage = null;
+            Logger.LogInformation("Comparing LastActivityId between index and database");
+            
+            if (!LastActivityService.ValidatePath(IndexPath))
+            {
+                ErrorMessage = $"The index directory does not exist: {IndexPath}";
+                return;
+            }
+            
+            if (string.IsNullOrWhiteSpace(ConnectionString))
+            {
+                ErrorMessage = "Connection string is required for comparison";
+                return;
+            }
+            
+            LastActivityComparison = await LastActivityService.CompareLastActivityIdAsync(IndexPath, ConnectionString);
+            Logger.LogInformation("Successfully compared LastActivityId - Status: {Status}", LastActivityComparison.Status);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error comparing LastActivityId: {ex.Message}";
+            Logger.LogError(ex, "Error comparing LastActivityId");
+        }
+    }
+
+    private async Task SetLastActivityId()
+    {
+        try
+        {
+            ErrorMessage = null;
+            await LastActivityService.SetLastActivityIdAsync(IndexPath, NewId, CreateBackup, BackupPath);
+            await GetLastActivityId(); // Refresh the display
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error setting LastActivityId: {ex.Message}";
+            Logger.LogError(ex, "Error setting LastActivityId to {NewId} in {IndexPath}", NewId, IndexPath);
+        }
+    }
+
+    private async Task InitLastActivityId()
+    {
+        try
+        {
+            ErrorMessage = null;
+            await LastActivityService.InitializeLastActivityIdAsync(IndexPath, NewId, CreateBackup, BackupPath);
+            await GetLastActivityId(); // Refresh the display
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error initializing LastActivityId: {ex.Message}";
+            Logger.LogError(ex, "Error initializing LastActivityId to {NewId} in {IndexPath}", NewId, IndexPath);
+        }
+    }
+
+    private void OpenFolderPicker()
+    {
+        _showFolderPicker = true;
+    }
+
+    private async Task OnFolderSelected(string path)
+    {
+        IndexPath = path;
+        await ValidatePathAsync();
+    }
+
+    private void OnConfigurationApplied(SavedConfiguration configuration)
+    {
+        try
+        {
+            // Apply configuration values to the LastActivityId page
+            if (!string.IsNullOrEmpty(configuration.IndexPath))
+            {
+                IndexPath = configuration.IndexPath;
+            }
+
+            if (!string.IsNullOrEmpty(configuration.ConnectionString))
+            {
+                ConnectionString = configuration.ConnectionString;
+            }
+
+            StateHasChanged();
+            
+            Logger.LogInformation("Applied configuration: {ConfigurationName}", configuration.Name);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error applying configuration");
+        }
+    }
+}

@@ -1,0 +1,190 @@
+@inject ConfigurationService ConfigurationService
+@inject ILogger<ConfigurationSelector> Logger
+
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="card-title mb-0">
+            <i class="bi bi-gear me-2"></i>Configuration
+        </h6>
+        <a href="/settings" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-plus-circle me-1"></i>Manage
+        </a>
+    </div>
+    <div class="card-body">
+        @if (showConfigurationSelector)
+        {
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="mb-3">
+                        <label class="form-label">Select Saved Configuration</label>
+                        <select class="form-select" @onchange="OnConfigurationSelected">
+                            <option value="">-- Select a configuration --</option>
+                            @foreach (var config in availableConfigurations)
+                            {
+                                <option value="@config.Id">
+                                    @config.Name
+                                    @if (config.IsFavorite)
+                                    {
+                                        <text> ⭐</text>
+                                    }
+                                </option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="mb-3">
+                        <label class="form-label">&nbsp;</label>
+                        <div>
+                            <button type="button" class="btn btn-outline-secondary w-100" @onclick="ToggleManualMode">
+                                <i class="bi bi-pencil me-2"></i>Manual Entry
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            @if (selectedConfiguration != null)
+            {
+                <div class="alert alert-info">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong>@selectedConfiguration.Name</strong>
+                            @if (!string.IsNullOrEmpty(selectedConfiguration.Description))
+                            {
+                                <br><small>@selectedConfiguration.Description</small>
+                            }
+                            <div class="mt-2">
+                                @if (!string.IsNullOrEmpty(selectedConfiguration.IndexPath))
+                                {
+                                    <div><small><strong>Index:</strong> @selectedConfiguration.IndexPath</small></div>
+                                }
+                                @if (!string.IsNullOrEmpty(selectedConfiguration.ConnectionString))
+                                {
+                                    <div><small><strong>Database:</strong> @TruncateConnectionString(selectedConfiguration.ConnectionString)</small></div>
+                                }
+                                @if (!string.IsNullOrEmpty(selectedConfiguration.RepositoryPath))
+                                {
+                                    <div><small><strong>Repository:</strong> @selectedConfiguration.RepositoryPath</small></div>
+                                }
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-primary" @onclick="ApplyConfiguration">
+                            <i class="bi bi-check-circle me-1"></i>Apply
+                        </button>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="text-muted">Manual configuration mode</span>
+                    <br>
+                    <small class="text-muted">Enter values manually in the fields below</small>
+                </div>
+                <button type="button" class="btn btn-outline-primary" @onclick="ToggleConfigurationSelector">
+                    <i class="bi bi-list me-2"></i>Use Saved Config
+                </button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<SavedConfiguration> OnConfigurationApplied { get; set; }
+    [Parameter] public bool ShowByDefault { get; set; } = true;
+    
+    private List<SavedConfiguration> availableConfigurations = new();
+    private SavedConfiguration? selectedConfiguration;
+    private bool showConfigurationSelector = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        showConfigurationSelector = ShowByDefault;
+        await LoadConfigurations();
+    }
+
+    private async Task LoadConfigurations()
+    {
+        try
+        {
+            var allConfigs = await ConfigurationService.GetAllConfigurationsAsync();
+            var favorites = await ConfigurationService.GetFavoriteConfigurationsAsync();
+            var recent = await ConfigurationService.GetRecentConfigurationsAsync(3);
+            
+            // Combine favorites and recent, remove duplicates, then add remaining configs
+            var priorityConfigs = favorites.Concat(recent).GroupBy(c => c.Id).Select(g => g.First()).ToList();
+            var remainingConfigs = allConfigs.Where(c => !priorityConfigs.Any(p => p.Id == c.Id)).ToList();
+            
+            availableConfigurations = priorityConfigs.Concat(remainingConfigs).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading configurations for selector");
+        }
+    }
+
+    private async Task OnConfigurationSelected(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var configId))
+        {
+            selectedConfiguration = availableConfigurations.FirstOrDefault(c => c.Id == configId);
+        }
+        else
+        {
+            selectedConfiguration = null;
+        }
+        StateHasChanged();
+    }
+
+    private async Task ApplyConfiguration()
+    {
+        if (selectedConfiguration != null)
+        {
+            try
+            {
+                await ConfigurationService.MarkConfigurationUsedAsync(selectedConfiguration.Id);
+                await OnConfigurationApplied.InvokeAsync(selectedConfiguration);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error applying configuration");
+            }
+        }
+    }
+
+    private void ToggleConfigurationSelector()
+    {
+        showConfigurationSelector = true;
+        StateHasChanged();
+    }
+
+    private void ToggleManualMode()
+    {
+        showConfigurationSelector = false;
+        selectedConfiguration = null;
+        StateHasChanged();
+    }
+
+    private string TruncateConnectionString(string? connectionString, int maxLength = 40)
+    {
+        if (string.IsNullOrEmpty(connectionString) || connectionString.Length <= maxLength)
+            return connectionString ?? "";
+
+        // Try to show the Data Source part
+        var parts = connectionString.Split(';');
+        var dataSource = parts.FirstOrDefault(p => p.Trim().StartsWith("Data Source", StringComparison.OrdinalIgnoreCase));
+        if (dataSource != null)
+        {
+            var serverName = dataSource.Split('=').LastOrDefault()?.Trim();
+            if (!string.IsNullOrEmpty(serverName))
+            {
+                return serverName + "...";
+            }
+        }
+
+        return connectionString.Substring(0, maxLength - 3) + "...";
+    }
+}

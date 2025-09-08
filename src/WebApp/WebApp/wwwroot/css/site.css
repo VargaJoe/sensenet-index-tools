@@ -1,0 +1,48 @@
+/* SenseNet branding colors */
+:root {
+    --sensenet-primary: #007FAC;
+    --sensenet-primary-hover: #006A8F;
+    --sensenet-secondary: #13A5AD;
+    --sensenet-light: #F1F9FB;
+    --sensenet-dark: #1A1A1A;
+}
+
+.btn-primary {
+    background-color: var(--sensenet-primary);
+    border-color: var(--sensenet-primary);
+}
+
+.btn-primary:hover {
+    background-color: var(--sensenet-primary-hover);
+    border-color: var(--sensenet-primary-hover);
+}
+
+.btn-outline-primary {
+    color: var(--sensenet-primary);
+    border-color: var(--sensenet-primary);
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--sensenet-primary);
+    border-color: var(--sensenet-primary);
+}
+
+.alert-info {
+    background-color: var(--sensenet-light);
+    border-color: var(--sensenet-secondary);
+    color: var(--sensenet-dark);
+}
+
+h1, h5.card-title {
+    color: var(--sensenet-primary);
+}
+
+.form-control:focus {
+    border-color: var(--sensenet-primary);
+    box-shadow: 0 0 0 0.25rem rgba(0, 127, 172, 0.25);
+}
+
+.form-check-input:checked {
+    background-color: var(--sensenet-primary);
+    border-color: var(--sensenet-primary);
+}

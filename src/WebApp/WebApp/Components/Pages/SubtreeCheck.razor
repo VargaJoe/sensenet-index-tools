@@ -1,0 +1,504 @@
+@page "/subtree-check"
+@rendermode InteractiveServer
+@inject SubtreeCheckingService CheckingService
+@inject IJSRuntime JSRuntime
+@inject ILogger<SubtreeCheck> Logger
+
+<PageTitle>Subtree Check - SenseNet Index Tools</PageTitle>
+
+<div class="container-fluid">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Subtree Check</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Configuration Selector -->
+            <ConfigurationSelector OnConfigurationApplied="OnConfigurationApplied" />
+            
+            <!-- Configuration Card -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-diagram-3 me-2"></i>
+                        Subtree Check Configuration
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <EditForm Model="checkOptions" OnValidSubmit="StartSubtreeCheck">
+                        <DataAnnotationsValidator />
+                        
+                        <div class="row">
+                            <!-- Index Path Selection -->
+                            <div class="col-md-6 mb-3">
+                                <label for="indexPath" class="form-label">Index Path <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <InputText id="indexPath" class="form-control" @bind-Value="checkOptions.IndexPath" 
+                                              placeholder="Path to Lucene index directory" />
+                                    <button type="button" class="btn btn-outline-secondary" @onclick="ShowFolderPicker">
+                                        <i class="bi bi-folder"></i>
+                                    </button>
+                                </div>
+                                <ValidationMessage For="() => checkOptions.IndexPath" />
+                                @if (!string.IsNullOrEmpty(pathValidationMessage))
+                                {
+                                    <div class="form-text text-danger">@pathValidationMessage</div>
+                                }
+                            </div>
+
+                            <!-- Repository Path -->
+                            <div class="col-md-6 mb-3">
+                                <label for="repositoryPath" class="form-label">Repository Path <span class="text-danger">*</span></label>
+                                <InputText id="repositoryPath" class="form-control" @bind-Value="checkOptions.RepositoryPath" 
+                                          placeholder="/Root/Sites/Default_Site" />
+                                <div class="form-text">SenseNet content path to check (e.g., /Root/Sites/Default_Site)</div>
+                                <ValidationMessage For="() => checkOptions.RepositoryPath" />
+                            </div>
+                        </div>
+
+                        <!-- Connection String -->
+                        <div class="mb-3">
+                            <label for="connectionString" class="form-label">Database Connection String <span class="text-danger">*</span></label>
+                            <InputText id="connectionString" class="form-control" @bind-Value="checkOptions.ConnectionString" 
+                                      placeholder="Data Source=server;Initial Catalog=sensenet;Integrated Security=True" />
+                            <div class="form-text">SQL Server connection string for the SenseNet database</div>
+                            <ValidationMessage For="() => checkOptions.ConnectionString" />
+                        </div>
+
+                        <!-- Check Options Row -->
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <div class="form-check">
+                                    <InputCheckbox id="recursive" class="form-check-input" @bind-Value="checkOptions.Recursive" />
+                                    <label class="form-check-label" for="recursive">
+                                        Recursive Check
+                                    </label>
+                                    <div class="form-text">Check all content items under the specified path</div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-4 mb-3">
+                                <label for="depth" class="form-label">Depth Limit</label>
+                                <InputNumber id="depth" class="form-control" @bind-Value="checkOptions.Depth" min="0" />
+                                <div class="form-text">Limit depth (0 = no limit, 1 = direct children only)</div>
+                            </div>
+
+                            <div class="col-md-4 mb-3">
+                                <label for="reportFormat" class="form-label">Report Detail</label>
+                                <InputSelect id="reportFormat" class="form-select" @bind-Value="checkOptions.ReportFormat">
+                                    <option value="summary">Summary</option>
+                                    <option value="detailed">Detailed</option>
+                                    <option value="tree">Tree View</option>
+                                    <option value="full">Full Report</option>
+                                </InputSelect>
+                                <div class="form-text">Level of detail in the report</div>
+                            </div>
+                        </div>
+
+                        <!-- Output Configuration Row -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="format" class="form-label">Output Format</label>
+                                <InputSelect id="format" class="form-select" @bind-Value="checkOptions.Format">
+                                    <option value="md">Markdown</option>
+                                    <option value="html">HTML</option>
+                                </InputSelect>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="outputPath" class="form-label">Output File (Optional)</label>
+                                <InputText id="outputPath" class="form-control" @bind-Value="checkOptions.OutputPath" 
+                                          placeholder="Leave empty for in-browser display" />
+                                <div class="form-text">Optional file path to save the report</div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary" disabled="@isChecking">
+                                @if (isChecking)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                    <span>Checking...</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-play-circle me-2"></i>
+                                    <span>Start Subtree Check</span>
+                                }
+                            </button>
+                            
+                            @if (checkResult != null && checkResult.Success && !string.IsNullOrEmpty(checkResult.ReportContent))
+                            {
+                                <button type="button" class="btn btn-success" @onclick="DownloadReport">
+                                    <i class="bi bi-download me-2"></i>
+                                    Download Report
+                                </button>
+                            }
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+
+            <!-- Progress Indicator -->
+            @if (isChecking)
+            {
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h6 class="card-title">Subtree Check in Progress</h6>
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" style="width: 100%"></div>
+                        </div>
+                        <small class="text-muted mt-2 d-block">
+                            Comparing content between database and index...
+                        </small>
+                    </div>
+                </div>
+            }
+
+            <!-- Results Display -->
+            @if (checkResult != null)
+            {
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            @if (checkResult.Success)
+                            {
+                                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                <span>Check Results</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>
+                                <span>Check Failed</span>
+                            }
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <small class="text-muted">Duration</small>
+                                <div class="fw-bold">@checkResult.Duration.TotalSeconds.ToString("F2")s</div>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">Repository Path</small>
+                                <div class="fw-bold">@checkResult.RepositoryPath</div>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">Started</small>
+                                <div class="fw-bold">@checkResult.StartTime.ToString("HH:mm:ss")</div>
+                            </div>
+                            <div class="col-md-3">
+                                <small class="text-muted">Status</small>
+                                <div class="fw-bold">
+                                    @if (checkResult.Success)
+                                    {
+                                        <span class="text-success">Success</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-danger">Failed</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (checkResult.Success)
+                        {
+                            <!-- Statistics Cards -->
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <div class="card bg-light">
+                                        <div class="card-body text-center">
+                                            <div class="h4 mb-1">@checkResult.ItemsInDatabase</div>
+                                            <small class="text-muted">Database Items</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card bg-light">
+                                        <div class="card-body text-center">
+                                            <div class="h4 mb-1">@checkResult.ItemsInIndex</div>
+                                            <small class="text-muted">Index Items</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card bg-light">
+                                        <div class="card-body text-center">
+                                            <div class="h4 mb-1 text-success">@checkResult.MatchedItems</div>
+                                            <small class="text-muted">Matched</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card bg-light">
+                                        <div class="card-body text-center">
+                                            <div class="h4 mb-1 text-danger">@checkResult.MismatchedItems</div>
+                                            <small class="text-muted">Mismatched</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        <div class="alert @(checkResult.Success ? "alert-success" : "alert-danger")" role="alert">
+                            <strong>@(checkResult.Success ? "Success:" : "Error:")</strong> @checkResult.Message
+                        </div>
+
+                        <!-- Report Content -->
+                        @if (checkResult.Success && !string.IsNullOrEmpty(checkResult.ReportContent))
+                        {
+                            <div class="mt-3">
+                                <h6>Generated Report</h6>
+                                @if (checkOptions.Format.ToLower() == "html")
+                                {
+                                    @((MarkupString)checkResult.ReportContent)
+                                }
+                                else
+                                {
+                                    <pre class="bg-light p-3 rounded"><code>@checkResult.ReportContent</code></pre>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Last Check History -->
+            @if (lastCheckResult != null)
+            {
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-clock-history me-2"></i>
+                            Last Check
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <small class="text-muted">Path</small>
+                                <div class="fw-bold">@lastCheckResult.RepositoryPath</div>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted">When</small>
+                                <div class="fw-bold">@lastCheckResult.EndTime.ToString("yyyy-MM-dd HH:mm")</div>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted">Result</small>
+                                <div class="fw-bold">
+                                    @if (lastCheckResult.Success)
+                                    {
+                                        <span class="text-success">@lastCheckResult.MatchedItems matched, @lastCheckResult.MismatchedItems mismatched</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-danger">Failed</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Info Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-info-circle me-2"></i>
+                        About Subtree Checking
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p><strong>Subtree checking</strong> compares content between your SenseNet database and Lucene index for a specific repository path.</p>
+                    
+                    <h6>What it checks:</h6>
+                    <ul class="small">
+                        <li>Items that exist in database but not in index</li>
+                        <li>Items that exist in index but not in database</li>
+                        <li>Items with mismatched IDs or versions</li>
+                        <li>Content type distribution and statistics</li>
+                    </ul>
+
+                    <h6>Report Formats:</h6>
+                    <ul class="small">
+                        <li><strong>Summary:</strong> Basic statistics and counts</li>
+                        <li><strong>Detailed:</strong> Content type breakdown and mismatch details</li>
+                        <li><strong>Tree:</strong> Hierarchical view of the content structure</li>
+                        <li><strong>Full:</strong> Complete item-by-item comparison</li>
+                    </ul>
+
+                    <div class="alert alert-info small mt-3" role="alert">
+                        <strong>Tip:</strong> Start with a small, specific path to test your configuration before checking large content trees.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Server Folder Picker Modal -->
+<ServerFolderPicker @bind-Show="showFolderPicker" 
+                    InitialPath="@checkOptions.IndexPath"
+                    OnSelected="OnFolderSelected" />
+
+@code {
+    private SubtreeCheckOptions checkOptions = new();
+    private SubtreeCheckResult? checkResult;
+    private SubtreeCheckResult? lastCheckResult;
+    private bool isChecking = false;
+    private bool showFolderPicker = false;
+    private string pathValidationMessage = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        // Set default values
+        checkOptions.RepositoryPath = "/Root";
+        checkOptions.Recursive = true;
+        checkOptions.Depth = 0;
+        checkOptions.ReportFormat = "summary";
+        checkOptions.Format = "html";
+    }
+
+    private void ShowFolderPicker()
+    {
+        showFolderPicker = true;
+    }
+
+    private void OnFolderSelected(string selectedPath)
+    {
+        checkOptions.IndexPath = selectedPath;
+        showFolderPicker = false;
+    }
+
+    private async Task StartSubtreeCheck()
+    {
+        pathValidationMessage = string.Empty;
+
+        // Validate paths
+        if (!CheckingService.ValidatePaths(checkOptions.IndexPath, checkOptions.ConnectionString, checkOptions.RepositoryPath))
+        {
+            pathValidationMessage = "Please check that the index path exists and all required fields are filled.";
+            return;
+        }
+
+        isChecking = true;
+        checkResult = null;
+
+        try
+        {
+            checkResult = await CheckingService.CheckSubtreeAsync(checkOptions);
+            
+            if (checkResult.Success)
+            {
+                lastCheckResult = checkResult;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during subtree check");
+            checkResult = new SubtreeCheckResult
+            {
+                Success = false,
+                Message = $"An error occurred: {ex.Message}",
+                StartTime = DateTime.Now,
+                EndTime = DateTime.Now
+            };
+        }
+        finally
+        {
+            isChecking = false;
+        }
+    }
+
+    private async Task DownloadReport()
+    {
+        if (checkResult == null || string.IsNullOrEmpty(checkResult.ReportContent))
+            return;
+
+        try
+        {
+            var fileName = $"subtree-check-{DateTime.Now:yyyyMMdd-HHmmss}.{checkOptions.Format}";
+            var mimeType = checkOptions.Format.ToLower() == "html" ? "text/html" : "text/markdown";
+            
+            await JSRuntime.InvokeVoidAsync("downloadFile", fileName, checkResult.ReportContent, mimeType);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error downloading report");
+        }
+    }
+    
+    private void OnConfigurationApplied(SavedConfiguration configuration)
+    {
+        try
+        {
+            // Apply configuration values to the subtree check options
+            if (!string.IsNullOrEmpty(configuration.IndexPath))
+            {
+                checkOptions.IndexPath = configuration.IndexPath;
+            }
+            
+            if (!string.IsNullOrEmpty(configuration.ConnectionString))
+            {
+                checkOptions.ConnectionString = configuration.ConnectionString;
+            }
+            
+            if (!string.IsNullOrEmpty(configuration.RepositoryPath))
+            {
+                checkOptions.RepositoryPath = configuration.RepositoryPath;
+            }
+            
+            if (!string.IsNullOrEmpty(configuration.DefaultOutputPath))
+            {
+                checkOptions.OutputPath = configuration.DefaultOutputPath;
+            }
+            
+            // Set configuration info for better report naming
+            checkOptions.ConfigurationId = configuration.Id.ToString();
+            checkOptions.ConfigurationName = configuration.Name;
+
+            StateHasChanged();
+            
+            Logger.LogInformation("Applied configuration: {ConfigurationName}", configuration.Name);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error applying configuration");
+        }
+    }
+}
+
+<style>
+    .card-title {
+        color: #495057;
+    }
+    
+    .progress {
+        height: 8px;
+    }
+    
+    .alert {
+        border: none;
+        border-radius: 8px;
+    }
+    
+    pre code {
+        font-size: 0.85rem;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .bg-light {
+        background-color: #f8f9fa !important;
+    }
+</style>

@@ -14,12 +14,13 @@ The suite currently supports:
 - Initializing a LastActivityId in a non-SenseNet Lucene index (`init` command)
 - Automatic backup creation before making changes
 - Validating index structure and integrity (`validate` command)
+- HTML report generation with interactive features and visualizations
 - Checking database-index synchronization for subtrees (`check-subtree` command):
   - Enhanced detection capabilities with multiple search strategies
   - Accurate document validation and inspection
   - Content type distribution analysis
   - Version state tracking (published vs. draft content)
-  - Detailed reporting with statistics and markdown output
+  - Detailed reporting with statistics in markdown and HTML formats
 
 ## Proposed Enhancements
 
@@ -38,22 +39,29 @@ The suite currently supports:
 
 ### 2. ActivityId Gap Management
 
-#### 2.1 Gap Detection & Analysis
-- Enhanced detection and reporting of ActivityId gaps
-- Statistical analysis of gap patterns and potential impacts
-- Add a new `analyze-gaps` command
+#### 2.1 Gap Detection & Analysis ✓
+- ✅ Enhanced detection and reporting of ActivityId gaps
+- ✅ Interactive visualization of gap patterns
+- ✅ Timeline-based gap analysis with tooltips
+- Add more statistical analysis capabilities
 
 #### 2.2 Gap Resolution
 - Tools to merge or resolve ActivityId gaps
 - Options for different gap resolution strategies (skip, merge, reindex)
 - Add a new `fix-gaps` command
 
-### 3. Index Performance Optimization
+### 3. Report Generation and Visualization
 
-#### 3.1 Index Optimization
-- Add functions to optimize the index structure and reduce fragmentation
-- Support for segment merging and compaction
-- Add a new `optimize` command
+#### 3.1 Enhanced HTML Reports ✓
+- ✅ Interactive visualizations for activity gaps
+- ✅ Responsive layout with split-view design
+- ✅ Bootstrap-based styling and components
+- ✅ Visual status indicators and tooltips
+
+#### 3.2 Export Options
+- Add PDF export capability for reports
+- Support for Excel/CSV data export
+- Email report distribution options
 
 ### 4. Content Synchronization Validation
 

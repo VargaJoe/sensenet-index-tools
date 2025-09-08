@@ -1,0 +1,212 @@
+@using System.IO
+@using Microsoft.AspNetCore.Components
+
+@inherits ComponentBase
+
+@if (Show)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,.5);">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content shadow">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-folder2-open me-2"></i>
+                        Select Folder
+                    </h5>
+                    <button type="button" class="btn-close" aria-label="Close" @onclick="OnCancelClicked"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-folder"></i></span>
+                            <input class="form-control" value="@(_currentPath ?? "")" @onchange="OnPathTyped" />
+                            <button class="btn btn-outline-secondary" @onclick="GoUp" disabled="@(string.IsNullOrEmpty(_currentPath) || _currentPathRoot)">
+                                <i class="bi bi-arrow-up"></i>
+                            </button>
+                        </div>
+                        <div class="form-text">Navigate by clicking a directory. Use the up arrow to go to the parent folder.</div>
+                    </div>
+
+                    @if (_errorMessage is not null)
+                    {
+                        <div class="alert alert-warning py-1">@_errorMessage</div>
+                    }
+
+                    @if (_isAtDriveRoot)
+                    {
+                        <div class="list-group small">
+                            @foreach (var drive in _drives)
+                            {
+                                <button class="list-group-item list-group-item-action d-flex align-items-center" @onclick="() => Open(drive)">
+                                    <i class="bi bi-hdd-stack me-2"></i>
+                                    <span>@drive</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="list-group small">
+                            @foreach (var dir in _directories)
+                            {
+                                <button class="list-group-item list-group-item-action d-flex align-items-center" @onclick="() => Open(dir.FullPath)">
+                                    <i class="bi bi-folder-fill text-warning me-2"></i>
+                                    <span>@dir.Name</span>
+                                </button>
+                            }
+                            @if (_directories.Count == 0)
+                            {
+                                <div class="text-muted">No subdirectories</div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <div class="me-auto small text-muted">
+                        @(_currentPath ?? "Select a drive or directory")
+                    </div>
+                    <button class="btn btn-outline-secondary" @onclick="OnCancelClicked">Cancel</button>
+                    <button class="btn btn-primary" @onclick="Confirm" disabled="@(!_canSelect)">Select this folder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Show { get; set; }
+    [Parameter] public EventCallback<bool> ShowChanged { get; set; }
+    [Parameter] public string? InitialPath { get; set; }
+    [Parameter] public EventCallback<string> OnSelected { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string? _currentPath;
+    private bool _currentPathRoot;
+    private bool _isAtDriveRoot => string.IsNullOrEmpty(_currentPath);
+    private bool _canSelect => !string.IsNullOrEmpty(_currentPath) && Directory.Exists(_currentPath);
+    private string? _errorMessage;
+    private List<string> _drives = new();
+    private List<(string Name, string FullPath)> _directories = new();
+
+    protected override void OnParametersSet()
+    {
+        if (Show)
+        {
+            LoadDrives();
+            if (!string.IsNullOrWhiteSpace(InitialPath) && Directory.Exists(InitialPath))
+            {
+                TryOpen(InitialPath!);
+            }
+            else
+            {
+                // start at drive selection
+                _currentPath = null;
+                _currentPathRoot = false;
+                _directories.Clear();
+            }
+        }
+    }
+
+    private void LoadDrives()
+    {
+        try
+        {
+            _drives = Directory.GetLogicalDrives().OrderBy(d => d).ToList();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error loading drives: {ex.Message}";
+        }
+    }
+
+    private void Open(string path)
+    {
+        TryOpen(path);
+    }
+
+    private void TryOpen(string path)
+    {
+        try
+        {
+            var full = Path.GetFullPath(path);
+            var dirs = Directory.GetDirectories(full);
+            _directories = dirs
+                .Select(p => (Name: Path.GetFileName(p).Trim().Length == 0 ? p : Path.GetFileName(p), FullPath: p))
+                .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            _currentPath = full;
+            _currentPathRoot = Path.GetPathRoot(full)?.Equals(full, StringComparison.OrdinalIgnoreCase) == true;
+            _errorMessage = null;
+            StateHasChanged();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _errorMessage = "Access denied to this folder.";
+        }
+        catch (DirectoryNotFoundException)
+        {
+            _errorMessage = "Directory not found.";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Cannot open folder: {ex.Message}";
+        }
+    }
+
+    private void GoUp()
+    {
+        if (string.IsNullOrEmpty(_currentPath)) return;
+        try
+        {
+            var parent = Directory.GetParent(_currentPath);
+            if (parent == null)
+            {
+                // back to drive list
+                _currentPath = null;
+                _currentPathRoot = false;
+                _directories.Clear();
+            }
+            else
+            {
+                TryOpen(parent.FullName);
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Cannot go up: {ex.Message}";
+        }
+    }
+
+    private async Task Confirm()
+    {
+        if (_canSelect && _currentPath is not null)
+        {
+            await OnSelected.InvokeAsync(_currentPath);
+            await CloseAsync();
+        }
+    }
+
+    private async Task OnCancelClicked()
+    {
+        if (OnCancel.HasDelegate)
+            await OnCancel.InvokeAsync();
+        await CloseAsync();
+    }
+
+    private async Task CloseAsync()
+    {
+        if (ShowChanged.HasDelegate)
+        {
+            await ShowChanged.InvokeAsync(false);
+        }
+    }
+
+    private void OnPathTyped(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(val))
+        {
+            TryOpen(val);
+        }
+    }
+}

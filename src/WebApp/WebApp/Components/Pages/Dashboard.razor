@@ -1,0 +1,181 @@
+@page "/"
+@page "/dashboard"
+@inject ILogger<Dashboard> Logger
+
+<PageTitle>Dashboard - SenseNet Index Tools</PageTitle>
+
+<div class="sensenet-header mb-4">
+    <div class="d-flex align-items-center mb-3">
+        <img src="_content/WebApp/images/sensenet-logo.png" alt="SenseNet Logo" height="40" class="me-3" />
+        <h1 class="mb-0">SenseNet Index Maintenance Suite</h1>
+    </div>
+    <div class="alert alert-info" role="alert">
+        <i class="bi bi-info-circle-fill me-2"></i>
+        Comprehensive toolkit for managing and maintaining SenseNet Lucene.NET indexes.
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card mb-4 shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-lightning-charge me-2"></i>
+                    Quick Actions
+                </h5>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="d-grid">
+                            <a href="/lastactivityid" class="btn btn-primary btn-lg">
+                                <i class="bi bi-clock-history me-2"></i>
+                                LastActivityId Management
+                            </a>
+                        </div>
+                        <small class="text-muted">Get, set, or initialize LastActivityId values</small>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-grid">
+                            <a href="/validation" class="btn btn-outline-primary btn-lg">
+                                <i class="bi bi-shield-check me-2"></i>
+                                Index Validation
+                            </a>
+                        </div>
+                        <small class="text-muted">Validate index structure and integrity</small>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-grid">
+                            <a href="/subtree-check" class="btn btn-outline-primary btn-lg">
+                                <i class="bi bi-diagram-3 me-2"></i>
+                                Subtree Checking
+                            </a>
+                        </div>
+                        <small class="text-muted">Check database-index synchronization for subtrees</small>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-grid">
+                            <button class="btn btn-outline-primary btn-lg" disabled>
+                                <i class="bi bi-list-ul me-2"></i>
+                                Content Listing
+                            </button>
+                        </div>
+                        <small class="text-muted">List and compare content (Coming Soon)</small>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-grid">
+                            <a href="/reports" class="btn btn-outline-info btn-lg">
+                                <i class="bi bi-file-earmark-text me-2"></i>
+                                Reports
+                            </a>
+                        </div>
+                        <small class="text-muted">View, download, and manage saved reports</small>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-grid">
+                            <a href="/settings" class="btn btn-outline-secondary btn-lg">
+                                <i class="bi bi-gear-fill me-2"></i>
+                                Settings
+                            </a>
+                        </div>
+                        <small class="text-muted">Manage saved configurations</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-info-circle me-2"></i>
+                    Getting Started
+                </h5>
+                <p class="card-text">
+                    The SenseNet Index Maintenance Suite provides tools for managing LastActivityId values, 
+                    validating index integrity, and ensuring database-index synchronization.
+                </p>
+                <ul class="list-unstyled">
+                    <li><i class="bi bi-check-circle-fill text-success me-2"></i>Safe for live production indexes (read operations)</li>
+                    <li><i class="bi bi-check-circle-fill text-success me-2"></i>Automatic backup creation for write operations</li>
+                    <li><i class="bi bi-check-circle-fill text-success me-2"></i>Comprehensive validation and reporting</li>
+                    <li><i class="bi bi-check-circle-fill text-success me-2"></i>Command-line and web interfaces available</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-clock-history me-2"></i>
+                    Recent Reports
+                </h5>
+                @if (RecentReports.Any())
+                {
+                    <div class="list-group list-group-flush">
+                        @foreach (var report in RecentReports)
+                        {
+                            <div class="list-group-item d-flex justify-content-between align-items-start">
+                                <div class="ms-2 me-auto">
+                                    <div class="fw-bold">@report.Operation</div>
+                                    <small class="text-muted">@report.Timestamp.ToString("MMM dd, yyyy HH:mm")</small>
+                                </div>
+                                <span class="badge bg-@(report.Status == "Success" ? "success" : "warning") rounded-pill">
+                                    @report.Status
+                                </span>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="text-muted">No reports available yet.</p>
+                    <p class="small">
+                        Reports will appear here after running operations like LastActivityId management, 
+                        index validation, or subtree checking.
+                    </p>
+                }
+            </div>
+        </div>
+
+        <div class="card mt-4 shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-gear me-2"></i>
+                    System Status
+                </h5>
+                <ul class="list-unstyled">
+                    <li class="d-flex justify-content-between">
+                        <span>Web Interface</span>
+                        <span class="badge bg-success">Online</span>
+                    </li>
+                    <li class="d-flex justify-content-between">
+                        <span>SenseNet Tools</span>
+                        <span class="badge bg-success">v3.3.0</span>
+                    </li>
+                    <li class="d-flex justify-content-between">
+                        <span>Lucene Engine</span>
+                        <span class="badge bg-success">v7.5.1</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    // Placeholder for recent reports - will be replaced with actual service later
+    private List<ReportSummary> RecentReports = new();
+
+    protected override void OnInitialized()
+    {
+        // Placeholder data for demonstration
+        RecentReports = new List<ReportSummary>();
+    }
+
+    private class ReportSummary
+    {
+        public string Operation { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+        public string Status { get; set; } = string.Empty;
+    }
+}

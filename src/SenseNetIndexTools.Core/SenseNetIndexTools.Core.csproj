@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>SenseNetIndexTools</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Title>SenseNet Index Tools Core Library</Title>
+    <Authors>vargajoe</Authors>
+    <Description>Core library for SenseNet Lucene.NET index maintenance and validation</Description>
+    <PackageProjectUrl>https://github.com/vargajoe/sensenet-index-tools</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/vargajoe/sensenet-index-tools</RepositoryUrl>
+    <PackageTags>sensenet;lucene;index;search;maintenance</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+    <PackageReference Include="SenseNet.Search.Lucene29" Version="7.5.1" />
+    <PackageReference Include="SenseNet.Search.Lucene29.Local" Version="7.5.1" />
+    <PackageReference Include="SenseNet.ContentRepository" Version="7.8.1" />
+    <PackageReference Include="SenseNet.Search.Lucene29.Common" Version="7.5.1" />
+    <PackageReference Include="System.Data.SqlClient" Version="4.8.6" />
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+  </ItemGroup>
+
+</Project>

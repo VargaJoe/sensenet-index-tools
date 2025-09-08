@@ -3,20 +3,10 @@ using System.Data.SqlClient;
 
 namespace SenseNetIndexTools
 {
+    using DbContentItem = ContentItem;
+
     public class DatabaseLister
     {
-        private class ContentItem
-        {
-            public int NodeId { get; set; }
-            public int VersionId { get; set; }
-            public string Path { get; set; } = string.Empty;
-            public string NodeType { get; set; } = string.Empty;
-
-            public override string ToString()
-            {
-                return $"{NodeId}\t{VersionId}\t{Path}\t{NodeType}";
-            }
-        }
 
         public static Command Create()
         {
@@ -88,12 +78,12 @@ namespace SenseNetIndexTools
                     
                     if (items.Count > 0)
                     {
-                        Console.WriteLine("NodeID\tVersionId\tPath\tNodeType");
+                        Console.WriteLine("NodeId\tVersionId\tPath\tNodeType");
                         Console.WriteLine(new string('-', 80));
 
                         foreach (var item in items)
                         {
-                            Console.WriteLine(item.ToString());
+                            Console.WriteLine($"{item.NodeId}\t{item.VersionId}\t{item.Path}\t{item.NodeType}");
                         }
                     }
                 }
@@ -108,9 +98,9 @@ namespace SenseNetIndexTools
             return command;
         }
 
-        private static List<ContentItem> GetContentItemsFromDatabase(string connectionString, string path, bool recursive, int depth)
+        private static List<DbContentItem> GetContentItemsFromDatabase(string connectionString, string path, bool recursive, int depth)
         {
-            var items = new List<ContentItem>();
+            var items = new List<DbContentItem>();
             
             // Sanitize path for SQL query
             string sanitizedPath = path.Replace("'", "''");
@@ -154,7 +144,7 @@ namespace SenseNetIndexTools
                     {
                         while (reader.Read())
                         {
-                            items.Add(new ContentItem
+                            items.Add(new DbContentItem
                             {
                                 NodeId = reader.GetInt32(reader.GetOrdinal("NodeId")),
                                 VersionId = reader.GetInt32(reader.GetOrdinal("VersionId")),
