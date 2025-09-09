@@ -5,7 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-  <ItemGroup>    <ProjectReference Include="..\WebApp.Client\WebApp.Client.csproj" />
+  <ItemGroup>
+    <PackageReference Include="SenseNet.ContentRepository" Version="7.8.1" />    <ProjectReference Include="..\WebApp.Client\WebApp.Client.csproj" />
     <ProjectReference Include="..\..\MainProgram\sn-index-maintenance-suite.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="8.0.18" />
     <PackageReference Include="SenseNet.Tools" Version="3.3.0" />

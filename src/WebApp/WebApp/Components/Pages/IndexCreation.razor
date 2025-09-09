@@ -1,0 +1,489 @@
+@page "/indexcreation"
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@using WebApp.Services
+@using WebApp.Components
+@using WebApp.Models
+@using SenseNetIndexTools
+@inject IndexCreationService CreationService
+@inject IJSRuntime JSRuntime
+@inject ILogger<IndexCreation> Logger
+@rendermode InteractiveServer
+
+<PageTitle>Index Creation</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="mb-0">
+                    <i class="bi bi-plus-circle text-success me-2"></i>
+                    Index Creation
+                </h1>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-0">
+                        <li class="breadcrumb-item"><a href="/">Home</a></li>
+                        <li class="breadcrumb-item active">Index Creation</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Configuration Selector -->
+            <ConfigurationSelector OnConfigurationApplied="OnConfigurationApplied" />
+            
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-gear me-2"></i>
+                        Index Creation Configuration
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <EditForm Model="@creationOptions" OnValidSubmit="@CreateIndex">
+                        <DataAnnotationsValidator />
+
+                        <!-- Connection String -->
+                        <div class="mb-3">
+                            <label for="connectionString" class="form-label">
+                                <i class="bi bi-database me-1"></i>
+                                SenseNet Database Connection String
+                            </label>
+                            <InputText id="connectionString" 
+                                     @bind-Value="creationOptions.ConnectionString" 
+                                     class="form-control" 
+                                     placeholder="Data Source=server;Initial Catalog=database;..." />
+                            <ValidationMessage For="@(() => creationOptions.ConnectionString)" />
+                        </div>
+
+                        <!-- Repository Path -->
+                        <div class="mb-3">
+                            <label for="repositoryPath" class="form-label">
+                                <i class="bi bi-folder2-open me-1"></i>
+                                Repository Path
+                            </label>
+                            <InputText id="repositoryPath" 
+                                     @bind-Value="creationOptions.RepositoryPath" 
+                                     class="form-control" 
+                                     placeholder="/Root or /Root/Content..." />
+                            <div class="form-text">
+                                SenseNet repository path to index (e.g., /Root, /Root/Content, /Root/Sites/Default_Site)
+                            </div>
+                            <ValidationMessage For="@(() => creationOptions.RepositoryPath)" />
+                        </div>
+
+                        <!-- Output Path -->
+                        <div class="mb-3">
+                            <label for="outputPath" class="form-label">
+                                <i class="bi bi-folder me-1"></i>
+                                Index Output Path
+                            </label>
+                            <InputText id="outputPath" 
+                                     @bind-Value="creationOptions.OutputPath" 
+                                     class="form-control" 
+                                     placeholder="D:\LuceneIndex or leave empty for default..." />
+                            <div class="form-text">
+                                Directory where the Lucene index will be created (optional - defaults to SenseNet configuration)
+                            </div>
+                            <ValidationMessage For="@(() => creationOptions.OutputPath)" />
+                        </div>
+
+                        <!-- Processing Options -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <InputCheckbox id="recursive" 
+                                                 @bind-Value="creationOptions.Recursive" 
+                                                 class="form-check-input" />
+                                    <label for="recursive" class="form-check-label">
+                                        <i class="bi bi-arrow-down-circle me-1"></i>
+                                        Recursive Processing
+                                    </label>
+                                </div>
+                                <div class="form-text">
+                                    Process all content recursively from the specified path
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <InputCheckbox id="forceReindex" 
+                                                 @bind-Value="creationOptions.ForceReindex" 
+                                                 class="form-check-input" />
+                                    <label for="forceReindex" class="form-check-label">
+                                        <i class="bi bi-arrow-clockwise me-1"></i>
+                                        Force Reindex
+                                    </label>
+                                </div>
+                                <div class="form-text">
+                                    Recreate index even if it already exists
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Performance Settings -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="batchSize" class="form-label">
+                                    <i class="bi bi-layers me-1"></i>
+                                    Batch Size
+                                </label>
+                                <InputNumber id="batchSize" 
+                                           @bind-Value="creationOptions.BatchSize" 
+                                           class="form-control" 
+                                           min="1" max="1000" />
+                                <div class="form-text">
+                                    Number of items to process in each batch (1-1000)
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="maxItems" class="form-label">
+                                    <i class="bi bi-list-ol me-1"></i>
+                                    Max Items (0 = unlimited)
+                                </label>
+                                <InputNumber id="maxItems" 
+                                           @bind-Value="creationOptions.MaxItems" 
+                                           class="form-control" 
+                                           min="0" />
+                                <div class="form-text">
+                                    Maximum number of items to index (0 for unlimited)
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Report Settings -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="reportFormat" class="form-label">
+                                    <i class="bi bi-file-text me-1"></i>
+                                    Report Detail Level
+                                </label>
+                                <InputSelect id="reportFormat" @bind-Value="creationOptions.ReportFormat" class="form-select">
+                                    <option value="summary">Summary</option>
+                                    <option value="detailed">Detailed</option>
+                                    <option value="verbose">Verbose</option>
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="outputFormat" class="form-label">
+                                    <i class="bi bi-filetype-html me-1"></i>
+                                    Output Format
+                                </label>
+                                <InputSelect id="outputFormat" @bind-Value="creationOptions.OutputFormat" class="form-select">
+                                    <option value="md">Markdown</option>
+                                    <option value="html">HTML</option>
+                                </InputSelect>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="button" class="btn btn-outline-secondary" @onclick="ResetForm" disabled="@isProcessing">
+                                <i class="bi bi-arrow-clockwise me-1"></i>
+                                Reset
+                            </button>
+                            <button type="submit" class="btn btn-success" disabled="@isProcessing">
+                                @if (isProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                    <span>Creating Index...</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-plus-circle me-1"></i>
+                                    <span>Create Index</span>
+                                }
+                            </button>
+                        </div>
+
+                        <ValidationSummary />
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Progress Card -->
+            @if (isProcessing)
+            {
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-hourglass-split me-2"></i>
+                            Progress
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="progress mb-2">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: 100%"></div>
+                        </div>
+                        <small class="text-muted">Creating SenseNet index...</small>
+                    </div>
+                </div>
+            }
+
+            <!-- Results Card -->
+            @if (creationResult != null)
+            {
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="card-title mb-0">
+                            @if (creationResult.Success)
+                            {
+                                <i class="bi bi-check-circle text-success me-2"></i>
+                                <span>Index Creation Successful</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-x-circle text-danger me-2"></i>
+                                <span>Index Creation Failed</span>
+                            }
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <strong>Repository:</strong> @creationResult.RepositoryPath
+                        </div>
+                        <div class="mb-2">
+                            <strong>Duration:</strong> @creationResult.Duration.TotalSeconds.ToString("F1")s
+                        </div>
+                        <div class="mb-3">
+                            <strong>Message:</strong> @creationResult.Message
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(creationResult.ReportContent))
+                        {
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => DownloadReport(creationResult)">
+                                    <i class="bi bi-download me-1"></i>
+                                    Download Report
+                                </button>
+                                <button type="button" class="btn btn-outline-info btn-sm" @onclick="() => PreviewReport(creationResult)">
+                                    <i class="bi bi-eye me-1"></i>
+                                    Preview Report
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Help Card -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Help & Tips
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">
+                            <i class="bi bi-lightbulb text-warning me-2"></i>
+                            Use SenseNet repository paths starting with /Root
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-lightbulb text-warning me-2"></i>
+                            Batch size affects memory usage vs. performance
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-lightbulb text-warning me-2"></i>
+                            Force reindex recreates existing indexes
+                        </li>
+                        <li class="mb-0">
+                            <i class="bi bi-lightbulb text-warning me-2"></i>
+                            Leave output path empty to use SenseNet defaults
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Report Preview Modal -->
+@if (showReportPreview && previewContent != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Index Creation Report Preview</h5>
+                    <button type="button" class="btn-close" @onclick="CloseReportPreview"></button>
+                </div>
+                <div class="modal-body">
+                    @if (previewIsHtml)
+                    {
+                        @((MarkupString)previewContent)
+                    }
+                    else
+                    {
+                        <pre class="bg-light p-3 rounded" style="max-height: 70vh; overflow-y: auto;">@previewContent</pre>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseReportPreview">Close</button>
+                    <button type="button" class="btn btn-primary" @onclick="() => DownloadReport(creationResult!)">
+                        <i class="bi bi-download me-1"></i>
+                        Download Report
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IndexCreationOptions creationOptions = new();
+    private IndexCreationServiceResult? creationResult;
+    private bool isProcessing = false;
+
+    // Report preview
+    private bool showReportPreview = false;
+    private string? previewContent;
+    private bool previewIsHtml = false;
+
+    // Configuration management
+    private string? currentConfigurationId;
+    private string? currentConfigurationName;
+
+    protected override void OnInitialized()
+    {
+        ResetForm();
+    }
+
+    private void ResetForm()
+    {
+        creationOptions = new IndexCreationOptions
+        {
+            ConnectionString = "",
+            RepositoryPath = "/Root",
+            OutputPath = "",
+            Recursive = true,
+            BatchSize = 100,
+            MaxItems = 0,
+            ForceReindex = false,
+            ReportFormat = "summary",
+            OutputFormat = "md"
+        };
+        
+        creationResult = null;
+        StateHasChanged();
+    }
+
+    private async Task CreateIndex()
+    {
+        try
+        {
+            isProcessing = true;
+            creationResult = null;
+            StateHasChanged();
+
+            Logger.LogInformation("Starting index creation for repository: {RepositoryPath}", creationOptions.RepositoryPath);
+
+            creationResult = await CreationService.CreateIndexAsync(creationOptions, 
+                string.IsNullOrEmpty(currentConfigurationId) ? null : Guid.Parse(currentConfigurationId), 
+                currentConfigurationName);
+
+            Logger.LogInformation("Index creation completed. Success: {Success}", creationResult.Success);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during index creation");
+            
+            creationResult = new IndexCreationServiceResult
+            {
+                RepositoryPath = creationOptions.RepositoryPath,
+                StartTime = DateTime.UtcNow,
+                EndTime = DateTime.UtcNow,
+                Success = false,
+                Message = $"Error: {ex.Message}",
+                Options = creationOptions
+            };
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnConfigurationApplied(SavedConfiguration configuration)
+    {
+        try
+        {
+            currentConfigurationId = configuration.Id.ToString();
+            currentConfigurationName = configuration.Name;
+
+            // Apply configuration values to the creation options
+            if (!string.IsNullOrEmpty(configuration.ConnectionString))
+            {
+                creationOptions.ConnectionString = configuration.ConnectionString;
+            }
+            
+            if (!string.IsNullOrEmpty(configuration.RepositoryPath))
+            {
+                creationOptions.RepositoryPath = configuration.RepositoryPath;
+            }
+            
+            if (!string.IsNullOrEmpty(configuration.DefaultOutputPath))
+            {
+                creationOptions.OutputPath = configuration.DefaultOutputPath;
+            }
+
+            Logger.LogInformation("Applied configuration: {Name}", configuration.Name);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error applying configuration: {Name}", configuration.Name);
+        }
+    }
+
+    private async Task DownloadReport(IndexCreationServiceResult result)
+    {
+        if (string.IsNullOrEmpty(result.ReportContent))
+            return;
+
+        try
+        {
+            var isHtml = result.Options?.OutputFormat?.ToLower() == "html";
+            var extension = isHtml ? "html" : "md";
+            var mimeType = isHtml ? "text/html" : "text/markdown";
+            var fileName = $"index-creation-report-{DateTime.Now:yyyy-MM-dd-HHmm}.{extension}";
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes(result.ReportContent);
+            var base64 = Convert.ToBase64String(bytes);
+            var dataUrl = $"data:{mimeType};base64,{base64}";
+
+            await JSRuntime.InvokeVoidAsync("downloadFile", dataUrl, fileName);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error downloading report");
+        }
+    }
+
+    private void PreviewReport(IndexCreationServiceResult result)
+    {
+        if (string.IsNullOrEmpty(result.ReportContent))
+            return;
+
+        previewContent = result.ReportContent;
+        previewIsHtml = result.Options?.OutputFormat?.ToLower() == "html";
+        showReportPreview = true;
+        StateHasChanged();
+    }
+
+    private void CloseReportPreview()
+    {
+        showReportPreview = false;
+        previewContent = null;
+        previewIsHtml = false;
+        StateHasChanged();
+    }
+}
