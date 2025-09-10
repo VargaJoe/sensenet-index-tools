@@ -24,7 +24,10 @@ public class IndexCreationOptions
     public string OutputFormat { get; set; } = "md";
     
     // Indexing approach selection
-    public string IndexingApproach { get; set; } = "manual"; // "manual" or "native"
+    public string IndexingApproach { get; set; } = "native"; // "manual" or "native"
+    
+    // Subfolder creation option
+    public bool CreateSubfolder { get; set; } = false;
     
     // Configuration tracking for better report naming
     public string? ConfigurationId { get; set; }

@@ -121,6 +121,20 @@
                                     Recreate index even if it already exists
                                 </div>
                             </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <InputCheckbox id="createSubfolder" 
+                                                 @bind-Value="creationOptions.CreateSubfolder" 
+                                                 class="form-check-input" />
+                                    <label for="createSubfolder" class="form-check-label">
+                                        <i class="bi bi-folder-plus me-1"></i>
+                                        Create Subfolder
+                                    </label>
+                                </div>
+                                <div class="form-text">
+                                    Create index in timestamped subfolder (default: use selected folder directly)
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Performance Settings -->
@@ -186,24 +200,24 @@
                                     Indexing Approach
                                 </label>
                                 <InputSelect id="indexingApproach" @bind-Value="creationOptions.IndexingApproach" class="form-select">
-                                    <option value="manual">Manual Field Selection (Stable - Recommended)</option>
-                                    <option value="native">SenseNet Native Indexing (Experimental)</option>
+                                    <option value="native">SenseNet Native Indexing (Recommended)</option>
+                                    <option value="manual">Manual Field Selection (Alternative)</option>
                                 </InputSelect>
                                 <div class="form-text">
                                     @if (creationOptions.IndexingApproach == "native")
                                     {
-                                        <span class="text-warning">
-                                            <i class="bi bi-exclamation-triangle me-1"></i>
-                                            <strong>Experimental:</strong> Uses SenseNet's native Repository.Start() and content.Index() for automatic field discovery. 
-                                            May require additional setup and could conflict with WebApp context.
+                                        <span class="text-success">
+                                            <i class="bi bi-check-circle me-1"></i>
+                                            <strong>Recommended:</strong> Uses SenseNet's proven database schema for complete field discovery. 
+                                            Creates fully compatible indexes with all content types and unlimited dynamic fields.
                                         </span>
                                     }
                                     else
                                     {
-                                        <span class="text-success">
-                                            <i class="bi bi-check-circle me-1"></i>
-                                            <strong>Stable:</strong> Manually selects fields to index with comprehensive SenseNet compatibility. 
-                                            Includes dynamic property discovery from FlatProperties, TextProperties, and BinaryProperties tables.
+                                        <span class="text-info">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            <strong>Alternative:</strong> Manually selects fields to index with basic SenseNet compatibility. 
+                                            Uses hardcoded field mapping with dynamic property discovery.
                                         </span>
                                     }
                                 </div>

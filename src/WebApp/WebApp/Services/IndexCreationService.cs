@@ -368,7 +368,9 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
 
             // Create index directory
             var outputPath = options.OutputPath ?? IOPath.Combine(IODirectory.GetCurrentDirectory(), "IndexOutput");
-            var indexPath = IOPath.Combine(outputPath, $"SenseNetIndex_{DateTime.Now:yyyyMMddHHmmss}");
+            var indexPath = options.CreateSubfolder 
+                ? IOPath.Combine(outputPath, $"SenseNetIndex_{DateTime.Now:yyyyMMddHHmmss}")
+                : outputPath;
             IODirectory.CreateDirectory(indexPath);
             _logger.LogInformation("Created SenseNet index directory: {IndexPath}", indexPath);
 
@@ -734,6 +736,12 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
         var outputPath = string.IsNullOrEmpty(options.OutputPath) 
             ? Path.Combine(System.IO.Directory.GetCurrentDirectory(), "IndexOutput", $"SenseNetNativeIndex_{DateTime.Now:yyyyMMddHHmmss}")
             : options.OutputPath;
+            
+        // Apply subfolder logic if CreateSubfolder is true
+        if (!string.IsNullOrEmpty(options.OutputPath) && options.CreateSubfolder)
+        {
+            outputPath = Path.Combine(options.OutputPath, $"SenseNetNativeIndex_{DateTime.Now:yyyyMMddHHmmss}");
+        }
 
         try
         {
