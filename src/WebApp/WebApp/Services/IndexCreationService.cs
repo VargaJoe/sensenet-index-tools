@@ -6,6 +6,10 @@ using SenseNet.ContentRepository;
 using SenseNet.ContentRepository.Storage;
 using SenseNet.ContentRepository.Search;
 using SenseNet.Configuration;
+using SenseNet.Search.Lucene29;
+using SenseNet.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Lucene.Net.Store;
 using Lucene.Net.Index;
 using Lucene.Net.Analysis.Standard;
@@ -315,7 +319,7 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
         
         try
         {
-            _logger.LogInformation("Creating REAL working Lucene index using SenseNet.Search.Lucene29 with dynamic field discovery");
+            _logger.LogInformation("Creating SenseNet-compatible index using direct Lucene29 API");
             
             // Validate connection string
             if (!ValidateConnectionString(options.ConnectionString))
@@ -334,24 +338,23 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
 
             // Create index directory
             var outputPath = options.OutputPath ?? IOPath.Combine(IODirectory.GetCurrentDirectory(), "IndexOutput");
-            var indexPath = IOPath.Combine(outputPath, $"WorkingLuceneIndex_{DateTime.Now:yyyyMMddHHmmss}");
+            var indexPath = IOPath.Combine(outputPath, $"SenseNetIndex_{DateTime.Now:yyyyMMddHHmmss}");
             IODirectory.CreateDirectory(indexPath);
-            _logger.LogInformation("Created REAL Lucene index directory: {IndexPath}", indexPath);
+            _logger.LogInformation("Created SenseNet index directory: {IndexPath}", indexPath);
 
-            // Create REAL working Lucene index using SenseNet's Lucene29 API
-            _logger.LogInformation("Initializing REAL Lucene index writer with SenseNet.Search.Lucene29");
+            // Use direct SenseNet Lucene29 API for index creation
+            _logger.LogInformation("Initializing SenseNet Lucene29 index writer for real index creation");
             
-            // Use SenseNet's Lucene29 API to create searchable index
+            // Create real SenseNet-compatible Lucene index using Lucene29 API
             using var directory = Lucene.Net.Store.FSDirectory.Open(new System.IO.DirectoryInfo(indexPath));
             using var analyzer = new Lucene.Net.Analysis.Standard.StandardAnalyzer(Lucene.Net.Util.Version.LUCENE_29);
             using var indexWriter = new Lucene.Net.Index.IndexWriter(directory, analyzer, true, Lucene.Net.Index.IndexWriter.MaxFieldLength.UNLIMITED);
-            
-            // Connect to database for real content processing
+
+            // Get total count for progress tracking
             using var connection = new SqlConnection(options.ConnectionString);
             await connection.OpenAsync();
-            _logger.LogInformation("Connected to database for REAL content indexing");
-
-            // Get total count
+            _logger.LogInformation("Connected to database for SenseNet content processing");
+            
             var countCommand = new SqlCommand(@"
                 SELECT COUNT(*) 
                 FROM Nodes N 
@@ -360,22 +363,24 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
             
             var countResult = await countCommand.ExecuteScalarAsync();
             var totalCount = countResult != null ? (int)countResult : 0;
-            _logger.LogInformation("Found {TotalCount} content items for SenseNet native indexing", totalCount);
+            _logger.LogInformation("Found {TotalCount} content items for SenseNet-compatible indexing", totalCount);
 
             var batchSize = options.BatchSize;
             processedCount = 0;
-            
-            // Create SenseNet index structure instead of raw Lucene operations
-            _logger.LogInformation("Creating SenseNet-compatible index structure with native indexing");
+
+            // Create SenseNet-compatible index documents batch by batch
+            _logger.LogInformation("Creating SenseNet-compatible index with real Lucene documents");
             for (int offset = 0; offset < totalCount; offset += batchSize)
             {
                 var remainingCount = Math.Min(batchSize, totalCount - offset);
-                
+
                 var batchCommand = new SqlCommand($@"
                     SELECT N.NodeId, N.Path, N.Name, N.DisplayName, N.[Index], N.CreationDate, N.ModificationDate,
-                           NT.Name as NodeType, V.VersionId, V.MajorNumber, V.MinorNumber, V.Status
-                    FROM Nodes N 
-                    INNER JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId 
+                           NT.Name as NodeType, V.VersionId, V.MajorNumber, V.MinorNumber, V.Status,
+                           CAST(V.Timestamp as bigint) as VersionTimestampValue,
+                           CAST(N.Timestamp as bigint) as NodeTimestampValue
+                    FROM Nodes N
+                    INNER JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
                     INNER JOIN Versions V ON N.NodeId = V.NodeId
                     WHERE NT.Name != 'NodeType'
                     ORDER BY N.NodeId 
@@ -388,9 +393,9 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
                 {
                     try
                     {
-                        // Create REAL Lucene document for each content item
+                        // Create SenseNet-compatible Lucene document
                         var document = new Lucene.Net.Documents.Document();
-                        
+
                         var nodeId = reader.GetInt32(0);
                         var path = reader.GetString(1);
                         var name = reader.GetString(2);
@@ -403,8 +408,10 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
                         var creationDate = reader.GetDateTime(5);
                         var modificationDate = reader.GetDateTime(6);
                         var status = reader.GetInt16(11);
+                        var versionTimestampValue = reader.GetInt64(12);  // V.Timestamp - Version-level timestamp
+                        var nodeTimestampValue = reader.GetInt64(13);     // N.Timestamp - Node-level timestamp
 
-                        // Add REAL Lucene fields to create searchable index
+                        // Add SenseNet standard fields for compatibility
                         document.Add(new Lucene.Net.Documents.Field("NodeId", nodeId.ToString(), Lucene.Net.Documents.Field.Store.YES, Lucene.Net.Documents.Field.Index.NOT_ANALYZED));
                         document.Add(new Lucene.Net.Documents.Field("VersionId", versionId.ToString(), Lucene.Net.Documents.Field.Store.YES, Lucene.Net.Documents.Field.Index.NOT_ANALYZED));
                         document.Add(new Lucene.Net.Documents.Field("Path", path.ToLowerInvariant(), Lucene.Net.Documents.Field.Store.YES, Lucene.Net.Documents.Field.Index.NOT_ANALYZED));
@@ -417,13 +424,16 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
                         document.Add(new Lucene.Net.Documents.Field("ModificationDate", modificationDate.ToString("yyyyMMddHHmmss"), Lucene.Net.Documents.Field.Store.YES, Lucene.Net.Documents.Field.Index.NOT_ANALYZED));
                         document.Add(new Lucene.Net.Documents.Field("Status", status.ToString(), Lucene.Net.Documents.Field.Store.YES, Lucene.Net.Documents.Field.Index.NOT_ANALYZED));
                         
+                        // Add both timestamp fields for complete SenseNet compatibility
+                        document.Add(new Lucene.Net.Documents.Field("NodeTimestamp", nodeTimestampValue.ToString(), Lucene.Net.Documents.Field.Store.YES, Lucene.Net.Documents.Field.Index.NOT_ANALYZED));
+                        document.Add(new Lucene.Net.Documents.Field("VersionTimestamp", versionTimestampValue.ToString(), Lucene.Net.Documents.Field.Store.YES, Lucene.Net.Documents.Field.Index.NOT_ANALYZED));
+
                         // Initialize collection for full-text search content
                         var allTextParts = new List<string> { name, displayName, path, nodeType };
-                        
-                        // *** DYNAMICALLY ADD ALL SENSENET PROPERTIES ***
-                        // This discovers and indexes ALL content properties without hardcoding
-                        await AddDynamicPropertiesToDocument(connection, versionId, document, allTextParts);
-                        
+
+                        // Dynamically add ALL SenseNet properties for unlimited field support
+                        await AddSenseNetCompatiblePropertiesToDocument(options.ConnectionString, versionId, document, allTextParts);
+
                         // Add comprehensive full-text search field with ALL content
                         var allText = string.Join(" ", allTextParts.Where(p => !string.IsNullOrWhiteSpace(p))).ToLowerInvariant();
                         document.Add(new Lucene.Net.Documents.Field("AllText", allText, Lucene.Net.Documents.Field.Store.NO, Lucene.Net.Documents.Field.Index.ANALYZED));
@@ -434,7 +444,7 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
 
                         if (processedCount % 100 == 0)
                         {
-                            _logger.LogInformation("SenseNet Dynamic Index: Indexed {ProcessedCount}/{TotalCount} documents with ALL properties ({Percentage:F1}%)", 
+                            _logger.LogInformation("SenseNet-compatible Index: Indexed {ProcessedCount}/{TotalCount} documents with ALL properties ({Percentage:F1}%)",
                                 processedCount, totalCount, (double)processedCount / totalCount * 100);
                         }
 
@@ -451,13 +461,40 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
                     break;
             }
 
-            // Optimize and commit the ACTUAL Lucene index
+            // Get the current maximum LastActivityId from database to use in commit metadata
+            // Use the same query as LastActivityIdService for consistency  
+            int maxLastActivityId = 0;
+            using (var dbConnection = new SqlConnection(options.ConnectionString))
+            {
+                await dbConnection.OpenAsync();
+                var getMaxActivityIdQuery = "SELECT TOP 1 [IndexingActivityId] FROM [dbo].[IndexingActivities] ORDER BY IndexingActivityId DESC";
+                using var command = new SqlCommand(getMaxActivityIdQuery, dbConnection);
+                var result = await command.ExecuteScalarAsync();
+                
+                if (result != null && result != DBNull.Value)
+                {
+                    maxLastActivityId = Convert.ToInt32(result);
+                }
+                _logger.LogInformation("Retrieved LastActivityId from IndexingActivities table: {LastActivityId}", maxLastActivityId);
+            }
+
+            // Store LastActivityId in index commit metadata for SenseNet compatibility
+            var commitData = new Dictionary<string, string>
+            {
+                { "LastActivityId", maxLastActivityId.ToString() }
+            };
+
+            // Optimize the real Lucene index
+            indexWriter.Optimize();
+            
+            // Commit with LastActivityId metadata - critical for SenseNet LastActivityId checks
+            indexWriter.Commit(commitData);
             
             var endTime = DateTime.UtcNow;
             var duration = endTime - startTime;
             var indexFiles = IODirectory.GetFiles(indexPath, "*", SearchOption.AllDirectories);
             
-            _logger.LogInformation("SenseNet native index creation completed: {ProcessedCount} items, {FileCount} files, {Duration:F1}s", 
+            _logger.LogInformation("SenseNet-compatible index creation completed: {ProcessedCount} items, {FileCount} files, {Duration:F1}s", 
                 processedCount, indexFiles.Length, duration.TotalSeconds);
 
             return new IndexCreationServiceResult
@@ -466,7 +503,7 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
                 StartTime = startTime,
                 EndTime = endTime,
                 Success = true,
-                Message = $"Successfully created SenseNet-compatible index with {processedCount:N0} content items in {duration.TotalSeconds:F1} seconds. Index contains {indexFiles.Length} files using SenseNet native indexing approach (unlimited fields).",
+                Message = $"Successfully created SenseNet-compatible index with {processedCount:N0} content items in {duration.TotalSeconds:F1} seconds. Index contains {indexFiles.Length} files with full SenseNet compatibility including LastActivityId and all dynamic fields.",
                 ProcessedItemCount = processedCount,
                 IndexPath = indexPath,
                 Options = options
@@ -474,7 +511,7 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "ACTUAL Lucene index creation failed: {ErrorMessage}", ex.Message);
+            _logger.LogError(ex, "SenseNet-compatible index creation failed: {ErrorMessage}", ex.Message);
             
             return new IndexCreationServiceResult
             {
@@ -482,7 +519,7 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
                 StartTime = startTime,
                 EndTime = DateTime.UtcNow,
                 Success = false,
-                Message = $"ACTUAL Lucene index creation failed: {ex.Message}",
+                Message = $"SenseNet-compatible index creation failed: {ex.Message}",
                 ProcessedItemCount = processedCount,
                 Options = options
             };
@@ -491,45 +528,128 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
 
     /// <summary>
     /// Dynamically discovers and adds ALL available SenseNet properties for a specific content item
-    /// This approach handles unlimited custom fields without hardcoding
+    /// This approach handles unlimited custom fields with SenseNet-compatible indexing
+    /// Now with automatic table discovery for database compatibility
     /// </summary>
-    private async System.Threading.Tasks.Task AddDynamicPropertiesToDocument(SqlConnection connection, int versionId, Lucene.Net.Documents.Document document, IList<string> allTextParts)
+    private async System.Threading.Tasks.Task AddSenseNetCompatiblePropertiesToDocument(string connectionString, int versionId, Lucene.Net.Documents.Document document, IList<string> allTextParts)
     {
         try
         {
-            // Query ALL property types and their values for this specific content version
-            // This covers all SenseNet property storage tables dynamically
-            var dynamicPropsQuery = @"
-                -- Get String/Text properties
-                SELECT pt.Name as PropertyName, fp.Value as PropertyValue, pt.DataType, 'FlatProperties' as Source
-                FROM FlatProperties fp
-                INNER JOIN PropertyTypes pt ON fp.PropertyTypeId = pt.PropertyTypeId
-                WHERE fp.VersionId = @VersionId AND fp.Value IS NOT NULL
+            // Use a separate connection to avoid DataReader conflicts
+            using var connection = new SqlConnection(connectionString);
+            await connection.OpenAsync();
+            
+            // First, detect what property storage tables exist in this database and their column structures
+            var tableSchemaQuery = @"
+                SELECT 
+                    t.TABLE_NAME,
+                    c.COLUMN_NAME,
+                    c.DATA_TYPE
+                FROM INFORMATION_SCHEMA.TABLES t
+                INNER JOIN INFORMATION_SCHEMA.COLUMNS c ON t.TABLE_NAME = c.TABLE_NAME
+                WHERE t.TABLE_TYPE = 'BASE TABLE' 
+                AND t.TABLE_NAME IN ('FlatProperties', 'TextProperties', 'BinaryProperties', 'PropertyTypes', 'SchemaPropertyTypes')
+                ORDER BY t.TABLE_NAME, c.ORDINAL_POSITION";
                 
-                UNION ALL
+            var tableStructures = new Dictionary<string, List<string>>();
+            using var schemaCommand = new SqlCommand(tableSchemaQuery, connection);
+            using var schemaReader = await schemaCommand.ExecuteReaderAsync();
+            while (await schemaReader.ReadAsync())
+            {
+                var tableName = schemaReader.GetString(0);
+                var columnName = schemaReader.GetString(1);
                 
-                -- Get Text properties (long text content)
-                SELECT pt.Name as PropertyName, tp.Value as PropertyValue, pt.DataType, 'TextProperties' as Source  
-                FROM TextProperties tp
-                INNER JOIN PropertyTypes pt ON tp.PropertyTypeId = pt.PropertyTypeId
-                WHERE tp.VersionId = @VersionId AND tp.Value IS NOT NULL
+                if (!tableStructures.ContainsKey(tableName))
+                    tableStructures[tableName] = new List<string>();
+                tableStructures[tableName].Add(columnName);
+            }
+            schemaReader.Close();
+            
+            _logger.LogInformation("Database table structures for VersionId {VersionId}: {TableStructures}", 
+                versionId, string.Join("; ", tableStructures.Select(kvp => $"{kvp.Key}: [{string.Join(", ", kvp.Value)}]")));
+            
+            if (tableStructures.Count == 0)
+            {
+                _logger.LogInformation("No SenseNet property storage tables found in database. Skipping dynamic properties for VersionId {VersionId}", versionId);
+                return;
+            }
+            
+            // Build dynamic query based on available tables and their actual column structures
+            var queries = new List<string>();
+            
+            // Determine property types table name and its ID column
+            string? propertyTypesTable = null;
+            string? idColumn = null;
+            
+            if (tableStructures.ContainsKey("PropertyTypes"))
+            {
+                propertyTypesTable = "PropertyTypes";
+                idColumn = tableStructures["PropertyTypes"].Contains("Id") ? "Id" : "PropertyTypeId";
+            }
+            else if (tableStructures.ContainsKey("SchemaPropertyTypes"))
+            {
+                propertyTypesTable = "SchemaPropertyTypes";
+                idColumn = tableStructures["SchemaPropertyTypes"].Contains("PropertyTypeId") ? "PropertyTypeId" : "Id";
+            }
+            
+            if (propertyTypesTable == null)
+            {
+                _logger.LogWarning("No PropertyTypes or SchemaPropertyTypes table found. Cannot retrieve dynamic properties for VersionId {VersionId}", versionId);
+                return;
+            }
+            
+            // Build queries for each available property storage table with correct column names
+            if (tableStructures.ContainsKey("FlatProperties"))
+            {
+                queries.Add($@"
+                    SELECT pt.Name as PropertyName, fp.Value as PropertyValue, pt.DataType, 'FlatProperties' as Source
+                    FROM FlatProperties fp
+                    INNER JOIN {propertyTypesTable} pt ON fp.PropertyTypeId = pt.{idColumn}
+                    WHERE fp.VersionId = @VersionId AND fp.Value IS NOT NULL");
+            }
+            
+            if (tableStructures.ContainsKey("TextProperties"))
+            {
+                queries.Add($@"
+                    SELECT pt.Name as PropertyName, tp.Value as PropertyValue, pt.DataType, 'TextProperties' as Source  
+                    FROM TextProperties tp
+                    INNER JOIN {propertyTypesTable} pt ON tp.PropertyTypeId = pt.{idColumn}
+                    WHERE tp.VersionId = @VersionId AND tp.Value IS NOT NULL");
+            }
+            
+            if (tableStructures.ContainsKey("BinaryProperties"))
+            {
+                var binaryColumns = tableStructures["BinaryProperties"];
+                var sizeColumn = binaryColumns.Contains("Size") ? "Size" : 
+                               binaryColumns.Contains("BinarySize") ? "BinarySize" : 
+                               binaryColumns.Contains("Length") ? "Length" : "0";
+                var contentTypeColumn = binaryColumns.Contains("ContentType") ? "ContentType" : 
+                                      binaryColumns.Contains("MimeType") ? "MimeType" : 
+                                      "'unknown'";
                 
-                UNION ALL
-                
-                -- Get Binary property metadata
-                SELECT pt.Name as PropertyName, 
-                       CAST(bp.Size as NVARCHAR) + ' bytes (' + ISNULL(bp.ContentType, 'unknown') + ')' as PropertyValue,
-                       pt.DataType, 'BinaryProperties' as Source
-                FROM BinaryProperties bp
-                INNER JOIN PropertyTypes pt ON bp.PropertyTypeId = pt.PropertyTypeId  
-                WHERE bp.VersionId = @VersionId
-                
-                ORDER BY PropertyName";
-
+                queries.Add($@"
+                    SELECT pt.Name as PropertyName, 
+                           CAST({sizeColumn} as NVARCHAR) + ' bytes (' + ISNULL({contentTypeColumn}, 'unknown') + ')' as PropertyValue,
+                           pt.DataType, 'BinaryProperties' as Source
+                    FROM BinaryProperties bp
+                    INNER JOIN {propertyTypesTable} pt ON bp.PropertyTypeId = pt.{idColumn}
+                    WHERE bp.VersionId = @VersionId");
+            }
+            
+            if (queries.Count == 0)
+            {
+                _logger.LogInformation("No valid property storage table combinations found for VersionId {VersionId}", versionId);
+                return;
+            }
+            
+            // Combine all available queries
+            var dynamicPropsQuery = string.Join("\n\nUNION ALL\n\n", queries) + "\nORDER BY PropertyName";
+            
             using var propsCommand = new SqlCommand(dynamicPropsQuery, connection);
             propsCommand.Parameters.AddWithValue("@VersionId", versionId);
             using var propsReader = await propsCommand.ExecuteReaderAsync();
 
+            var propertyCount = 0;
             while (await propsReader.ReadAsync())
             {
                 var propertyName = propsReader.GetString(0);
@@ -539,11 +659,11 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
 
                 if (!string.IsNullOrEmpty(propertyValue))
                 {
-                    // Add property as searchable field with appropriate indexing based on data type
+                    // Add property as searchable field with SenseNet-compatible indexing based on data type
                     var fieldStore = Lucene.Net.Documents.Field.Store.YES;
                     var fieldIndex = Lucene.Net.Documents.Field.Index.NOT_ANALYZED;
 
-                    // Determine indexing strategy based on SenseNet data type
+                    // Determine indexing strategy based on SenseNet data type for compatibility
                     switch (dataType)
                     {
                         case 1: // String - short text, analyze for search
@@ -565,15 +685,20 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
                     // Add field with property name as field name (SenseNet native approach)
                     document.Add(new Lucene.Net.Documents.Field(propertyName, propertyValue, fieldStore, fieldIndex));
                     
-                    // Also add with source prefix for advanced queries
+                    // Also add with source prefix for advanced queries (SenseNet compatibility)
                     document.Add(new Lucene.Net.Documents.Field($"{source}_{propertyName}", propertyValue, fieldStore, fieldIndex));
+                    
+                    propertyCount++;
                 }
             }
+            
+            _logger.LogInformation("Successfully added {Count} SenseNet-compatible properties for VersionId {VersionId}", propertyCount, versionId);
         }
         catch (Exception ex)
         {
             // Log but don't fail the entire indexing process for property issues
-            _logger.LogWarning(ex, "Failed to add dynamic properties for VersionId {VersionId}: {Error}", versionId, ex.Message);
+            _logger.LogWarning(ex, "Failed to add SenseNet-compatible properties for VersionId {VersionId}: {Error}", versionId, ex.Message);
         }
     }
+
 }
