@@ -23,6 +23,9 @@ public class IndexCreationOptions
     public string ReportFormat { get; set; } = "summary";
     public string OutputFormat { get; set; } = "md";
     
+    // Indexing approach selection
+    public string IndexingApproach { get; set; } = "manual"; // "manual" or "native"
+    
     // Configuration tracking for better report naming
     public string? ConfigurationId { get; set; }
     public string? ConfigurationName { get; set; }

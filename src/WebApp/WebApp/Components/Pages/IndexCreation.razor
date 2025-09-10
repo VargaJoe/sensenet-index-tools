@@ -154,7 +154,7 @@
                         </div>
 
                         <!-- Report Settings -->
-                        <div class="row mb-4">
+                        <div class="row mb-3">
                             <div class="col-md-6">
                                 <label for="reportFormat" class="form-label">
                                     <i class="bi bi-file-text me-1"></i>
@@ -175,6 +175,38 @@
                                     <option value="md">Markdown</option>
                                     <option value="html">HTML</option>
                                 </InputSelect>
+                            </div>
+                        </div>
+
+                        <!-- Indexing Approach Selection -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <label for="indexingApproach" class="form-label">
+                                    <i class="bi bi-gear-wide-connected me-1"></i>
+                                    Indexing Approach
+                                </label>
+                                <InputSelect id="indexingApproach" @bind-Value="creationOptions.IndexingApproach" class="form-select">
+                                    <option value="manual">Manual Field Selection (Stable - Recommended)</option>
+                                    <option value="native">SenseNet Native Indexing (Experimental)</option>
+                                </InputSelect>
+                                <div class="form-text">
+                                    @if (creationOptions.IndexingApproach == "native")
+                                    {
+                                        <span class="text-warning">
+                                            <i class="bi bi-exclamation-triangle me-1"></i>
+                                            <strong>Experimental:</strong> Uses SenseNet's native Repository.Start() and content.Index() for automatic field discovery. 
+                                            May require additional setup and could conflict with WebApp context.
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-success">
+                                            <i class="bi bi-check-circle me-1"></i>
+                                            <strong>Stable:</strong> Manually selects fields to index with comprehensive SenseNet compatibility. 
+                                            Includes dynamic property discovery from FlatProperties, TextProperties, and BinaryProperties tables.
+                                        </span>
+                                    }
+                                </div>
                             </div>
                         </div>
 
