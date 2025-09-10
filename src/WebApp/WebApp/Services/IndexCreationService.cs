@@ -315,7 +315,7 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
         
         try
         {
-            _logger.LogInformation("Creating REAL working Lucene index using SenseNet.Search.Lucene29");
+            _logger.LogInformation("Creating REAL working Lucene index using SenseNet.Search.Lucene29 with dynamic field discovery");
             
             // Validate connection string
             if (!ValidateConnectionString(options.ConnectionString))
@@ -417,8 +417,15 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
                         document.Add(new Lucene.Net.Documents.Field("ModificationDate", modificationDate.ToString("yyyyMMddHHmmss"), Lucene.Net.Documents.Field.Store.YES, Lucene.Net.Documents.Field.Index.NOT_ANALYZED));
                         document.Add(new Lucene.Net.Documents.Field("Status", status.ToString(), Lucene.Net.Documents.Field.Store.YES, Lucene.Net.Documents.Field.Index.NOT_ANALYZED));
                         
-                        // Add searchable full-text field
-                        var allText = $"{name} {displayName} {path} {nodeType}".ToLowerInvariant();
+                        // Initialize collection for full-text search content
+                        var allTextParts = new List<string> { name, displayName, path, nodeType };
+                        
+                        // *** DYNAMICALLY ADD ALL SENSENET PROPERTIES ***
+                        // This discovers and indexes ALL content properties without hardcoding
+                        await AddDynamicPropertiesToDocument(connection, versionId, document, allTextParts);
+                        
+                        // Add comprehensive full-text search field with ALL content
+                        var allText = string.Join(" ", allTextParts.Where(p => !string.IsNullOrWhiteSpace(p))).ToLowerInvariant();
                         document.Add(new Lucene.Net.Documents.Field("AllText", allText, Lucene.Net.Documents.Field.Store.NO, Lucene.Net.Documents.Field.Index.ANALYZED));
 
                         // ADD DOCUMENT TO REAL LUCENE INDEX
@@ -427,7 +434,7 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
 
                         if (processedCount % 100 == 0)
                         {
-                            _logger.LogInformation("REAL Lucene: Indexed {ProcessedCount}/{TotalCount} documents ({Percentage:F1}%)", 
+                            _logger.LogInformation("SenseNet Dynamic Index: Indexed {ProcessedCount}/{TotalCount} documents with ALL properties ({Percentage:F1}%)", 
                                 processedCount, totalCount, (double)processedCount / totalCount * 100);
                         }
 
@@ -479,6 +486,94 @@ This POC demonstrates the SenseNet native indexing approach. In a full implement
                 ProcessedItemCount = processedCount,
                 Options = options
             };
+        }
+    }
+
+    /// <summary>
+    /// Dynamically discovers and adds ALL available SenseNet properties for a specific content item
+    /// This approach handles unlimited custom fields without hardcoding
+    /// </summary>
+    private async System.Threading.Tasks.Task AddDynamicPropertiesToDocument(SqlConnection connection, int versionId, Lucene.Net.Documents.Document document, IList<string> allTextParts)
+    {
+        try
+        {
+            // Query ALL property types and their values for this specific content version
+            // This covers all SenseNet property storage tables dynamically
+            var dynamicPropsQuery = @"
+                -- Get String/Text properties
+                SELECT pt.Name as PropertyName, fp.Value as PropertyValue, pt.DataType, 'FlatProperties' as Source
+                FROM FlatProperties fp
+                INNER JOIN PropertyTypes pt ON fp.PropertyTypeId = pt.PropertyTypeId
+                WHERE fp.VersionId = @VersionId AND fp.Value IS NOT NULL
+                
+                UNION ALL
+                
+                -- Get Text properties (long text content)
+                SELECT pt.Name as PropertyName, tp.Value as PropertyValue, pt.DataType, 'TextProperties' as Source  
+                FROM TextProperties tp
+                INNER JOIN PropertyTypes pt ON tp.PropertyTypeId = pt.PropertyTypeId
+                WHERE tp.VersionId = @VersionId AND tp.Value IS NOT NULL
+                
+                UNION ALL
+                
+                -- Get Binary property metadata
+                SELECT pt.Name as PropertyName, 
+                       CAST(bp.Size as NVARCHAR) + ' bytes (' + ISNULL(bp.ContentType, 'unknown') + ')' as PropertyValue,
+                       pt.DataType, 'BinaryProperties' as Source
+                FROM BinaryProperties bp
+                INNER JOIN PropertyTypes pt ON bp.PropertyTypeId = pt.PropertyTypeId  
+                WHERE bp.VersionId = @VersionId
+                
+                ORDER BY PropertyName";
+
+            using var propsCommand = new SqlCommand(dynamicPropsQuery, connection);
+            propsCommand.Parameters.AddWithValue("@VersionId", versionId);
+            using var propsReader = await propsCommand.ExecuteReaderAsync();
+
+            while (await propsReader.ReadAsync())
+            {
+                var propertyName = propsReader.GetString(0);
+                var propertyValue = propsReader.IsDBNull(1) ? null : propsReader.GetString(1);
+                var dataType = propsReader.GetInt32(2);
+                var source = propsReader.GetString(3);
+
+                if (!string.IsNullOrEmpty(propertyValue))
+                {
+                    // Add property as searchable field with appropriate indexing based on data type
+                    var fieldStore = Lucene.Net.Documents.Field.Store.YES;
+                    var fieldIndex = Lucene.Net.Documents.Field.Index.NOT_ANALYZED;
+
+                    // Determine indexing strategy based on SenseNet data type
+                    switch (dataType)
+                    {
+                        case 1: // String - short text, analyze for search
+                        case 2: // Text - long text content, analyze for full-text search
+                            fieldIndex = Lucene.Net.Documents.Field.Index.ANALYZED;
+                            allTextParts.Add(propertyValue); // Include in full-text search
+                            break;
+                        case 3: // Int
+                        case 4: // DateTime  
+                        case 5: // Currency
+                        case 6: // Reference
+                            fieldIndex = Lucene.Net.Documents.Field.Index.NOT_ANALYZED; // Exact match only
+                            break;
+                        default:
+                            fieldIndex = Lucene.Net.Documents.Field.Index.ANALYZED; // Default to analyzed
+                            break;
+                    }
+
+                    // Add field with property name as field name (SenseNet native approach)
+                    document.Add(new Lucene.Net.Documents.Field(propertyName, propertyValue, fieldStore, fieldIndex));
+                    
+                    // Also add with source prefix for advanced queries
+                    document.Add(new Lucene.Net.Documents.Field($"{source}_{propertyName}", propertyValue, fieldStore, fieldIndex));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log but don't fail the entire indexing process for property issues
+            _logger.LogWarning(ex, "Failed to add dynamic properties for VersionId {VersionId}: {Error}", versionId, ex.Message);
         }
     }
 }
