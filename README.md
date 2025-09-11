@@ -213,4 +213,4 @@ Index operations now properly support large indexes by implementing efficient pa
 New `clean-orphaned` command for cleaning up index entries that exist in the index but not in the database.
 
 ### Enhanced Content Comparison
-Significantly improved content comparison logic with better handling of multiple versions, renamed items, and path normalization. See [Enhanced Comparer Documentation](ENHANCED_COMPARER.md) for details.
+Significantly improved content comparison logic with better handling of multiple versions, renamed items, and path normalization. See [Enhanced Comparer Documentation](docs/fixes/enhanced-comparer.md) for details.

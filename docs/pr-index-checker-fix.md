@@ -21,7 +21,7 @@ This PR fixes a fundamental issue in the SubtreeIndexChecker where content items
 
 ## Documentation
 
-- Added `INDEX_CHECKER_FIX.md` explaining the issue and solution in detail
+- Added `docs/fixes/index-checker-fix.md` explaining the issue and solution in detail
 - Updated code comments to explain the search strategy
 
 ## Impact
