@@ -79,6 +79,66 @@ The application is structured as follows:
    - Segment analysis
    - File system verification
 
+## Command Reference
+
+### Create Index Command Parameters
+
+The `create-index` command creates a new Lucene index from SenseNet database content with comprehensive configuration options:
+
+#### Required Parameters
+- `--connection-string`: Database connection string for SenseNet repository
+- `--output-path`: Directory path where the new index will be created
+
+#### Optional Parameters
+- `--repository-path`: SenseNet repository path to index (default: "/Root")
+- `--recursive`: Include all child content recursively (default: true)
+- `--batch-size`: Number of items to process per batch (default: 50)
+- `--max-items`: Maximum number of items to index (0 = unlimited, default: 0)
+- `--approach`: Indexing approach - "manual" or "native" (default: "manual")
+- `--create-subfolder`: Create a timestamped subfolder for the index (default: false)
+- `--format`: Report format - "markdown" or "html" (default: "markdown")
+- `--output-report`: Path for the creation report file
+- `--force-reindex`: Force recreation of existing index (default: false)
+
+#### Indexing Approaches
+
+1. **Manual Approach** (Default)
+   - Custom implementation with detailed progress tracking
+   - Generates comprehensive creation reports
+   - Better error handling and diagnostics
+   - Recommended for troubleshooting and analysis
+
+2. **Native Approach**
+   - Uses SenseNet's built-in indexing engine
+   - Faster performance for large datasets
+   - Production-grade reliability
+   - Recommended for production index creation
+
+#### Usage Examples by Scenario
+
+**Quick Development Index**
+```powershell
+sn-index-maintenance-suite create-index --connection-string <connection> --output-path "D:\DevIndex"
+```
+
+**Production Index with Native Approach**
+```powershell
+sn-index-maintenance-suite create-index --connection-string <connection> `
+    --output-path "D:\Production" --approach native --batch-size 100
+```
+
+**Site-Specific Index**
+```powershell
+sn-index-maintenance-suite create-index --connection-string <connection> `
+    --output-path "D:\SiteIndex" --repository-path "/Root/Sites/Default_Site"
+```
+
+**Index with Detailed HTML Report**
+```powershell
+sn-index-maintenance-suite create-index --connection-string <connection> `
+    --output-path "D:\NewIndex" --output-report "D:\Reports\creation.html" --format html
+```
+
 ## Usage Guide
 
 ### Index Validation Command
@@ -157,6 +217,46 @@ sn-index-maintenance-suite subtree-check --path <index-path> `
     --output "report.md"
 ```
 
+### Index Creation Command
+
+Create a new Lucene index from SenseNet database content:
+
+```powershell
+# Basic index creation (manual approach with report)
+sn-index-maintenance-suite create-index --connection-string <connection-string> --output-path "D:\NewIndex"
+
+# Recursive creation with subfolder organization
+sn-index-maintenance-suite create-index --connection-string <connection-string> `
+    --output-path "D:\NewIndex" `
+    --recursive `
+    --create-subfolder
+
+# Native SenseNet approach for production
+sn-index-maintenance-suite create-index --connection-string <connection-string> `
+    --output-path "D:\ProductionIndex" `
+    --repository-path "/Root" `
+    --approach native `
+    --batch-size 100 `
+    --max-items 10000
+
+# Create from specific repository path
+sn-index-maintenance-suite create-index --connection-string <connection-string> `
+    --output-path "D:\SiteIndex" `
+    --repository-path "/Root/Sites/Default_Site" `
+    --recursive
+
+# Create with detailed HTML report
+sn-index-maintenance-suite create-index --connection-string <connection-string> `
+    --output-path "D:\NewIndex" `
+    --output-report "D:\Reports\creation-report.html" `
+    --format html
+
+# Force reindex of existing index
+sn-index-maintenance-suite create-index --connection-string <connection-string> `
+    --output-path "D:\ExistingIndex" `
+    --force-reindex
+```
+
 ### Database Operations
 
 Commands for database operations and comparisons:
@@ -183,10 +283,18 @@ The toolkit assumes all indexes are potentially live (connected to a running Sen
    - `list-index`: Content listing from index (read-only)
    - `list-db`: Content listing from database (read-only)
    - `compare`: Database-Index comparison (read-only)
+   - `subtree-check`: Subtree validation against database (read-only)
 
 2. **Write Operations** (Require --offline Flag)
    - `lastactivityid-set`: Modifying LastActivityId
    - `lastactivityid-init`: Initializing new LastActivityId
+
+3. **Index Creation Operations** (Creates New Indexes)
+   - `create-index`: Creates new Lucene index from database content
+     - Safe for production use as it creates new indexes
+     - Does not modify existing indexes unless --force-reindex is used
+     - Supports both manual and native SenseNet indexing approaches
+     - Can be run while SenseNet application is active (reads from database only)
    
 ### Content Listing Safety
 

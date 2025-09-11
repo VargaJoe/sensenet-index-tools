@@ -34,6 +34,12 @@ dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value> --bac
 # Validate index structure and integrity and save report
 dotnet run -- validate --path "<path-to-index>" --detailed --output "<report-file>"
 
+# Create a new Lucene index from SenseNet database content
+dotnet run -- create-index --connection-string "<sql-connection-string>" --repository-path "/Root" --output-path "<index-output-directory>"
+
+# Create index with advanced options
+dotnet run -- create-index --connection-string "<sql-connection-string>" --repository-path "/Root/Sites/Default_Site" --output-path "D:\Indexes" --approach native --create-subfolder --max-items 10000 --output-report "creation-report.html" --format html
+
 # List items from index and/or database
 dotnet run -- list-items --index-path "<path-to-index>" --repository-path "/Root/Path" --source "index" --recursive true --depth 1
 
