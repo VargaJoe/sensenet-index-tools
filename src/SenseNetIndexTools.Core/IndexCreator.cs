@@ -20,7 +20,7 @@ namespace SenseNetIndexTools.Core
         public bool ForceReindex { get; set; } = false;
         public string ReportFormat { get; set; } = "summary";
         public string OutputFormat { get; set; } = "md";
-        public string IndexingApproach { get; set; } = "native"; // "manual" or "native"
+        public string IndexingApproach { get; set; } = "native"; // "native" or "manual"
         public bool CreateSubfolder { get; set; } = false;
         public string? ConfigurationId { get; set; }
         public string? ConfigurationName { get; set; }
@@ -80,7 +80,7 @@ namespace SenseNetIndexTools.Core
 
             var approachOption = new Option<string>(
                 name: "--approach",
-                description: "Indexing approach: manual, native",
+                description: "Indexing approach: native (default), manual",
                 getDefaultValue: () => "native");
 
             var subfolderOption = new Option<bool>(
@@ -190,13 +190,14 @@ namespace SenseNetIndexTools.Core
                 }
 
                 IndexCreationResult result;
-                if (options.IndexingApproach?.ToLower() == "native")
+                if (options.IndexingApproach?.ToLower() == "manual")
                 {
-                    result = await CreateSenseNetNativeIndexAsync(options);
+                    result = await CreateManualIndexAsync(options);
                 }
                 else
                 {
-                    result = await CreateManualIndexAsync(options);
+                    // Default to native approach (includes "native" and any other values)
+                    result = await CreateSenseNetNativeIndexAsync(options);
                 }
 
                 result.Options = options;

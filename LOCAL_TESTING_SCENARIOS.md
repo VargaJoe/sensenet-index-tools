@@ -138,7 +138,7 @@ $ReportsPath = "./Reports"
 
 ### 1. Basic Index Creation
 ```powershell
-# Simple index creation with sensenet custom approach (default)
+# Simple index creation with native approach (default)
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
     --connection-string $TestDb `
     --output-path $NewIndexPath
@@ -163,9 +163,10 @@ dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-in
     --connection-string $TestDb `
     --output-path $NewIndexPath `
     --repository-path "/Root" `
+    --approach manual `
     --recursive `
     --batch-size 25 `
-    --output-report "$ReportsPath/manual-creation-report.md"
+    --output-report "$ReportsPath/custom-creation-report.md"
 
 # Manual approach with HTML report
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
@@ -175,38 +176,36 @@ dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-in
     --output-report "$ReportsPath/manual-creation-report.html" `
     --format html
 
-# Limited item creation for testing
+# Limited item creation for testing with manual approach
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
     --connection-string $TestDb `
     --output-path $NewIndexPath `
+    --approach manual `
     --max-items 100 `
     --batch-size 10
 ```
 
-### 3. Native SenseNet Approach (Production-Ready)
+### 3. Native SenseNet Approach (Default - Production-Ready)
 ```powershell
-# Production index with native approach
+# Production index with native approach (default)
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
     --connection-string $TestDb `
     --output-path $ProductionIndexPath `
-    --approach native `
     --batch-size 100 `
     --recursive
 
-# Native approach with performance tuning
+# Native approach with performance tuning (default)
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
     --connection-string $TestDb `
     --output-path $ProductionIndexPath `
-    --approach native `
     --batch-size 200 `
     --max-items 5000
 
-# Native approach with specific repository path
+# Native approach with specific repository path (default)
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
     --connection-string $TestDb `
     --output-path $ProductionIndexPath `
     --repository-path "/Root/Content" `
-    --approach native `
     --batch-size 150
 ```
 
@@ -218,11 +217,11 @@ dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-in
     --output-path $NewIndexPath `
     --force-reindex
 
-# Force reindex with different approach
+# Force reindex with manual approach
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
     --connection-string $TestDb `
     --output-path $NewIndexPath `
-    --approach native `
+    --approach manual `
     --force-reindex `
     --batch-size 100
 ```

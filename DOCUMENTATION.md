@@ -94,7 +94,7 @@ The `create-index` command creates a new Lucene index from SenseNet database con
 - `--recursive`: Include all child content recursively (default: true)
 - `--batch-size`: Number of items to process per batch (default: 50)
 - `--max-items`: Maximum number of items to index (0 = unlimited, default: 0)
-- `--approach`: Indexing approach - "manual" or "native" (default: "manual")
+- `--approach`: Indexing approach - "native" (default) or "manual" (default: "native")
 - `--create-subfolder`: Create a timestamped subfolder for the index (default: false)
 - `--format`: Report format - "markdown" or "html" (default: "markdown")
 - `--output-report`: Path for the creation report file
@@ -102,17 +102,17 @@ The `create-index` command creates a new Lucene index from SenseNet database con
 
 #### Indexing Approaches
 
-1. **Manual Approach** (Default)
-   - Custom implementation with detailed progress tracking
-   - Generates comprehensive creation reports
-   - Better error handling and diagnostics
-   - Recommended for troubleshooting and analysis
-
-2. **Native Approach**
+1. **Native Approach** (Default)
    - Uses SenseNet's built-in indexing engine
    - Faster performance for large datasets
    - Production-grade reliability
    - Recommended for production index creation
+
+2. **Manual Approach**
+   - Custom implementation with detailed progress tracking
+   - Generates comprehensive creation reports
+   - Better error handling and diagnostics
+   - Recommended for troubleshooting and analysis
 
 #### Usage Examples by Scenario
 
@@ -121,10 +121,10 @@ The `create-index` command creates a new Lucene index from SenseNet database con
 sn-index-maintenance-suite create-index --connection-string <connection> --output-path "D:\DevIndex"
 ```
 
-**Production Index with Native Approach**
+**Production Index with Native Approach** (default)
 ```powershell
 sn-index-maintenance-suite create-index --connection-string <connection> `
-    --output-path "D:\Production" --approach native --batch-size 100
+    --output-path "D:\Production" --batch-size 100
 ```
 
 **Site-Specific Index**
@@ -222,7 +222,7 @@ sn-index-maintenance-suite subtree-check --path <index-path> `
 Create a new Lucene index from SenseNet database content:
 
 ```powershell
-# Basic index creation (manual approach with report)
+# Basic index creation (native approach - default)
 sn-index-maintenance-suite create-index --connection-string <connection-string> --output-path "D:\NewIndex"
 
 # Recursive creation with subfolder organization
@@ -231,12 +231,12 @@ sn-index-maintenance-suite create-index --connection-string <connection-string> 
     --recursive `
     --create-subfolder
 
-# Native SenseNet approach for production
+# Manual approach for detailed analysis
 sn-index-maintenance-suite create-index --connection-string <connection-string> `
-    --output-path "D:\ProductionIndex" `
+    --output-path "D:\DetailedIndex" `
     --repository-path "/Root" `
-    --approach native `
-    --batch-size 100 `
+    --approach manual `
+    --batch-size 50 `
     --max-items 10000
 
 # Create from specific repository path
