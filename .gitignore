@@ -99,3 +99,5 @@ subtree-*.*
 src/WebApp/WebApp/Data/*
 src/WebApp/out/
 Reports/*
+IndexOutput/*
+IndexBackups/*

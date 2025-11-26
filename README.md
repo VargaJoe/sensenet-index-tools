@@ -6,6 +6,36 @@ A comprehensive toolkit for managing and maintaining SenseNet Lucene.NET indexes
 
 This project is maintained at: https://github.com/VargaJoe/sensenet-index-tools
 
+## ⚠️ Experimental Features
+
+### SenseNet Native Index Creation Tool
+
+An experimental CLI tool that uses SenseNet's native indexing infrastructure instead of manual Lucene operations. This tool is designed for **clean setup** scenarios where you need to create an index from scratch.
+
+**Location**: `src/SenseNetIndexTools.Native/`
+
+**Key Differences**:
+- ✅ Uses SenseNet's `IIndexPopulator.ClearAndPopulateAllAsync()` method
+- ✅ Integrates with SenseNet's provider system
+- ✅ Respects SenseNet's security and field processing
+- ✅ Creates indexes compatible with SenseNet installations
+- ❌ Requires full SenseNet dependency chain
+- ❌ Experimental status - use with caution
+
+**Quick Start**:
+```bash
+# Build the experimental tool
+cd src/SenseNetIndexTools.Native
+./build-native.ps1
+
+# Run the experimental tool
+./bin/Release/net8.0/sensenet-create-index-native.exe --connection-string "your-connection-string" --verbose
+```
+
+**Documentation**: See [`src/SenseNetIndexTools.Native/README.md`](src/SenseNetIndexTools.Native/README.md) for detailed usage.
+
+---
+
 ## Requirements
 
 - .NET 8.0 or higher

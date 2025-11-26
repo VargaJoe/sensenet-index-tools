@@ -20,7 +20,7 @@ namespace SenseNetIndexTools.Core
         public bool ForceReindex { get; set; } = false;
         public string ReportFormat { get; set; } = "summary";
         public string OutputFormat { get; set; } = "md";
-        public string IndexingApproach { get; set; } = "native"; // "native" or "manual"
+        public string IndexingApproach { get; set; } = "sensenet"; // "sensenet" or "manual"
         public bool CreateSubfolder { get; set; } = false;
         public string? ConfigurationId { get; set; }
         public string? ConfigurationName { get; set; }
@@ -80,8 +80,8 @@ namespace SenseNetIndexTools.Core
 
             var approachOption = new Option<string>(
                 name: "--approach",
-                description: "Indexing approach: native (default), manual",
-                getDefaultValue: () => "native");
+                description: "Indexing approach: sensenet (default), manual",
+                getDefaultValue: () => "sensenet");
 
             var subfolderOption = new Option<bool>(
                 name: "--create-subfolder",
@@ -196,7 +196,7 @@ namespace SenseNetIndexTools.Core
                 }
                 else
                 {
-                    // Default to native approach (includes "native" and any other values)
+                    // Default to SenseNet approach (includes "sensenet" and any other values)
                     result = await CreateSenseNetNativeIndexAsync(options);
                 }
 
@@ -256,7 +256,9 @@ namespace SenseNetIndexTools.Core
                     : outputPath;
                 IODirectory.CreateDirectory(indexPath);
 
-                // Use direct SenseNet Lucene29 API for index creation
+                // IMPORTANT: This is NOT true SenseNet native indexing - it's SenseNet-compatible Lucene indexing
+                // TODO: Replace with proper SenseNet Repository.Start() + ContentRepository.Content.RebuildIndexAsync() approach
+                // Use direct SenseNet Lucene29 API for index creation (temporary solution)
                 using var directory = Lucene.Net.Store.FSDirectory.Open(new System.IO.DirectoryInfo(indexPath));
                 using var analyzer = new Lucene.Net.Analysis.Standard.StandardAnalyzer(Lucene.Net.Util.Version.LUCENE_29);
                 using var indexWriter = new Lucene.Net.Index.IndexWriter(directory, analyzer, true, Lucene.Net.Index.IndexWriter.MaxFieldLength.UNLIMITED);
@@ -379,7 +381,7 @@ namespace SenseNetIndexTools.Core
                     StartTime = startTime,
                     EndTime = DateTime.UtcNow,
                     Success = false,
-                    Message = $"SenseNet native index creation failed: {ex.Message}",
+                    Message = $"SenseNet indexing failed: {ex.Message}. NOTE: Current implementation uses SenseNet-compatible Lucene approach, not true SenseNet Repository.Start() infrastructure.",
                     ProcessedItemCount = processedCount
                 };
             }
