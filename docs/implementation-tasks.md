@@ -53,3 +53,17 @@
 
 ### Future Enhancement Stories
 _(Additional features for future consideration)_
+
+## Kubernetes Deployment Support (US-024)
+**Goal:** Enable the index tools to work with SenseNet deployments in Kubernetes environments.
+
+#### Tasks
+- [x] **PVC Conflict Resolution**: Workflow for handling ReadWriteOnce PVC limitations
+- [x] **Automated Index Transfer**: PowerShell script for copying indexes between local and pods
+- [x] **Read-Only Operations**: Optimize for operations that don't require index modification
+- [x] **Documentation**: Kubernetes deployment and usage guide
+- [x] **Production Testing**: Successfully tested with real production deployment
+- [x] **CLI Parameter Integration**: Added --kubeconfig, --namespace, --deployment, --auto-copy-index parameters
+- [x] **PowerShell Automation Fixes**: Resolved kubectl cp issues on Windows platform
+- [x] **Auto-Copy Functionality**: Implemented automatic index copying from Kubernetes pods
+- [x] **LastActivityId Integration**: Enhanced lastactivityid-get command with Kubernetes auto-copy support

@@ -8,6 +8,10 @@ x86/
 [Ww][Ii][Nn]32/
 [Aa][Rr][Mm]/
 [Aa][Rr][Mm]64/
+
+# Temporary index copies from Kubernetes
+temp-index*/
+temp-index-prod/
 bld/
 [Bb]in/
 [Oo]bj/
@@ -98,3 +102,5 @@ temp_*
 subtree-*.*
 src/WebApp/WebApp/Data/*
 src/WebApp/out/
+IndexOutput/
+Reports/

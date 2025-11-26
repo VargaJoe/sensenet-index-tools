@@ -17,14 +17,188 @@ namespace SenseNetIndexTools
         private const string COMMITFIELDNAME = "$#COMMIT";
         private const string COMMITDATAFIELDNAME = "$#DATA";
 
+        private static async Task<string> AutoCopyIndexFromKubernetes(
+            string? kubeconfig, 
+            string? deployment, 
+            string namespaceName, 
+            string indexPathInPod,
+            string localPath)
+        {
+            if (string.IsNullOrEmpty(kubeconfig) || string.IsNullOrEmpty(deployment))
+            {
+                return localPath; // No auto-copy requested
+            }
+
+            Console.WriteLine($"Auto-copying index from Kubernetes deployment: {deployment}");
+            Console.WriteLine($"Namespace: {namespaceName}");
+            Console.WriteLine($"Kubeconfig: {kubeconfig}");
+
+            // Create temp directory
+            var tempDir = Path.Combine(Path.GetTempPath(), $"sensenet-index-{DateTime.Now:yyyyMMddHHmmss}");
+            System.IO.Directory.CreateDirectory(tempDir);
+            Console.WriteLine($"Created temporary directory: {tempDir}");
+
+            try
+            {
+                // Build kubectl command to get pod name
+                var kubeconfigArg = string.IsNullOrEmpty(kubeconfig) ? "" : $"--kubeconfig \"{kubeconfig}\"";
+                var getPodsCommand = $"kubectl {kubeconfigArg} get pods -l app={deployment} -n {namespaceName} --no-headers -o custom-columns=\":metadata.name\"";
+
+                Console.WriteLine($"Finding pod with command: {getPodsCommand}");
+                var podResult = await RunCommandAsync("cmd", $"/c {getPodsCommand}");
+                
+                if (podResult.ExitCode != 0)
+                {
+                    throw new Exception($"Failed to get pods: {podResult.Error}");
+                }
+
+                var podLines = podResult.Output.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                var podName = podLines.FirstOrDefault()?.Trim();
+                
+                if (string.IsNullOrEmpty(podName))
+                {
+                    throw new Exception("No pod found for the deployment");
+                }
+
+                // If multiple pods, prefer the one that contains the deployment name
+                if (podLines.Length > 1)
+                {
+                    var preferredPod = podLines.FirstOrDefault(p => p.Contains(deployment));
+                    if (!string.IsNullOrEmpty(preferredPod))
+                    {
+                        podName = preferredPod.Trim();
+                    }
+                }
+
+                Console.WriteLine($"Selected pod: {podName}");
+
+                // List index directory to find the latest folder
+                var listCommand = $"kubectl {kubeconfigArg} exec {podName} -n {namespaceName} -- ls -la {indexPathInPod}";
+                Console.WriteLine($"Listing index directory: {listCommand}");
+                
+                var listResult = await RunCommandAsync("cmd", $"/c {listCommand}");
+                if (listResult.ExitCode != 0)
+                {
+                    // Try with container specification if the pod has multiple containers
+                    listCommand = $"kubectl {kubeconfigArg} exec {podName} -n {namespaceName} -c sensenet -- ls -la {indexPathInPod}";
+                    Console.WriteLine($"Retrying with container specification: {listCommand}");
+                    listResult = await RunCommandAsync("cmd", $"/c {listCommand}");
+                    
+                    if (listResult.ExitCode != 0)
+                    {
+                        Console.WriteLine($"List command output: {listResult.Output}");
+                        Console.WriteLine($"List command error: {listResult.Error}");
+                        throw new Exception($"Failed to list index directory: {listResult.Error}");
+                    }
+                }
+
+                Console.WriteLine($"List output: {listResult.Output}");
+
+                // Parse the output to find the latest dated folder
+                var lines = listResult.Output.Split('\n');
+                var indexFolders = new List<string>();
+                
+                foreach (var line in lines)
+                {
+                    // Skip lines that don't contain directory info
+                    if (string.IsNullOrWhiteSpace(line) || !line.Contains("drwxr"))
+                        continue;
+                        
+                    var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 9)
+                    {
+                        var folderName = parts[8];
+                        // Look for folders that start with 20 (year) and are 14-15 chars (YYYYMMDDHHMMSS format)
+                        if (folderName.Length >= 14 && folderName.Length <= 15 && folderName.StartsWith("20") && folderName.All(char.IsDigit))
+                        {
+                            indexFolders.Add(folderName);
+                            Console.WriteLine($"Found index folder: {folderName}");
+                        }
+                    }
+                }
+
+                if (!indexFolders.Any())
+                {
+                    throw new Exception("No dated index folders found");
+                }
+
+                var latestFolder = indexFolders.OrderByDescending(f => f).First();
+                Console.WriteLine($"Latest index folder: {latestFolder}");
+
+                // Copy the index directly using kubectl cp
+                var fullIndexPath = $"{indexPathInPod.TrimEnd('/')}/{latestFolder}";
+
+                // kubectl cp on Windows doesn't work well with absolute paths
+                // Change to the temp directory's parent and use relative path
+                var parentDir = Path.GetDirectoryName(tempDir);
+                if (string.IsNullOrEmpty(parentDir))
+                {
+                    throw new Exception("Unable to determine parent directory for temp path");
+                }
+                var relativeDir = Path.GetFileName(tempDir);
+
+                // Change to parent directory for kubectl cp to work with relative paths
+                var originalDir = System.IO.Directory.GetCurrentDirectory();
+                try
+                {
+                    System.IO.Directory.SetCurrentDirectory(parentDir);
+                    var copyCommand = $"kubectl {kubeconfigArg} cp \"{namespaceName}/{podName}:{fullIndexPath}\" \"{relativeDir}\"";
+
+                    Console.WriteLine($"Executing kubectl cp from directory {parentDir}: {copyCommand}");
+                    var copyResult = await RunCommandAsync("cmd", $"/c {copyCommand}");
+
+                    if (copyResult.ExitCode != 0)
+                    {
+                        Console.Error.WriteLine($"kubectl cp failed: {copyResult.Error}");
+                        Console.Error.WriteLine($"kubectl cp output: {copyResult.Output}");
+                        throw new Exception($"Failed to copy index from pod: {copyResult.Error}");
+                    }
+                }
+                finally
+                {
+                    System.IO.Directory.SetCurrentDirectory(originalDir);
+                }
+
+                Console.WriteLine("Index copy completed successfully");
+                return tempDir;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Auto-copy failed: {ex.Message}");
+                throw;
+            }
+        }
+
+        private static async Task<(int ExitCode, string Output, string Error)> RunCommandAsync(string command, string arguments)
+        {
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = command,
+                    Arguments = arguments,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            var error = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            
+            return (process.ExitCode, output, error);
+        }
+
         public static async Task<int> Main(string[] args)
         {
             var rootCommand = new RootCommand("SenseNet Index Maintenance Suite - Tools for managing SenseNet Lucene indices");
 
             var pathOption = new Option<string>(
                 name: "--path",
-                description: "Path to the Lucene index directory");
-            pathOption.IsRequired = true;
+                description: "Path to the Lucene index directory (optional when --auto-copy-index is used)");
 
             var idOption = new Option<long>(
                 name: "--id",
@@ -45,22 +219,63 @@ namespace SenseNetIndexTools
                 description: "Confirm that the index is not in use and can be safely modified. Required for write operations to protect live indexes.",
                 getDefaultValue: () => false);
 
+            // Kubernetes options
+            var kubeconfigOption = new Option<string?>(
+                name: "--kubeconfig",
+                description: "Path to kubeconfig file for Kubernetes cluster access");
+
+            var namespaceOption = new Option<string>(
+                name: "--namespace",
+                description: "Kubernetes namespace containing the SenseNet deployment",
+                getDefaultValue: () => "default");
+
+            var deploymentOption = new Option<string?>(
+                name: "--deployment",
+                description: "Name of the SenseNet deployment in Kubernetes");
+
+            var indexPathInPodOption = new Option<string>(
+                name: "--index-path-in-pod",
+                description: "Path to the index directory inside the pod",
+                getDefaultValue: () => "/app/App_Data/LocalIndex/");
+
+            var autoCopyIndexOption = new Option<bool>(
+                name: "--auto-copy-index",
+                description: "Automatically copy index from Kubernetes pod to local temporary directory",
+                getDefaultValue: () => false);
+
             var getCommand = new Command("lastactivityid-get", "Get current LastActivityId from index");
             var setCommand = new Command("lastactivityid-set", "Set LastActivityId in index");
             var initCommand = new Command("lastactivityid-init", "Initialize LastActivityId in a non-SenseNet Lucene index");
             var validateCommand = SenseNetIndexTools.ValidateCommand.Create();
 
             getCommand.AddOption(pathOption);
+            getCommand.AddOption(kubeconfigOption);
+            getCommand.AddOption(namespaceOption);
+            getCommand.AddOption(deploymentOption);
+            getCommand.AddOption(indexPathInPodOption);
+            getCommand.AddOption(autoCopyIndexOption);
+            
             setCommand.AddOption(pathOption);
             setCommand.AddOption(idOption);
             setCommand.AddOption(backupOption);
             setCommand.AddOption(backupPathOption);
             setCommand.AddOption(offlineOption); // Add offline flag to set command
+            setCommand.AddOption(kubeconfigOption);
+            setCommand.AddOption(namespaceOption);
+            setCommand.AddOption(deploymentOption);
+            setCommand.AddOption(indexPathInPodOption);
+            setCommand.AddOption(autoCopyIndexOption);
+            
             initCommand.AddOption(pathOption);
             initCommand.AddOption(idOption);
             initCommand.AddOption(backupOption);
             initCommand.AddOption(backupPathOption);
             initCommand.AddOption(offlineOption); // Add offline flag to init command
+            initCommand.AddOption(kubeconfigOption);
+            initCommand.AddOption(namespaceOption);
+            initCommand.AddOption(deploymentOption);
+            initCommand.AddOption(indexPathInPodOption);
+            initCommand.AddOption(autoCopyIndexOption);
             rootCommand.AddCommand(getCommand);
             rootCommand.AddCommand(setCommand);
             rootCommand.AddCommand(initCommand);
@@ -71,16 +286,41 @@ namespace SenseNetIndexTools
             rootCommand.AddCommand(ContentComparer.Create());
             rootCommand.AddCommand(CleanOrphanedCommand.Create());
 
-            getCommand.SetHandler(async (string path) =>
+            getCommand.SetHandler(async (context) =>
             {
+                var path = context.ParseResult.GetValueForOption(pathOption);
+                var kubeconfig = context.ParseResult.GetValueForOption(kubeconfigOption);
+                var namespaceName = context.ParseResult.GetValueForOption(namespaceOption)!;
+                var deployment = context.ParseResult.GetValueForOption(deploymentOption);
+                var indexPathInPod = context.ParseResult.GetValueForOption(indexPathInPodOption)!;
+                var autoCopyIndex = context.ParseResult.GetValueForOption(autoCopyIndexOption);
+
+                if (autoCopyIndex && (string.IsNullOrEmpty(deployment) || string.IsNullOrEmpty(kubeconfig)))
+                {
+                    Console.Error.WriteLine("--deployment and --kubeconfig are required when using --auto-copy-index");
+                    Environment.Exit(1);
+                    return;
+                }
+
+                if (!autoCopyIndex && string.IsNullOrEmpty(path))
+                {
+                    Console.Error.WriteLine("--path is required when not using --auto-copy-index");
+                    Environment.Exit(1);
+                    return;
+                }
+
                 try
                 {
-                    Console.WriteLine($"Opening index directory: {path}");
+                    var actualPath = autoCopyIndex ? 
+                        await AutoCopyIndexFromKubernetes(kubeconfig, deployment, namespaceName, indexPathInPod, path ?? "auto-index") : 
+                        path!;
+
+                    Console.WriteLine($"Opening index directory: {actualPath}");
 
                     // First verify this is a valid Lucene index
-                    if (!IndexUtilities.IsValidLuceneIndex(path))
+                    if (!IndexUtilities.IsValidLuceneIndex(actualPath))
                     {
-                        Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {path}");
+                        Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {actualPath}");
                         Environment.Exit(1);
                         return;
                     }
@@ -88,7 +328,7 @@ namespace SenseNetIndexTools
                     // First try using SenseNet API method
                     try
                     {
-                        var directory = new IndexDirectory(path);
+                        var directory = new IndexDirectory(actualPath);
                         Console.WriteLine("Created IndexDirectory object successfully.");
 
                         var engine = new Lucene29LocalIndexingEngine(directory);
@@ -111,7 +351,7 @@ namespace SenseNetIndexTools
                     // Fall back to direct Lucene.NET access
                     try
                     {
-                        using (var directory = FSDirectory.Open(new DirectoryInfo(path)))
+                        using (var directory = FSDirectory.Open(new DirectoryInfo(actualPath)))
                         {
                             if (IndexReader.IndexExists(directory))
                             {
@@ -149,15 +389,44 @@ namespace SenseNetIndexTools
                     Console.Error.WriteLine($"Stack trace: {ex.StackTrace}");
                     Environment.Exit(1);
                 }
-            }, pathOption);
+            });
 
-            setCommand.SetHandler(async (string path, long id, bool backup, string? backupPath, bool offline) =>
+            setCommand.SetHandler(async (context) =>
             {
+                var path = context.ParseResult.GetValueForOption(pathOption);
+                var id = context.ParseResult.GetValueForOption(idOption);
+                var backup = context.ParseResult.GetValueForOption(backupOption);
+                var backupPath = context.ParseResult.GetValueForOption(backupPathOption);
+                var offline = context.ParseResult.GetValueForOption(offlineOption);
+                var kubeconfig = context.ParseResult.GetValueForOption(kubeconfigOption);
+                var namespaceName = context.ParseResult.GetValueForOption(namespaceOption)!;
+                var deployment = context.ParseResult.GetValueForOption(deploymentOption);
+                var indexPathInPod = context.ParseResult.GetValueForOption(indexPathInPodOption)!;
+                var autoCopyIndex = context.ParseResult.GetValueForOption(autoCopyIndexOption);
+
+                if (autoCopyIndex && (string.IsNullOrEmpty(deployment) || string.IsNullOrEmpty(kubeconfig)))
+                {
+                    Console.Error.WriteLine("--deployment and --kubeconfig are required when using --auto-copy-index");
+                    Environment.Exit(1);
+                    return;
+                }
+
+                if (!autoCopyIndex && string.IsNullOrEmpty(path))
+                {
+                    Console.Error.WriteLine("--path is required when not using --auto-copy-index");
+                    Environment.Exit(1);
+                    return;
+                }
+
                 try
                 {
-                    if (!IndexUtilities.IsValidLuceneIndex(path))
+                    var actualPath = autoCopyIndex ? 
+                        await AutoCopyIndexFromKubernetes(kubeconfig, deployment, namespaceName, indexPathInPod, path ?? "auto-index") : 
+                        path!;
+
+                    if (!IndexUtilities.IsValidLuceneIndex(actualPath))
                     {
-                        Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {path}");
+                        Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {actualPath}");
                         Environment.Exit(1);
                         return;
                     }
@@ -171,15 +440,13 @@ namespace SenseNetIndexTools
 
                     if (backup)
                     {
-                        IndexUtilities.CreateBackup(path, backupPath);
+                        IndexUtilities.CreateBackup(actualPath, backupPath);
                     }
 
                     // First try using SenseNet API method
-                    bool useSenseNetApi = false;
-
                     try
                     {
-                        var directory = new IndexDirectory(path);
+                        var directory = new IndexDirectory(actualPath);
                         var engine = new Lucene29LocalIndexingEngine(directory);
 
                         // Get current status to preserve gaps
@@ -203,7 +470,6 @@ namespace SenseNetIndexTools
                         else
                             Console.WriteLine($"Warning: Verification returned different value: {verificationStatus.LastActivityId}");
 
-                        useSenseNetApi = true;
                         return;
                     }
                     catch (Exception ex)
@@ -218,7 +484,7 @@ namespace SenseNetIndexTools
                         Console.WriteLine("Using direct Lucene.NET access to update LastActivityId...");
 
                         // Open the index with write access
-                        using (var directory = FSDirectory.Open(new DirectoryInfo(path)))
+                        using (var directory = FSDirectory.Open(new DirectoryInfo(actualPath)))
                         {
                             if (IndexReader.IndexExists(directory))
                             {
@@ -333,17 +599,46 @@ namespace SenseNetIndexTools
                     Console.Error.WriteLine($"Stack trace: {ex.StackTrace}");
                     Environment.Exit(1);
                 }
-            }, pathOption, idOption, backupOption, backupPathOption, offlineOption);
+            });
 
             // New command specifically for initializing a non-SenseNet index
-            initCommand.SetHandler(async (string path, long id, bool backup, string? backupPath, bool offline) =>
+            initCommand.SetHandler(async (context) =>
             {
+                var path = context.ParseResult.GetValueForOption(pathOption);
+                var id = context.ParseResult.GetValueForOption(idOption);
+                var backup = context.ParseResult.GetValueForOption(backupOption);
+                var backupPath = context.ParseResult.GetValueForOption(backupPathOption);
+                var offline = context.ParseResult.GetValueForOption(offlineOption);
+                var kubeconfig = context.ParseResult.GetValueForOption(kubeconfigOption);
+                var namespaceName = context.ParseResult.GetValueForOption(namespaceOption)!;
+                var deployment = context.ParseResult.GetValueForOption(deploymentOption);
+                var indexPathInPod = context.ParseResult.GetValueForOption(indexPathInPodOption)!;
+                var autoCopyIndex = context.ParseResult.GetValueForOption(autoCopyIndexOption);
+
+                if (autoCopyIndex && (string.IsNullOrEmpty(deployment) || string.IsNullOrEmpty(kubeconfig)))
+                {
+                    Console.Error.WriteLine("--deployment and --kubeconfig are required when using --auto-copy-index");
+                    Environment.Exit(1);
+                    return;
+                }
+
+                if (!autoCopyIndex && string.IsNullOrEmpty(path))
+                {
+                    Console.Error.WriteLine("--path is required when not using --auto-copy-index");
+                    Environment.Exit(1);
+                    return;
+                }
+
                 try
                 {
+                    var actualPath = autoCopyIndex ? 
+                        await AutoCopyIndexFromKubernetes(kubeconfig, deployment, namespaceName, indexPathInPod, path ?? "auto-index") : 
+                        path!;
+
                     // First verify this is a valid Lucene index
-                    if (!IndexUtilities.IsValidLuceneIndex(path))
+                    if (!IndexUtilities.IsValidLuceneIndex(actualPath))
                     {
-                        Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {path}");
+                        Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {actualPath}");
                         Environment.Exit(1);
                         return;
                     }
@@ -357,17 +652,17 @@ namespace SenseNetIndexTools
 
                     if (backup)
                     {
-                        IndexUtilities.CreateBackup(path, backupPath);
+                        IndexUtilities.CreateBackup(actualPath, backupPath);
                     }
 
-                    Console.WriteLine($"Opening index directory: {path}");
+                    Console.WriteLine($"Opening index directory: {actualPath}");
 
                     // First check if LastActivityId already exists
                     bool alreadyInitialized = false;
 
                     try
                     {
-                        using (var directory = FSDirectory.Open(new DirectoryInfo(path)))
+                        using (var directory = FSDirectory.Open(new DirectoryInfo(actualPath)))
                         {
                             if (IndexReader.IndexExists(directory))
                             {
@@ -402,7 +697,7 @@ namespace SenseNetIndexTools
 
                     try
                     {
-                        var directory = new IndexDirectory(path);
+                        var directory = new IndexDirectory(actualPath);
                         var engine = new Lucene29LocalIndexingEngine(directory);
 
                         // Try to initialize with SenseNet API
@@ -439,7 +734,7 @@ namespace SenseNetIndexTools
                         Console.WriteLine("Using direct Lucene.NET access to initialize LastActivityId...");
 
                         // Open the index with write access
-                        using (var directory = FSDirectory.Open(new DirectoryInfo(path)))
+                        using (var directory = FSDirectory.Open(new DirectoryInfo(actualPath)))
                         {
                             if (IndexReader.IndexExists(directory))
                             {
@@ -520,7 +815,7 @@ namespace SenseNetIndexTools
                     Console.Error.WriteLine($"Stack trace: {ex.StackTrace}");
                     Environment.Exit(1);
                 }
-            }, pathOption, idOption, backupOption, backupPathOption, offlineOption);
+            });
 
             return await rootCommand.InvokeAsync(args);
         }
