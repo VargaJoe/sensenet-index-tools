@@ -6,8 +6,8 @@
 
 ```powershell
 $BackupPath = "./IndexBackups"
-$TestDb = ""
-$TestIndex = ""
+$TestDb = "Your_Connection_String_Here"
+$TestIndex = "Path_To_Your_Test_Index"
 $RepositoryPath = "/Root"
 ```
 
@@ -98,13 +98,13 @@ dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj list-inde
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj list-db --connection-string $TestDb --repository-path $RepositoryPath
 
 # List with recursive option
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj list-db --connection-string $TestDb --repository-path $RepositoryPath --recursive true
-
-# Detailed listing
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj list-db --connection-string $TestDb --repository-path $RepositoryPath --detailed
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj list-db --connection-string $TestDb --repository-path $RepositoryPath --recursive
 
 # List with custom ordering
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj list-db --connection-string $TestDb --repository-path $RepositoryPath --order-by "type"
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj list-db --connection-string $TestDb --repository-path $RepositoryPath --order-by type
+
+# List with depth limit
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj list-db --connection-string $TestDb --repository-path $RepositoryPath --depth 1
 ```
 
 ### 3. Compare Content
@@ -112,11 +112,11 @@ dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj list-db -
 # Basic comparison (safe for live indexes)
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj compare --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath
 
-# Detailed comparison with report
+# Comparison with report
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj compare --index-path $TestIndex `
     --connection-string $TestDb `
     --repository-path $RepositoryPath `
-    --recursive true `
+    --recursive `
     --output "comparison-report.md"
 
 # Compare specific depth with sorting
@@ -124,7 +124,214 @@ dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj compare -
     --connection-string $TestDb `
     --repository-path $RepositoryPath `
     --depth 1 `
-    --order-by "path"
+    --order-by path
+```
+
+## Index Creation Operations
+
+### Test Environment Variables for Index Creation
+```powershell
+$NewIndexPath = "./TestIndexes/NewIndex"
+$ProductionIndexPath = "./TestIndexes/ProductionIndex"
+$ReportsPath = "./Reports"
+```
+
+### 1. Basic Index Creation
+```powershell
+# Simple index creation with native approach (default)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path $NewIndexPath
+
+# Quick development index from specific repository path
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path $NewIndexPath `
+    --repository-path "/Root/Sites/Default_Site"
+
+# Create index with timestamped subfolder
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path $NewIndexPath `
+    --create-subfolder
+```
+
+### 2. Advanced Index Creation with Manual Approach
+```powershell
+# Detailed manual index with report generation
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path $NewIndexPath `
+    --repository-path "/Root" `
+    --approach manual `
+    --recursive `
+    --batch-size 25 `
+    --output-report "$ReportsPath/custom-creation-report.md"
+
+# Manual approach with HTML report
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path $NewIndexPath `
+    --approach manual `
+    --output-report "$ReportsPath/manual-creation-report.html" `
+    --format html
+
+# Limited item creation for testing with manual approach
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path $NewIndexPath `
+    --approach manual `
+    --max-items 100 `
+    --batch-size 10
+```
+
+### 3. Native SenseNet Approach (Default - Production-Ready)
+```powershell
+# Production index with native approach (default)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path $ProductionIndexPath `
+    --batch-size 100 `
+    --recursive
+
+# Native approach with performance tuning (default)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path $ProductionIndexPath `
+    --batch-size 200 `
+    --max-items 5000
+
+# Native approach with specific repository path (default)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path $ProductionIndexPath `
+    --repository-path "/Root/Content" `
+    --batch-size 150
+```
+
+### 4. Force Reindex Scenarios
+```powershell
+# Force recreation of existing index (for updates/fixes)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path $NewIndexPath `
+    --force-reindex
+
+# Force reindex with manual approach
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path $NewIndexPath `
+    --approach manual `
+    --force-reindex `
+    --batch-size 100
+```
+
+### 5. Site-Specific Index Creation
+```powershell
+# Create index for specific site only
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path "./TestIndexes/SiteIndex" `
+    --repository-path "/Root/Sites/Default_Site" `
+    --recursive
+
+# Create index for content area only
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path "./TestIndexes/ContentIndex" `
+    --repository-path "/Root/Content" `
+    --approach native `
+    --batch-size 50
+```
+
+### 6. Testing Index Creation Results
+```powershell
+# After creating an index, validate its integrity
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj validate `
+    --path $NewIndexPath `
+    --detailed `
+    --output "$ReportsPath/new-index-validation.md"
+
+# Check LastActivityId in newly created index
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj lastactivityid-get --path $NewIndexPath
+
+# Compare newly created index with database
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj compare --index-path $NewIndexPath --connection-string $TestDb --repository-path "/Root" --output "$ReportsPath/new-index-comparison.md"
+
+# List content from newly created index
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj list-index `
+    --index-path $NewIndexPath `
+    --repository-path "/Root" `
+    --depth 2
+```
+
+### 7. Performance Testing for Index Creation
+```powershell
+# Time large index creation
+Measure-Command {
+    dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+        --connection-string $TestDb `
+        --output-path "./TestIndexes/LargeIndex" `
+        --approach native `
+        --batch-size 500
+}
+
+# Compare manual vs native approach performance
+Measure-Command {
+    dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+        --connection-string $TestDb `
+        --output-path "./TestIndexes/ManualPerfTest" `
+        --approach manual `
+        --max-items 1000 `
+        --batch-size 50
+}
+
+Measure-Command {
+    dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+        --connection-string $TestDb `
+        --output-path "./TestIndexes/NativePerfTest" `
+        --approach native `
+        --max-items 1000 `
+        --batch-size 50
+}
+```
+
+### 8. Error Handling Testing
+```powershell
+# Test with invalid connection string (should fail gracefully)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string "invalid connection" `
+    --output-path $DevIndexPath
+
+# Test with invalid repository path (should handle gracefully)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path $DevIndexPath `
+    --repository-path "/Invalid/Path"
+
+# Test with read-only output path (should fail with proper error)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path "C:\Windows\System32\TestIndex"
+
+# Test creating index without force-reindex on existing directory
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj create-index `
+    --connection-string $TestDb `
+    --output-path $NewIndexPath
+```
+
+### 9. Cleanup After Index Creation Testing
+```powershell
+# Clean up test indexes (be careful with paths!)
+Remove-Item -Path "./TestIndexes" -Recurse -Force -ErrorAction SilentlyContinue
+
+# Clean up test reports
+Remove-Item -Path "$ReportsPath/manual-creation-report.*" -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "$ReportsPath/new-index-*" -Force -ErrorAction SilentlyContinue
+
+# Recreate directories for next test run
+New-Item -ItemType Directory -Path "./TestIndexes" -Force
+New-Item -ItemType Directory -Path $ReportsPath -Force
 ```
 
 ## Subtree Operations
@@ -159,12 +366,7 @@ Document: 2 mismatches
 #### 2. Basic File Output
 Generate a basic report file:
 ```powershell
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
-    --index-path $TestIndex `
-    --connection-string $TestDb `
-    --repository-path $RepositoryPath `
-    --output "subtree-default.md" `
-    --report-format default
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --output "subtree-default.md" --report-format default
 ```
 Verify the report contains:
 - Basic statistics
@@ -174,12 +376,7 @@ Verify the report contains:
 #### 3. Detailed Analysis
 Test detailed reporting with content type breakdown:
 ```powershell
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
-    --index-path $TestIndex `
-    --connection-string $TestDb `
-    --repository-path $RepositoryPath `
-    --output "subtree-detailed.md" `
-    --report-format detailed
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --output "subtree-detailed.md" --report-format detailed
 ```
 Check for:
 - Content type statistics table
@@ -194,12 +391,7 @@ Check for:
 #### 4. Hierarchical View
 Test tree format visualization:
 ```powershell
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
-    --index-path $TestIndex `
-    --connection-string $TestDb `
-    --repository-path $RepositoryPath `
-    --output "subtree-tree.md" `
-    --report-format tree
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --output "subtree-tree.md" --report-format tree
 ```
 Verify:
 - Proper tree structure with indentation
@@ -210,13 +402,7 @@ Verify:
 #### 5. Full Analysis with HTML Output
 Test comprehensive reporting:
 ```powershell
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
-    --index-path $TestIndex `
-    --connection-string $TestDb `
-    --repository-path $RepositoryPath `
-    --output "subtree-full.html" `
-    --report-format full `
-    --format html
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --output "subtree-full.html" --report-format full --format html
 ```
 Check for:
 - Complete item list with status details
@@ -254,20 +440,10 @@ When testing HTML output, verify:
 2. **Testing Different Depths**
    ```powershell
    # Test direct children only
-   dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
-       --index-path $TestIndex `
-       --connection-string $TestDb `
-       --repository-path $RepositoryPath `
-       --depth 1 `
-       --report-format tree
+   dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --depth 1 --report-format tree
 
    # Test full recursion
-   dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
-       --index-path $TestIndex `
-       --connection-string $TestDb `
-       --repository-path $RepositoryPath `
-       --recursive `
-       --report-format tree
+   dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --recursive --report-format tree
    ```
 
 3. **Edge Cases**
@@ -344,11 +520,7 @@ dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj validate 
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj validate --path $TestIndex --detailed --sample-size 1000
 
 # Deep subtree check (safe for live indexes)
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree `
-    --index-path $TestIndex `
-    --repository-path "/Root" `
-    --connection-string $TestDb `
-    --report-format detailed
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-subtree --index-path $TestIndex --repository-path "/Root" --connection-string $TestDb --report-format detailed
 ```
 
 ### 2. Live Index Performance
@@ -357,72 +529,36 @@ dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj check-sub
 dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj validate --path $TestIndex --detailed --sample-size 500
 
 # Deep comparison with database (safe for live indexes)
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj compare `
-    --index-path $TestIndex `
-    --repository-path $RepositoryPath `
-    --connection-string $TestDb `
-    --recursive true
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj compare --index-path $TestIndex --repository-path $RepositoryPath --connection-string $TestDb --recursive
 ```
 
 ## Cleanup Operations
 
 ### 1. Preview Orphaned Entries (Safe for Live Indexes)
 ```powershell
-# Basic check to preview orphaned entries (safe for live indexes)
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
-    --index-path $TestIndex `
-    --connection-string $TestDb `
-    --repository-path $RepositoryPath
+# Basic check to preview orphaned entries (safe for live indexes) - dry-run is default
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath
 
 # Check specific path with detailed output
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
-    --index-path $TestIndex `
-    --connection-string $TestDb `
-    --repository-path $RepositoryPath `
-    --verbose
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --verbose
 
-# Check direct children only
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
-    --index-path $TestIndex `
-    --connection-string $TestDb `
-    --repository-path $RepositoryPath `
-    --recursive false
+# Check direct children only (note: --recursive is default true, so use --recursive false to disable)
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --recursive false
 ```
 
 ### 2. Cleanup Operations (Non-Live Index Only)
 ```powershell
 # Clean up with default safety measures (requires --offline flag)
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
-    --index-path $TestIndex `
-    --connection-string $TestDb `
-    --repository-path $RepositoryPath `
-    --dry-run false `
-    --offline
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --dry-run false --offline
 
 # Clean up without creating backup (not recommended, requires --offline flag)
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
-    --index-path $TestIndex `
-    --connection-string $TestDb `
-    --repository-path $RepositoryPath `
-    --dry-run false `
-    --backup false `
-    --offline
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --dry-run false --backup false --offline
 
 # Clean up with custom backup location (requires --offline flag)
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
-    --index-path $TestIndex `
-    --connection-string $TestDb `
-    --repository-path $RepositoryPath `
-    --dry-run false `
-    --backup-path $BackupPath `
-    --offline
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --dry-run false --backup-path $BackupPath --offline
 
 # Attempt without offline flag (should fail)
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
-    --index-path $TestIndex `
-    --connection-string $TestDb `
-    --repository-path $RepositoryPath `
-    --dry-run false
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --dry-run false
 ```
 
 ### 3. Test Recovery From Backup
@@ -432,18 +568,10 @@ $CleanupBackupPath = "${BackupPath}_pre_cleanup_$(Get-Date -Format 'yyyyMMdd_HHm
 Copy-Item -Path $TestIndex -Destination $CleanupBackupPath -Recurse
 
 # Perform cleanup (requires --offline flag)
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned `
-    --index-path $TestIndex `
-    --connection-string $TestDb `
-    --repository-path $RepositoryPath `
-    --dry-run false `
-    --offline
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj clean-orphaned --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath --dry-run false --offline
 
 # Verify results
-dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj compare `
-    --index-path $TestIndex `
-    --connection-string $TestDb `
-    --repository-path $RepositoryPath
+dotnet run --project src/MainProgram/sn-index-maintenance-suite.csproj compare --index-path $TestIndex --connection-string $TestDb --repository-path $RepositoryPath
 
 # If needed, restore from backup
 Remove-Item -Path $TestIndex -Recurse

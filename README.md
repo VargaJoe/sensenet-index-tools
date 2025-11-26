@@ -6,6 +6,36 @@ A comprehensive toolkit for managing and maintaining SenseNet Lucene.NET indexes
 
 This project is maintained at: https://github.com/VargaJoe/sensenet-index-tools
 
+## ⚠️ Experimental Features
+
+### SenseNet Native Index Creation Tool
+
+An experimental CLI tool that uses SenseNet's native indexing infrastructure instead of manual Lucene operations. This tool is designed for **clean setup** scenarios where you need to create an index from scratch.
+
+**Location**: `src/SenseNetIndexTools.Native/`
+
+**Key Differences**:
+- ✅ Uses SenseNet's `IIndexPopulator.ClearAndPopulateAllAsync()` method
+- ✅ Integrates with SenseNet's provider system
+- ✅ Respects SenseNet's security and field processing
+- ✅ Creates indexes compatible with SenseNet installations
+- ❌ Requires full SenseNet dependency chain
+- ❌ Experimental status - use with caution
+
+**Quick Start**:
+```bash
+# Build the experimental tool
+cd src/SenseNetIndexTools.Native
+./build-native.ps1
+
+# Run the experimental tool
+./bin/Release/net8.0/sensenet-create-index-native.exe --connection-string "your-connection-string" --verbose
+```
+
+**Documentation**: See [`src/SenseNetIndexTools.Native/README.md`](src/SenseNetIndexTools.Native/README.md) for detailed usage.
+
+---
+
 ## Requirements
 
 - .NET 8.0 or higher
@@ -33,6 +63,12 @@ dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value> --bac
 
 # Validate index structure and integrity and save report
 dotnet run -- validate --path "<path-to-index>" --detailed --output "<report-file>"
+
+# Create a new Lucene index from SenseNet database content
+dotnet run -- create-index --connection-string "<sql-connection-string>" --repository-path "/Root" --output-path "<index-output-directory>"
+
+# Create index with advanced options
+dotnet run -- create-index --connection-string "<sql-connection-string>" --repository-path "/Root/Sites/Default_Site" --output-path "D:\Indexes" --approach native --create-subfolder --max-items 10000 --output-report "creation-report.html" --format html
 
 # List items from index and/or database
 dotnet run -- list-items --index-path "<path-to-index>" --repository-path "/Root/Path" --source "index" --recursive true --depth 1
@@ -207,4 +243,4 @@ Index operations now properly support large indexes by implementing efficient pa
 New `clean-orphaned` command for cleaning up index entries that exist in the index but not in the database.
 
 ### Enhanced Content Comparison
-Significantly improved content comparison logic with better handling of multiple versions, renamed items, and path normalization. See [Enhanced Comparer Documentation](ENHANCED_COMPARER.md) for details.
+Significantly improved content comparison logic with better handling of multiple versions, renamed items, and path normalization. See [Enhanced Comparer Documentation](docs/fixes/enhanced-comparer.md) for details.

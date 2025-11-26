@@ -40,9 +40,9 @@ This PR significantly improves the `check-subtree` command's ability to detect i
 
 ### 6. Documentation
 
-- Added ENHANCED_ITEM_DETECTION.md document explaining the improved algorithm
-- Updated DOCUMENTATION.md with details about the new features
-- Updated SUBTREE_CHECKER_README.md with new command examples
+- Added docs/fixes/enhanced-item-detection.md document explaining the improved algorithm
+- Updated docs/technical-documentation.md with details about the new features
+- Updated docs/subtree-checker-readme.md with new command examples
 - Updated FUTURE_PLAN.md to reflect completed items
 
 ## How to Test

@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using SenseNet.Search;
 using SenseNet.Search.Indexing;
 using SenseNet.Search.Lucene29;
+using SenseNetIndexTools.Core;
 using IODirectory = System.IO.Directory;
 
 namespace SenseNetIndexTools
@@ -70,6 +71,7 @@ namespace SenseNetIndexTools
             rootCommand.AddCommand(DatabaseLister.Create());
             rootCommand.AddCommand(ContentComparer.Create());
             rootCommand.AddCommand(CleanOrphanedCommand.Create());
+            rootCommand.AddCommand(IndexCreator.Create());
 
             getCommand.SetHandler(async (string path) =>
             {
