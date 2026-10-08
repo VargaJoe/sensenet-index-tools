@@ -1,115 +1,19 @@
-# Local Index Tools with Kubernetes
+# Kubernetes index workflow
 
-## Overview
-Run the SenseNet Index Tools locally on your development machine, using `kubectl cp` to transfer index files between your Kubernetes cluster and local storage.
+Run the tools locally with .NET 8 and kubectl. See [README](README.md#kubernetes-input) for the current capabilities and all options.
 
-## Prerequisites
-- kubectl configured to access your Kubernetes cluster
-- .NET 8.0 SDK installed locally
-- SenseNet Index Tools cloned locally
-
-## Workflow
-
-### 1. Copy Index from Kubernetes Pod
-```bash
-# Create local directory for the index
-mkdir .\temp-index
-
-# Copy index from SenseNet pod to local
-kubectl cp your-namespace/your-sensenet-pod:/path/to/index .\temp-index -n your-namespace
+```powershell
+dotnet run --project src/MainProgram -- lastactivityid-get --auto-copy-index --namespace example --deployment repository --container sensenet
+dotnet run --project src/MainProgram -- validate --auto-copy-index --namespace example --deployment repository --container sensenet --output validation.html --format html
+dotnet run --project src/MainProgram -- check-subtree --auto-copy-index --namespace example --deployment repository --container sensenet --connection-string "<SQL connection string>" --repository-path /Root/Content
 ```
 
-### 2. Run Index Tools Locally
+Omit `--kubeconfig` to use the current context, or specify an explicit config. Check that context before copying. The pod/container must support `ls`, `test` and `tar`.
 
-#### Option A: Web Application
-```bash
-# Navigate to web app directory
-cd src/WebApp/WebApp
+The tool reads the deployment selector, chooses a running ready pod, selects the latest 14/15-digit directory starting with `20` under `/app/App_Data/LocalIndex`, and copies it into a unique local `IndexBackups` directory. `--index-path-in-pod` and `--copy-output-path` override these locations. The same container is used for discovery and copying. Multi-container pods need `--container` unless one is named `sensenet`.
 
-# Run the web app
-dotnet run
+Copies are first stored with a `.partial` suffix. Only a successfully opened Lucene index is promoted to the final directory and passed to the command. Failed partials remain for diagnosis. Every operation uses a separate copy and never changes the process's current directory.
 
-# Access at http://localhost:5000 (or configured port)
-# Configure index path as: D:\devgit\joe\sensenet-index-tools\temp-index
-```
+A live `kubectl cp` is not an atomic snapshot: source commits/merges can change files during transfer. Quiesce the source writer or use a consistent volume snapshot before relying on comparison or repair results. The reader check only proves local readability. Current regression tests simulate kubectl and use synthetic Lucene data; a live cluster acceptance run remains required.
 
-#### Option B: Command Line Interface
-```bash
-# Validate index
-dotnet run -- validate --path ".\temp-index"
-
-# Check subtree
-dotnet run -- check-subtree --index-path ".\temp-index" --connection-string "your-connection-string" --repository-path "/Root"
-
-# Other operations...
-```
-
-### 3. Copy Modified Index Back (if needed)
-For operations that modify the index:
-```bash
-# Stop SenseNet deployment temporarily
-kubectl scale deployment your-sensenet-deployment --replicas=0 -n your-namespace
-
-# Copy back to pod
-kubectl cp .\temp-index your-namespace/your-sensenet-pod:/path/to/index -n your-namespace
-
-# Restart SenseNet
-kubectl scale deployment your-sensenet-deployment --replicas=1 -n your-namespace
-```
-
-## Advantages
-- **No deployment complexity**: Run tools on familiar local environment
-- **Full tool access**: All CLI and web features available locally
-- **Easy debugging**: Local development and testing
-- **Flexible operations**: Mix local and remote operations as needed
-
-## For Read-Only Operations
-For validation, subtree checking, and other read-only operations, you can copy the index without stopping the SenseNet application.
-
-## Automation Script
-Use the provided PowerShell script to automate index copying:
-
-```bash
-# Copy from pod to local
-.\copy-index.ps1 -PodName your-sensenet-pod -Namespace your-namespace -IndexPathInPod /path/to/index -CopyToLocal
-
-# Copy from local to pod
-.\copy-index.ps1 -PodName your-sensenet-pod -Namespace your-namespace -IndexPathInPod /path/to/index -CopyToPod
-```
-
-Parameters:
-- `PodName`: Name of the SenseNet pod
-- `Namespace`: Kubernetes namespace (default: default)
-- `IndexPathInPod`: Path to index directory inside the pod
-- `LocalIndexPath`: Local directory for index (default: .\temp-index)
-- `CopyToLocal`: Copy from pod to local
-- `CopyToPod`: Copy from local to pod
-
-## Real-World Example
-
-Successfully tested with production SenseNet deployment:
-
-### Index Copy Process
-```bash
-# Get deployment info
-kubectl --kubeconfig "$env:USERPROFILE\.kube\config-sn-prod" get deployment manfredrepo-staging-sensenet-cloud -n standalone-manfredrepo-staging
-
-# Find pod
-kubectl --kubeconfig "$env:USERPROFILE\.kube\config-sn-prod" get pods -n standalone-manfredrepo-staging
-
-# List index contents (find dated folder)
-kubectl exec [pod-name] -- ls -la /app/App_Data/LocalIndex/
-
-# Copy latest index
-kubectl cp [namespace]/[pod-name]:/app/App_Data/LocalIndex/[latest-folder] ./temp-index-prod
-```
-
-### Validation Results
-✅ **Index validation passed** - All structure checks successful
-✅ **Index integrity verified** - No corruption detected  
-✅ **SenseNet fields present** - Compatible with SenseNet requirements
-
-### Database Operations
-⚠️ **Network limitation** - Database connections require VPN/cluster access
-- Index-only operations work perfectly
-- Database comparison operations need network connectivity to SQL Server
+`lastactivityid-set`, `lastactivityid-init` and non-dry-run `clean-orphaned` modify only the local copy and require `--offline`. They do not upload it to Kubernetes. Replacing a production index requires a separate, explicitly planned operational procedure.

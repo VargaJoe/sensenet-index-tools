@@ -104,3 +104,7 @@ src/WebApp/WebApp/Data/*
 src/WebApp/out/
 IndexOutput/
 Reports/
+
+# Local backup sources and standalone published CLI output
+*.bak
+src/MainProgram/SensenetIndexTools/

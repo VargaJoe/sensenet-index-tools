@@ -1,0 +1,305 @@
+@page "/rebuild-index"
+@rendermode InteractiveServer
+@inject RebuildIndexService RebuildService
+@inject IJSRuntime JSRuntime
+@inject ILogger<RebuildIndex> Logger
+
+<PageTitle>Rebuild Index - SenseNet Index Tools</PageTitle>
+
+<div class="container-fluid">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Rebuild Index</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Configuration Card -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-arrow-repeat me-2"></i>
+                        Rebuild Index Configuration
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <EditForm Model="rebuildOptions" OnValidSubmit="StartRebuildIndex">
+                        <DataAnnotationsValidator />
+
+                        <div class="row">
+                            <!-- Repository URL -->
+                            <div class="col-md-6 mb-3">
+                                <label for="repoUrl" class="form-label">Repository URL <span class="text-danger">*</span></label>
+                                <InputText id="repoUrl" class="form-control" @bind-Value="rebuildOptions.RepoUrl"
+                                          placeholder="https://your-repo.sensenet.cloud" />
+                                <ValidationMessage For="() => rebuildOptions.RepoUrl" />
+                                <div class="form-text">SenseNet repository URL</div>
+                            </div>
+
+                            <!-- API Key -->
+                            <div class="col-md-6 mb-3">
+                                <label for="apiKey" class="form-label">API Key <span class="text-danger">*</span></label>
+                                <InputText id="apiKey" type="password" class="form-control" @bind-Value="rebuildOptions.ApiKey"
+                                          placeholder="Your API key" />
+                                <ValidationMessage For="() => rebuildOptions.ApiKey" />
+                                <div class="form-text">API key for repository authentication</div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <!-- Content Path -->
+                            <div class="col-md-6 mb-3">
+                                <label for="contentPath" class="form-label">Content Path</label>
+                                <InputText id="contentPath" class="form-control" @bind-Value="rebuildOptions.ContentPath"
+                                          placeholder="/Root/Sites/Default_Site" />
+                                <ValidationMessage For="() => rebuildOptions.ContentPath" />
+                                <div class="form-text">Path to content item (e.g., /Root/Sites/Default_Site)</div>
+                            </div>
+
+                            <!-- Content ID -->
+                            <div class="col-md-6 mb-3">
+                                <label for="contentId" class="form-label">Content ID</label>
+                                <InputText id="contentId" class="form-control" inputmode="numeric" @bind-Value="rebuildOptions.ContentId" />
+                                <ValidationMessage For="() => rebuildOptions.ContentId" />
+                                <div class="form-text">Numeric content ID</div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <!-- File Path -->
+                            <div class="col-md-6 mb-3">
+                                <label for="filePath" class="form-label">File Path</label>
+                                <div class="input-group">
+                                    <InputText id="filePath" class="form-control" @bind-Value="rebuildOptions.FilePath"
+                                              placeholder="fixTheseItems.txt" />
+                                </div>
+                                <ValidationMessage For="() => rebuildOptions.FilePath" />
+                                <div class="form-text">File containing list of content paths/IDs to process</div>
+                            </div>
+
+                            <!-- Rebuild Level -->
+                            <div class="col-md-6 mb-3">
+                                <label for="rebuildLevel" class="form-label">Rebuild Level <span class="text-danger">*</span></label>
+                                <InputSelect id="rebuildLevel" class="form-control" @bind-Value="rebuildOptions.RebuildLevel">
+                                    <option value="IndexOnly">Index Only</option>
+                                    <option value="DatabaseOnly">Database Only</option>
+                                    <option value="IndexAndDatabase">Index and Database</option>
+                                </InputSelect>
+                                <ValidationMessage For="() => rebuildOptions.RebuildLevel" />
+                                <div class="form-text">What to rebuild: index, database, or both</div>
+                            </div>
+                        </div>
+
+                        <!-- Options -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <div class="form-check">
+                                    <InputCheckbox id="recursive" class="form-check-input" @bind-Value="rebuildOptions.Recursive" />
+                                    <label for="recursive" class="form-check-label">Recursive</label>
+                                </div>
+                                <div class="form-text">Include child content items</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div class="form-check">
+                                    <InputCheckbox id="verbose" class="form-check-input" @bind-Value="rebuildOptions.Verbose" />
+                                    <label for="verbose" class="form-check-label">Verbose Logging</label>
+                                </div>
+                                <div class="form-text">Show detailed operation logs</div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary" disabled="@isProcessing">
+                                @if (isProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    @("Processing")
+                                }
+                                else
+                                {
+                                    <i class="bi bi-arrow-repeat me-2"></i>
+                                    @("Start Rebuild")
+                                }
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" @onclick="ResetForm">
+                                <i class="bi bi-arrow-counterclockwise me-2"></i>
+                                Reset
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+
+            <!-- Results Card -->
+            @if (rebuildResult != null)
+            {
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-check-circle-fill text-@(rebuildResult.Success ? "success" : "danger") me-2"></i>
+                            Rebuild Results
+                        </h5>
+                        <small class="text-muted">Duration: @rebuildResult.Duration.TotalSeconds.ToString("F2")s</small>
+                    </div>
+                    <div class="card-body">
+                        @if (!rebuildResult.Success && !string.IsNullOrEmpty(rebuildResult.ErrorMessage))
+                        {
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                @rebuildResult.ErrorMessage
+                            </div>
+                        }
+
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <div class="text-center">
+                                    <div class="h3 text-primary">@rebuildResult.ItemsProcessed</div>
+                                    <small class="text-muted">Items Processed</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="text-center">
+                                    <div class="h3 text-success">@rebuildResult.SuccessfulItems</div>
+                                    <small class="text-muted">Successful</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="text-center">
+                                    <div class="h3 text-danger">@rebuildResult.FailedItems</div>
+                                    <small class="text-muted">Failed</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (rebuildResult.ItemResults != null && rebuildResult.ItemResults.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Item</th>
+                                            <th>Status</th>
+                                            <th>Message</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var itemResult in rebuildResult.ItemResults)
+                                        {
+                                            <tr>
+                                                <td>@itemResult.Identifier</td>
+                                                <td>
+                                                    @if (itemResult.Success)
+                                                    {
+                                                        <span class="badge bg-success">Success</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-danger">Failed</span>
+                                                    }
+                                                </td>
+                                                <td>@itemResult.ErrorMessage</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Help Card -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-info-circle me-2"></i>
+                        How It Works
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="small mb-2">
+                        This tool rebuilds index entries for specific content items using SenseNet's REST API.
+                    </p>
+                    <ul class="small mb-0">
+                        <li><strong>Single Item:</strong> Specify either Content Path or Content ID</li>
+                        <li><strong>Batch Processing:</strong> Provide a file with multiple paths/IDs</li>
+                        <li><strong>Rebuild Levels:</strong> IndexOnly (recommended), DatabaseOnly, or both</li>
+                        <li><strong>Safe:</strong> Uses SenseNet's built-in rebuild functionality</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Tips Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-lightbulb me-2"></i>
+                        Tips
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <ul class="small mb-0">
+                        <li>Use <strong>IndexOnly</strong> for missing index items</li>
+                        <li>Use <strong>Recursive</strong> to include child content</li>
+                        <li>Check <strong>Subtree Check</strong> first to identify missing items</li>
+                        <li>API key needs <strong>rebuild permission</strong> on content</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private RebuildIndexOptions rebuildOptions = new();
+    private RebuildIndexResult? rebuildResult;
+    private bool isProcessing;
+
+    protected override void OnInitialized()
+    {
+        rebuildOptions.RebuildLevel = "IndexOnly"; // Default value
+    }
+
+    private async Task StartRebuildIndex()
+    {
+        if (isProcessing) return;
+
+        isProcessing = true;
+        rebuildResult = null;
+
+        try
+        {
+            Logger.LogInformation("Starting index rebuild operation");
+            rebuildResult = await RebuildService.RebuildIndexAsync(rebuildOptions);
+            Logger.LogInformation($"Index rebuild completed. Success: {rebuildResult.Success}, Items: {rebuildResult.ItemsProcessed}");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during index rebuild");
+            rebuildResult = new RebuildIndexResult
+            {
+                Success = false,
+                ErrorMessage = ex.Message,
+                StartTime = DateTime.Now,
+                EndTime = DateTime.Now
+            };
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private void ResetForm()
+    {
+        rebuildOptions = new RebuildIndexOptions { RebuildLevel = "IndexOnly" };
+        rebuildResult = null;
+    }
+
+}

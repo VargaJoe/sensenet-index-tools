@@ -75,7 +75,7 @@ namespace SenseNetIndexTools
                     }
 
                     Console.WriteLine($"\nFound {items.Count} items in database under path {repositoryPath}:");
-                    
+
                     if (items.Count > 0)
                     {
                         Console.WriteLine("NodeId\tVersionId\tPath\tNodeType");
@@ -101,16 +101,16 @@ namespace SenseNetIndexTools
         private static List<DbContentItem> GetContentItemsFromDatabase(string connectionString, string path, bool recursive, int depth)
         {
             var items = new List<DbContentItem>();
-            
+
             // Sanitize path for SQL query
-            string sanitizedPath = path.Replace("'", "''");
+            string sanitizedPath = path.Replace('\\', '/').TrimEnd('/');
 
             // Build the SQL query
             string sql;
             if (recursive)
             {
                 sql = @"
-                    SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName 
+                    SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName
                     FROM Nodes N
                     JOIN Versions V ON N.NodeId = V.NodeId
                     JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
@@ -120,7 +120,7 @@ namespace SenseNetIndexTools
             else
             {
                 sql = @"
-                    SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName 
+                    SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName
                     FROM Nodes N
                     JOIN Versions V ON N.NodeId = V.NodeId
                     JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
@@ -131,7 +131,7 @@ namespace SenseNetIndexTools
             using (var connection = new SqlConnection(connectionString))
             {
                 connection.Open();
-                
+
                 using (var command = new SqlCommand(sql, connection))
                 {
                     command.Parameters.AddWithValue("@path", sanitizedPath);
@@ -139,7 +139,7 @@ namespace SenseNetIndexTools
                     {
                         command.Parameters.AddWithValue("@pathPattern", sanitizedPath + "/%");
                     }
-                    
+
                     using (var reader = command.ExecuteReader())
                     {
                         while (reader.Read())
@@ -155,7 +155,7 @@ namespace SenseNetIndexTools
                     }
                 }
             }
-            
+
             return items;
         }
     }

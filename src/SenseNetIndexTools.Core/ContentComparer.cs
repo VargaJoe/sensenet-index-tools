@@ -75,9 +75,10 @@ namespace SenseNetIndexTools
             command.AddOption(verboseOption);
             command.AddOption(outputOption);
             command.AddOption(formatOption);
-            command.SetHandler((System.CommandLine.Invocation.InvocationContext context) =>
+            var indexInput = new IndexInputOptions(command, indexPathOption);
+            command.SetHandler(async (System.CommandLine.Invocation.InvocationContext context) =>
             {
-                var indexPath = context.ParseResult.GetValueForOption(indexPathOption)!;
+                var indexPath = await indexInput.ResolveAsync(context);
                 var connectionString = context.ParseResult.GetValueForOption(connectionStringOption)!;
                 var repositoryPath = context.ParseResult.GetValueForOption(repositoryPathOption)!;
                 var recursive = context.ParseResult.GetValueForOption(recursiveOption);
@@ -90,7 +91,7 @@ namespace SenseNetIndexTools
                 try
                 {
                     VerboseLogging = verbose;
-                    
+
                     if (!IndexUtilities.IsValidLuceneIndex(indexPath))
                     {
                         Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {indexPath}");
@@ -102,52 +103,7 @@ namespace SenseNetIndexTools
                     Console.WriteLine($"Recursive mode: {(recursive ? "Yes" : "No")}");
                     Console.WriteLine($"Depth limit: {depth}");
 
-                    // Get items from database and mark as database items 
-                    var dbItems = GetContentItemsFromDatabase(connectionString, repositoryPath, recursive, depth)
-                        .Select(i => { i.InDatabase = true; return i; });
-
-                    // Get items from index
-                    var indexItems = GetContentItemsFromIndex(indexPath, repositoryPath, recursive, depth)
-                        .Select(i => { i.InIndex = true; return i; });
-                    // Combine and group items by normalized path and type for side-by-side display
-                    var items = dbItems.Union(indexItems)
-                        .GroupBy(i => new { 
-                            Path = NormalizePath(i.Path),
-                            Type = i.NodeType ?? "unknown", // NodeType is already normalized to lowercase
-                            // Create a unique identifier that distinctly identifies each item by both ID and version
-                            // This ensures items with same path but different IDs or versions are treated as separate entries
-                            Id = i.InDatabase ? i.NodeId.ToString() : i.IndexNodeId ?? "unknown",
-                            Version = i.InDatabase ? i.VersionId.ToString() : i.IndexVersionId ?? "unknown"
-                        })
-                        .Select(g =>
-                        {
-                            var dbItem = g.FirstOrDefault(i => i.InDatabase);
-                            var indexItem = g.FirstOrDefault(i => i.InIndex);
-
-                            if (dbItem != null && indexItem != null)
-                            {
-                                // Found in both - merge the index data into the DB item
-                                dbItem.InIndex = true;
-                                dbItem.IndexNodeId = indexItem.IndexNodeId;
-                                dbItem.IndexVersionId = indexItem.IndexVersionId;
-                                dbItem.IndexTimestamp = indexItem.IndexTimestamp;
-                                dbItem.IndexVersionTimestamp = indexItem.IndexVersionTimestamp;
-                                return dbItem;
-                            }
-                            
-                            return dbItem ?? indexItem!;
-                        });
-
-                    // Filter by depth if specified
-                    if (depth > 0)
-                    {
-                        var basePath = repositoryPath.TrimEnd('/');
-                        var baseDepth = basePath.Count(c => c == '/');
-                        items = items.Where(item => {
-                            var itemDepth = item.Path.Count(c => c == '/') - baseDepth;
-                            return itemDepth <= depth;
-                        });
-                    }
+                    var items = new ContentComparer().CompareContent(indexPath, connectionString, repositoryPath, recursive, depth);
 
                     // Sort items based on order-by option
                     var groupedItems = orderBy switch
@@ -254,7 +210,7 @@ namespace SenseNetIndexTools
                 var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                 var idxTimestamp = item.InIndex ? (item.IndexTimestamp ?? "-") : "-";
                 var idxVerTimestamp = item.InIndex ? (item.IndexVersionTimestamp ?? "-") : "-";
-                
+
                 sb.AppendLine($"| {item.Status} | {dbNodeId} | {dbVerID} | {dbTimestamp} | {dbVerTimestamp} | {idxNodeId} | {idxVerID} | {idxTimestamp} | {idxVerTimestamp} | {item.Path} |");
             }
             return sb.ToString();
@@ -266,16 +222,16 @@ namespace SenseNetIndexTools
             string sanitizedPath = path.Replace("'", "''");
 
             Console.WriteLine($"DATABASE QUERY: Path={path}, Recursive={recursive}, Depth={depth}");            string sql = recursive
-                ? @"SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName, 
-                           CAST(N.Timestamp as bigint) as TimestampNumeric, 
+                ? @"SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName,
+                           CAST(N.Timestamp as bigint) as TimestampNumeric,
                            CAST(V.Timestamp as bigint) as VersionTimestampNumeric
                     FROM Nodes N
                     JOIN Versions V ON N.NodeId = V.NodeId
                     JOIN NodeTypes NT ON N.NodeTypeId = NT.NodeTypeId
                     WHERE (LOWER(N.Path) = LOWER(@path) OR LOWER(N.Path) LIKE LOWER(@pathPattern))
                     ORDER BY N.Path"
-                : @"SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName, 
-                           CAST(N.Timestamp as bigint) as TimestampNumeric, 
+                : @"SELECT N.NodeId, V.VersionId as VersionId, N.Path, NT.Name as NodeTypeName,
+                           CAST(N.Timestamp as bigint) as TimestampNumeric,
                            CAST(V.Timestamp as bigint) as VersionTimestampNumeric
                     FROM Nodes N
                     JOIN Versions V ON N.NodeId = V.NodeId
@@ -296,7 +252,7 @@ namespace SenseNetIndexTools
 
                     int loadedCount = 0;
                     int logInterval = 5000; // Log every 5000 items
-                    
+
                     using (var reader = command.ExecuteReader())
                     {
                         while (reader.Read())
@@ -345,7 +301,7 @@ namespace SenseNetIndexTools
                     }
                 }
             }
-            
+
             return items;
         }
 
@@ -360,7 +316,7 @@ namespace SenseNetIndexTools
                 using (var searcher = new IndexSearcher(reader))
                 {
                     // Convert path to lowercase for SenseNet indexes which store paths in lowercase
-                    var normalizedPath = path.ToLowerInvariant();
+                    var normalizedPath = NormalizePath(path);
                     Console.WriteLine($"INDEX NORMALIZED QUERY PATH: '{path}' -> '{normalizedPath}'");
 
                     Query query;
@@ -385,64 +341,20 @@ namespace SenseNetIndexTools
                         query = boolQuery;
                     }
 
-                    // Implement paging for large indexes
-                    const int PageSize = 10000; // Process 10000 documents at a time
-                    int totalProcessed = 0;
-                    
-                    // Create a collector to find all matching documents
-                    var initialCollector = TopScoreDocCollector.Create(1000000, true); // Use a large limit
-                    searcher.Search(query, initialCollector);
-                    var topDocs = initialCollector.TopDocs();
-                    int totalHits = topDocs.TotalHits;
-                    
-                    Console.WriteLine($"INDEX QUERY RESULTS: Found {totalHits} items in index matching the query");
-                    
-                    // Process in batches to avoid memory issues
-                    while (totalProcessed < totalHits)
+                    searcher.Search(query, new IndexDocumentCollector(docId =>
                     {
-                        var collector = TopScoreDocCollector.Create(1000000, true); // Use a large limit
-                        searcher.Search(query, collector);
-                        var searchHits = collector.TopDocs(totalProcessed, Math.Min(PageSize, totalHits - totalProcessed)).ScoreDocs;
-                        
-                        if (searchHits.Length == 0) break; // No more results
-
-                        Console.WriteLine($"INDEX PROCESSING BATCH: {totalProcessed}-{totalProcessed + searchHits.Length} of {totalHits}");
-
-                        int batchCount = 0;
-                        foreach (var hitDoc in searchHits)
-                        {
-                            var doc = searcher.Doc(hitDoc.Doc);
-                              var nodeId = doc.Get("Id") ?? doc.Get("NodeId") ?? "0";
-                            var versionId = doc.Get("Version_") ?? doc.Get("VersionId") ?? "0";
-                            var docPath = doc.Get("Path") ?? string.Empty;
-                            var type = (doc.Get("Type") ?? doc.Get("NodeType") ?? "Unknown").ToLowerInvariant();
-                            var timestamp = doc.Get("NodeTimestamp") ?? string.Empty;
-                            var versionTimeStamp = doc.Get("VersionTimestamp") ?? string.Empty;
-
-                            batchCount++;
-                            // Log every 20000th item as a sample
-                            if (VerboseLogging && ((totalProcessed + batchCount) % 20000 == 0 || batchCount <= 5))
-                            {
-                                Console.WriteLine($"INDEX SAMPLE: NodeId={nodeId}, VersionId={versionId}, Path='{docPath}', NormalizedPath='{NormalizePath(docPath)}', Type='{type}'");
-                            }
-
-                            items.Add(new ContentItem
-                            {
-                                NodeId = 0,  // We'll update this if we find a matching DB item
-                                VersionId = 0, // We'll update this if we find a matching DB item
-                                Path = docPath,
-                                NodeType = type, // Node type already normalized to lowercase
-                                InDatabase = false,
-                                InIndex = true,
-                                IndexNodeId = nodeId,
-                                IndexVersionId = versionId,
-                                IndexTimestamp = timestamp,
-                                IndexVersionTimestamp = versionTimeStamp
-                            });
-                        }
-                        
-                        totalProcessed += searchHits.Length;
-                    }
+                        var doc = searcher.Doc(docId);
+                        items.Add(new ContentItem {
+                            IndexDocumentId = docId,
+                            Path = doc.Get("Path") ?? string.Empty,
+                            NodeType = (doc.Get("Type") ?? doc.Get("NodeType") ?? "unknown").ToLowerInvariant(),
+                            InIndex = true,
+                            IndexNodeId = doc.Get("Id") ?? doc.Get("NodeId") ?? "0",
+                            IndexVersionId = doc.Get("VersionId") ?? doc.Get("Version_") ?? "0",
+                            IndexTimestamp = doc.Get("NodeTimestamp"),
+                            IndexVersionTimestamp = doc.Get("VersionTimestamp")
+                        });
+                    }));
 
                     Console.WriteLine($"INDEX LOAD COMPLETE: Loaded {items.Count} items from index");
 
@@ -467,7 +379,7 @@ namespace SenseNetIndexTools
                 throw new InvalidOperationException($"The directory does not appear to be a valid Lucene index: {indexPath}");
             }
 
-            // Get items from database and mark as database items 
+            // Get items from database and mark as database items
             var dbItems = GetContentItemsFromDatabase(connectionString, repositoryPath, recursive, depth)
                 .Select(i => { i.InDatabase = true; return i; });
 
@@ -475,25 +387,7 @@ namespace SenseNetIndexTools
             var indexItems = GetContentItemsFromIndex(indexPath, repositoryPath, recursive, depth)
                 .Select(i => { i.InIndex = true; return i; });
 
-            // Combine and group items by path for side-by-side comparison
-            var items = dbItems.Union(indexItems)
-                .GroupBy(i => i.Path.ToLowerInvariant())
-                .Select(g =>
-                {
-                    var dbItem = g.FirstOrDefault(i => i.InDatabase);
-                    var indexItem = g.FirstOrDefault(i => i.InIndex);                    if (dbItem != null && indexItem != null)
-                    {
-                        // Found in both - merge the index data into the DB item
-                        dbItem.InIndex = true;
-                        dbItem.IndexNodeId = indexItem.IndexNodeId;
-                        dbItem.IndexVersionId = indexItem.IndexVersionId;
-                        dbItem.IndexTimestamp = indexItem.IndexTimestamp;
-                        dbItem.IndexVersionTimestamp = indexItem.IndexVersionTimestamp;
-                        return dbItem;
-                    }
-                    
-                    return dbItem ?? indexItem!;
-                });
+            var items = CompareItems(dbItems, indexItems).AsEnumerable();
 
             // Filter by depth if specified
             if (depth > 0)
@@ -509,6 +403,47 @@ namespace SenseNetIndexTools
             return items.ToList();
         }
 
+        /// <summary>Pairs versions by path, type, node ID and version ID, preserving duplicate index entries.</summary>
+        public static List<ContentItem> CompareItems(IEnumerable<ContentItem> databaseItems, IEnumerable<ContentItem> indexItems)
+        {
+            static (string, string, string, string) Key(ContentItem item, bool database) =>
+                (NormalizePath(item.Path), (item.NodeType ?? "unknown").ToLowerInvariant(),
+                 database ? item.NodeId.ToString() : item.IndexNodeId ?? "",
+                 database ? item.VersionId.ToString() : item.IndexVersionId ?? "");
+            var pending = indexItems.GroupBy(i => Key(i, false))
+                .ToDictionary(g => g.Key, g => new Queue<ContentItem>(g));
+            var result = new List<ContentItem>();
+            foreach (var db in databaseItems)
+            {
+                var item = new ContentItem {
+                    NodeId = db.NodeId, VersionId = db.VersionId, Path = db.Path, NodeType = db.NodeType,
+                    TimestampNumeric = db.TimestampNumeric, VersionTimestampNumeric = db.VersionTimestampNumeric,
+                    InDatabase = true
+                };
+                if (pending.TryGetValue(Key(db, true), out var matches) && matches.TryDequeue(out var index))
+                {
+                    item.InIndex = true;
+                    item.IndexDocumentId = index.IndexDocumentId;
+                    item.IndexNodeId = index.IndexNodeId;
+                    item.IndexVersionId = index.IndexVersionId;
+                    item.IndexTimestamp = index.IndexTimestamp;
+                    item.IndexVersionTimestamp = index.IndexVersionTimestamp;
+                }
+                result.Add(item);
+            }
+            foreach (var index in pending.Values.SelectMany(q => q))
+                result.Add(new ContentItem {
+                    Path = index.Path, NodeType = index.NodeType, InIndex = true, IndexDocumentId = index.IndexDocumentId,
+                    IndexNodeId = index.IndexNodeId, IndexVersionId = index.IndexVersionId,
+                    IndexTimestamp = index.IndexTimestamp, IndexVersionTimestamp = index.IndexVersionTimestamp
+                });
+            return result;
+        }
+
+        public static List<ContentItem> ReadIndexItems(string indexPath, string path, bool recursive = true, int depth = 0) =>
+            GetContentItemsFromIndex(indexPath, path, recursive, depth)
+                .Where(i => depth <= 0 || i.Path.Count(c => c == '/') - path.TrimEnd('/').Count(c => c == '/') <= depth).ToList();
+
         private static string GenerateHtmlReport(List<ContentItem> items)
         {
             var matchCount = items.Count(i => i.InDatabase && i.InIndex && i.Status == "Match");
@@ -518,7 +453,7 @@ namespace SenseNetIndexTools
             var indexOnlyCount = items.Count(i => !i.InDatabase && i.InIndex);
 
             var sb = new StringBuilder();
-            
+
             // Start HTML document
             sb.AppendLine("<!DOCTYPE html>");
             sb.AppendLine("<html lang=\"en\">");
@@ -528,11 +463,11 @@ namespace SenseNetIndexTools
             sb.AppendLine("<title>SenseNet Content Comparison Report</title>");
             sb.AppendLine("<style>");
             sb.AppendLine(@"
-                body { 
-                    font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, ""Helvetica Neue"", Arial, sans-serif; 
-                    line-height: 1.6; 
-                    max-width: 1400px; 
-                    margin: 0 auto; 
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, ""Helvetica Neue"", Arial, sans-serif;
+                    line-height: 1.6;
+                    max-width: 1400px;
+                    margin: 0 auto;
                     padding: 20px;
                     color: #333;
                     background-color: #fafbfc;
@@ -543,9 +478,9 @@ namespace SenseNetIndexTools
                     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
                     padding: 30px;
                 }
-                h1, h2 { 
-                    border-bottom: 1px solid #eee; 
-                    padding-bottom: 0.3em; 
+                h1, h2 {
+                    border-bottom: 1px solid #eee;
+                    padding-bottom: 0.3em;
                     margin-top: 1.5em;
                     color: #24292e;
                 }
@@ -553,20 +488,20 @@ namespace SenseNetIndexTools
                     margin-top: 0;
                     font-size: 2rem;
                 }
-                table { 
-                    border-collapse: collapse; 
-                    width: 100%; 
-                    margin: 1em 0; 
+                table {
+                    border-collapse: collapse;
+                    width: 100%;
+                    margin: 1em 0;
                     font-size: 14px;
                 }
-                th, td { 
-                    padding: 12px 8px; 
-                    text-align: left; 
-                    border-bottom: 1px solid #ddd; 
+                th, td {
+                    padding: 12px 8px;
+                    text-align: left;
+                    border-bottom: 1px solid #ddd;
                 }
-                th { 
+                th {
                     background: #f6f8fa;
-                    font-weight: 600; 
+                    font-weight: 600;
                     color: #586069;
                 }
                 tr:hover {
@@ -607,24 +542,24 @@ namespace SenseNetIndexTools
                 .stat-mismatch { color: #d73a49; }
                 .stat-timestamp { color: #f66a0a; }
                 .stat-info { color: #6f42c1; }
-                .status-match { 
-                    color: #28a745; 
+                .status-match {
+                    color: #28a745;
                     font-weight: 600;
                 }
-                .status-mismatch { 
-                    color: #d73a49; 
+                .status-mismatch {
+                    color: #d73a49;
                     font-weight: 600;
                 }
-                .status-timestamp { 
-                    color: #f66a0a; 
+                .status-timestamp {
+                    color: #f66a0a;
                     font-weight: 600;
                 }
-                .status-db-only { 
-                    color: #6f42c1; 
+                .status-db-only {
+                    color: #6f42c1;
                     font-weight: 600;
                 }
-                .status-index-only { 
-                    color: #0366d6; 
+                .status-index-only {
+                    color: #0366d6;
                     font-weight: 600;
                 }
                 .path-cell {
@@ -664,55 +599,55 @@ namespace SenseNetIndexTools
             sb.AppendLine("</head>");
             sb.AppendLine("<body>");
             sb.AppendLine("<div class=\"container\">");
-            
+
             // Report header
             sb.AppendLine("<h1>SenseNet Content Comparison Report</h1>");
-            
+
             // Summary section with statistics
             sb.AppendLine("<div class=\"summary-section\">");
             sb.AppendLine("<h2>Summary</h2>");
             sb.AppendLine("<div class=\"stats-container\">");
-            
+
             sb.AppendLine("<div class=\"stat-card\">");
             sb.AppendLine("<div class=\"stat-title\">Total Items</div>");
             sb.AppendLine($"<div class=\"stat-value\">{items.Count:N0}</div>");
             sb.AppendLine("<small>Unique by path, ID, version</small>");
             sb.AppendLine("</div>");
-            
+
             sb.AppendLine("<div class=\"stat-card\">");
             sb.AppendLine("<div class=\"stat-title\">Perfect Matches</div>");
             sb.AppendLine($"<div class=\"stat-value stat-match\">{matchCount:N0}</div>");
             sb.AppendLine($"<small>{(items.Count > 0 ? (matchCount * 100.0 / items.Count):0.0):F1}% of total</small>");
             sb.AppendLine("</div>");
-            
+
             sb.AppendLine("<div class=\"stat-card\">");
             sb.AppendLine("<div class=\"stat-title\">ID Mismatches</div>");
             sb.AppendLine($"<div class=\"stat-value stat-mismatch\">{idMismatchCount:N0}</div>");
             sb.AppendLine($"<small>{(items.Count > 0 ? (idMismatchCount * 100.0 / items.Count):0.0):F1}% of total</small>");
             sb.AppendLine("</div>");
-            
+
             sb.AppendLine("<div class=\"stat-card\">");
             sb.AppendLine("<div class=\"stat-title\">Timestamp Mismatches</div>");
             sb.AppendLine($"<div class=\"stat-value stat-timestamp\">{timestampMismatchCount:N0}</div>");
             sb.AppendLine($"<small>{(items.Count > 0 ? (timestampMismatchCount * 100.0 / items.Count):0.0):F1}% of total</small>");
             sb.AppendLine("</div>");
-            
+
             sb.AppendLine("<div class=\"stat-card\">");
             sb.AppendLine("<div class=\"stat-title\">Database Only</div>");
             sb.AppendLine($"<div class=\"stat-value stat-info\">{dbOnlyCount:N0}</div>");
             sb.AppendLine($"<small>{(items.Count > 0 ? (dbOnlyCount * 100.0 / items.Count):0.0):F1}% of total</small>");
             sb.AppendLine("</div>");
-            
+
             sb.AppendLine("</div>"); // End of stats-container
             sb.AppendLine("</div>"); // End of summary-section
-            
+
             // Detailed results table
             sb.AppendLine("<div class=\"section\">");
             sb.AppendLine("<div class=\"section-title\">");
             sb.AppendLine("<h2>Detailed Comparison Results</h2>");
             sb.AppendLine($"<span class=\"badge badge-total\">{items.Count} items</span>");
             sb.AppendLine("</div>");
-            
+
             sb.AppendLine("<table>");
             sb.AppendLine("<thead>");
             sb.AppendLine("<tr>");
@@ -729,7 +664,7 @@ namespace SenseNetIndexTools
             sb.AppendLine("</tr>");
             sb.AppendLine("</thead>");
             sb.AppendLine("<tbody>");
-            
+
             foreach (var item in items.OrderBy(i => i.Path, StringComparer.OrdinalIgnoreCase))
             {
                 var dbNodeId = item.InDatabase ? item.NodeId.ToString() : "-";
@@ -740,17 +675,18 @@ namespace SenseNetIndexTools
                 var idxVerID = item.InIndex ? item.IndexVersionId : "-";
                 var idxTimestamp = item.InIndex ? (item.IndexTimestamp ?? "-") : "-";
                 var idxVerTimestamp = item.InIndex ? (item.IndexVersionTimestamp ?? "-") : "-";
-                
+
                 var statusClass = item.Status switch
                 {
                     "Match" => "status-match",
                     "ID mismatch" => "status-mismatch",
                     "Timestamp mismatch" => "status-timestamp",
-                    "DB Only" => "status-db-only",
-                    "Index Only" => "status-index-only",
+                    "Timestamp unavailable" => "status-timestamp",
+                    "DB only" => "status-db-only",
+                    "Index only" => "status-index-only",
                     _ => ""
                 };
-                
+
                 sb.AppendLine("<tr>");
                 sb.AppendLine($"<td class=\"{statusClass}\">{item.Status}</td>");
                 sb.AppendLine($"<td>{dbNodeId}</td>");
@@ -764,11 +700,11 @@ namespace SenseNetIndexTools
                 sb.AppendLine($"<td class=\"path-cell\">{System.Web.HttpUtility.HtmlEncode(item.Path)}</td>");
                 sb.AppendLine("</tr>");
             }
-            
+
             sb.AppendLine("</tbody>");
             sb.AppendLine("</table>");
             sb.AppendLine("</div>");
-            
+
             // Footer
             sb.AppendLine("<footer>");
             sb.AppendLine($"<p>Generated by SenseNet Index Maintenance Suite on {DateTime.Now:yyyy-MM-dd HH:mm:ss}</p>");
