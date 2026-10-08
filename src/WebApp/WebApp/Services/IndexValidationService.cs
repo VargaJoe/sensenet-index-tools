@@ -69,7 +69,7 @@ public class IndexValidationService
             }
 
             // Execute the validation command
-            await ExecuteValidationAsync(options, outputPath);
+            var valid = await ExecuteValidationAsync(options, outputPath);
 
             // Read the generated report
             if (File.Exists(outputPath))
@@ -79,8 +79,8 @@ public class IndexValidationService
             }
 
             result.EndTime = DateTime.UtcNow;
-            result.Success = true;
-            result.Message = "Validation completed successfully";
+            result.Success = valid;
+            result.Message = result.Success ? "Validation completed successfully" : "Validation found index errors";
 
             // Save report to storage
             await SaveReportAsync(result, options);
@@ -103,15 +103,15 @@ public class IndexValidationService
 
             // Save failed validation report too
             await SaveReportAsync(failedResult, options);
-            
+
             return failedResult;
         }
     }
 
-    private async Task ExecuteValidationAsync(ValidationOptions options, string outputPath)
+    private async Task<bool> ExecuteValidationAsync(ValidationOptions options, string outputPath)
     {
         _logger.LogInformation("Executing validation with options: {Options}", JsonSerializer.Serialize(options));
-        
+
         try
         {
             // Verify this is a valid Lucene index
@@ -144,13 +144,13 @@ public class IndexValidationService
             {
                 SampleSize = options.SampleSize ?? 10
             };
-            
+
             if (customFields != null)
             {
                 validator.RequiredFields = customFields;
             }
-            
-            var results = validator.Validate(options.Detailed);
+
+            var results = validator.Validate(options.Detailed).ToList();
 
             // Generate report based on format
             if (options.Format == "html")
@@ -162,7 +162,7 @@ public class IndexValidationService
                 await GenerateMarkdownReportAsync(results, outputPath, options.ReportFormat);
             }
 
-            _logger.LogInformation("Validation completed successfully");
+            return results.All(r => r.Severity != ValidationSeverity.Error);
         }
         catch (Exception ex)
         {
@@ -183,7 +183,7 @@ public class IndexValidationService
             await writer.WriteLineAsync($"- Warnings: {results.Count(r => r.Severity == ValidationSeverity.Warning)}");
             await writer.WriteLineAsync($"- Info: {results.Count(r => r.Severity == ValidationSeverity.Info)}");
             await writer.WriteLineAsync();
-            
+
             if (reportFormat != "summary")
             {
                 // Field info
@@ -198,7 +198,7 @@ public class IndexValidationService
                     await writer.WriteLineAsync();
                 }
             }
-            
+
             await writer.WriteLineAsync("## Validation Details");
             foreach (var result in results.OrderByDescending(r => r.Severity))
             {
@@ -229,7 +229,7 @@ public class IndexValidationService
             await writer.WriteLineAsync("</head><body>");
             await writer.WriteLineAsync("<h1>SenseNet Index Validation Report</h1>");
             await writer.WriteLineAsync($"<div class='summary'><h2>Summary</h2><ul><li><span class='error'>Errors:</span> {results.Count(r => r.Severity == ValidationSeverity.Error)}</li><li><span class='warning'>Warnings:</span> {results.Count(r => r.Severity == ValidationSeverity.Warning)}</li><li><span class='info'>Info:</span> {results.Count(r => r.Severity == ValidationSeverity.Info)}</li></ul></div>");
-            
+
             if (reportFormat != "summary")
             {
                 var fieldInfo = results.FirstOrDefault(r => r.Message == "Complete list of index fields");
@@ -240,11 +240,11 @@ public class IndexValidationService
                     await writer.WriteLineAsync("</div></div>");
                 }
             }
-            
+
             await writer.WriteLineAsync("<div class='section'><h2>Validation Details</h2><table><thead><tr><th>Severity</th><th>Message</th>");
             if (reportFormat != "summary") await writer.WriteLineAsync("<th>Details</th>");
             await writer.WriteLineAsync("</tr></thead><tbody>");
-            
+
             foreach (var result in results.OrderByDescending(r => r.Severity))
             {
                 if (result.Message == "Complete list of index fields" && reportFormat != "full")
@@ -255,7 +255,7 @@ public class IndexValidationService
                     await writer.WriteAsync($"<td class='details'>{System.Net.WebUtility.HtmlEncode(result.Details)}</td>");
                 await writer.WriteLineAsync("</tr>");
             }
-            
+
             await writer.WriteLineAsync("</tbody></table></div>");
             await writer.WriteLineAsync($"<footer style='margin-top:2em;font-size:13px;color:#888;'>Generated: {DateTime.Now}</footer>");
             await writer.WriteLineAsync("</body></html>");
@@ -312,15 +312,15 @@ public class IndexValidationService
     {
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
         var validationType = options.Detailed ? "Detailed" : "Basic";
-        
+
         // Use configuration name from options first, then fall back to parameter, then to path-based naming
         var effectiveConfigName = options.ConfigurationName ?? configurationName;
-        
+
         if (!string.IsNullOrEmpty(effectiveConfigName))
         {
             return $"Validation ({validationType}) - {effectiveConfigName} - {timestamp}";
         }
-        
+
         // Fallback to path-based naming when no configuration is used
         var indexName = Path.GetFileName(indexPath.TrimEnd('\\', '/'));
         return $"Validation ({validationType}) - {indexName} - {timestamp}";
@@ -339,7 +339,7 @@ public class ValidationOptions
     public string? BackupPath { get; set; }
     public int? SampleSize { get; set; } = 10;
     public string? RequiredFields { get; set; }
-    
+
     // Configuration tracking for better report naming
     public string? ConfigurationId { get; set; }
     public string? ConfigurationName { get; set; }

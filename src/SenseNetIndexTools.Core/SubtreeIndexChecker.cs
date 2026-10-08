@@ -25,10 +25,10 @@ namespace SenseNetIndexTools
         {
             var comparer = new ContentComparer();
             var results = comparer.CompareContent(indexPath, connectionString, repositoryPath, recursive, depth);
-            
+
             var databaseItems = results.Where(r => r.InDatabase).ToList();
             var indexItems = results.Where(r => r.InIndex).ToList();
-            
+
             return (databaseItems, indexItems);
         }
 
@@ -43,22 +43,21 @@ namespace SenseNetIndexTools
         /// <param name="reportFormat">Report format: "summary", "detailed", "full", "tree"</param>
         /// <param name="format">Output format: "md" or "html"</param>
         /// <returns>Generated report content</returns>
-        public string GenerateSubtreeReport(string indexPath, string connectionString, string repositoryPath, 
+        public string GenerateSubtreeReport(string indexPath, string connectionString, string repositoryPath,
             bool recursive = true, int depth = 0, string reportFormat = "detailed", string format = "md")
         {
-            var report = new CheckReport
-            {
-                StartTime = DateTime.Now,
-                RepositoryPath = repositoryPath,
-                Recursive = recursive
-            };
-
             // Use our established ContentComparer to get and compare items
             var comparer = new ContentComparer();
             var results = comparer.CompareContent(indexPath, connectionString, repositoryPath, recursive, depth);
 
-            // Process results for the report
-            ProcessResults(results, report, reportFormat != "summary");
+            return GenerateSubtreeReportFromItems(results, repositoryPath, recursive, reportFormat, format);
+        }
+
+        public string GenerateSubtreeReportFromItems(List<ContentItem> results, string repositoryPath,
+            bool recursive = true, string reportFormat = "detailed", string format = "md")
+        {
+            var report = new CheckReport { StartTime = DateTime.Now, RepositoryPath = repositoryPath, Recursive = recursive };
+            ProcessResults(results, report, reportFormat != "summary" && reportFormat != "default");
 
             report.EndTime = DateTime.Now;
 
@@ -153,10 +152,10 @@ namespace SenseNetIndexTools
             command.AddOption(formatOption);
             command.AddOption(verboseOption);
 
-            command.SetHandler((InvocationContext context) =>
+            var indexInput = new IndexInputOptions(command, indexPathOption);
+            command.SetHandler(async (InvocationContext context) =>
             {
-                string indexPathValue = context.ParseResult.GetValueForOption(indexPathOption)
-                    ?? throw new ArgumentNullException("indexPath");
+                string indexPathValue = await indexInput.ResolveAsync(context);
                 string connectionStringValue = context.ParseResult.GetValueForOption(connectionStringOption)
                     ?? throw new ArgumentNullException("connectionString");
                 string repositoryPathValue = context.ParseResult.GetValueForOption(repositoryPathOption)
@@ -176,7 +175,7 @@ namespace SenseNetIndexTools
                     {
                         Console.Error.WriteLine($"Index directory not found: {indexPathValue}");
                         Environment.Exit(1);
-                        return Task.CompletedTask;
+                        return;
                     }
 
                     var report = new CheckReport
@@ -198,14 +197,14 @@ namespace SenseNetIndexTools
                     report.EndTime = DateTime.Now;
                     GenerateReport(report, outputValue, reportFormatValue, formatValue);
 
-                    return Task.CompletedTask;
+                    return;
                 }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"Error checking subtree: {ex.Message}");
                     Console.Error.WriteLine(ex.StackTrace);
                     Environment.Exit(1);
-                    return Task.CompletedTask;
+                    return;
                 }
             });
 
@@ -492,32 +491,32 @@ namespace SenseNetIndexTools
             sb.AppendLine("<title>SenseNet Index Check Report</title>");
             sb.AppendLine("<style>");
             sb.AppendLine(@"
-                body { 
-                    font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, ""Helvetica Neue"", Arial, sans-serif; 
-                    line-height: 1.6; 
-                    max-width: 1200px; 
-                    margin: 0 auto; 
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, ""Helvetica Neue"", Arial, sans-serif;
+                    line-height: 1.6;
+                    max-width: 1200px;
+                    margin: 0 auto;
                     padding: 20px;
                     color: #333;
                 }
-                h1, h2 { 
-                    border-bottom: 1px solid #eee; 
-                    padding-bottom: 0.3em; 
+                h1, h2 {
+                    border-bottom: 1px solid #eee;
+                    padding-bottom: 0.3em;
                     margin-top: 1.5em;
                 }
-                table { 
-                    border-collapse: collapse; 
-                    width: 100%; 
-                    margin: 1em 0; 
+                table {
+                    border-collapse: collapse;
+                    width: 100%;
+                    margin: 1em 0;
                 }
-                th, td { 
-                    padding: 12px; 
-                    text-align: left; 
-                    border-bottom: 1px solid #ddd; 
+                th, td {
+                    padding: 12px;
+                    text-align: left;
+                    border-bottom: 1px solid #ddd;
                 }
-                th { 
+                th {
                     background: #f8f9fa;
-                    font-weight: 600; 
+                    font-weight: 600;
                 }
                 .summary-section {
                     background: #f8f9fa;

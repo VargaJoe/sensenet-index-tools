@@ -23,8 +23,7 @@ namespace SenseNetIndexTools
 
             var pathOption = new Option<string>(
                 name: "--path",
-                description: "Path to the Lucene index directory");
-            pathOption.IsRequired = true;
+                description: "Path to the Lucene index directory (optional when --auto-copy-index is used)");
 
             var idOption = new Option<long>(
                 name: "--id",
@@ -51,16 +50,25 @@ namespace SenseNetIndexTools
             var validateCommand = SenseNetIndexTools.ValidateCommand.Create();
 
             getCommand.AddOption(pathOption);
+
             setCommand.AddOption(pathOption);
             setCommand.AddOption(idOption);
             setCommand.AddOption(backupOption);
             setCommand.AddOption(backupPathOption);
             setCommand.AddOption(offlineOption); // Add offline flag to set command
+
             initCommand.AddOption(pathOption);
             initCommand.AddOption(idOption);
             initCommand.AddOption(backupOption);
             initCommand.AddOption(backupPathOption);
             initCommand.AddOption(offlineOption); // Add offline flag to init command
+            var getInput = new IndexInputOptions(getCommand, pathOption);
+            var setInput = new IndexInputOptions(setCommand, pathOption);
+            var initInput = new IndexInputOptions(initCommand, pathOption);
+            idOption.AddValidator(result => {
+                var value = result.GetValueForOption(idOption);
+                if (value < 0 || value > int.MaxValue) result.ErrorMessage = "LastActivityId must be between 0 and 2147483647.";
+            });
             rootCommand.AddCommand(getCommand);
             rootCommand.AddCommand(setCommand);
             rootCommand.AddCommand(initCommand);
@@ -70,17 +78,22 @@ namespace SenseNetIndexTools
             rootCommand.AddCommand(DatabaseLister.Create());
             rootCommand.AddCommand(ContentComparer.Create());
             rootCommand.AddCommand(CleanOrphanedCommand.Create());
+            rootCommand.AddCommand(RebuildIndexCommand.Create());
 
-            getCommand.SetHandler(async (string path) =>
+            getCommand.SetHandler(async (context) =>
             {
+                var path = context.ParseResult.GetValueForOption(pathOption);
+                string? actualPath = null;
                 try
                 {
-                    Console.WriteLine($"Opening index directory: {path}");
+                    actualPath = await getInput.ResolveAsync(context);
+
+                    Console.WriteLine($"Opening index directory: {actualPath}");
 
                     // First verify this is a valid Lucene index
-                    if (!IndexUtilities.IsValidLuceneIndex(path))
+                    if (!IndexUtilities.IsValidLuceneIndex(actualPath))
                     {
-                        Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {path}");
+                        Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {actualPath}");
                         Environment.Exit(1);
                         return;
                     }
@@ -88,7 +101,7 @@ namespace SenseNetIndexTools
                     // First try using SenseNet API method
                     try
                     {
-                        var directory = new IndexDirectory(path);
+                        var directory = new IndexDirectory(actualPath);
                         Console.WriteLine("Created IndexDirectory object successfully.");
 
                         var engine = new Lucene29LocalIndexingEngine(directory);
@@ -111,7 +124,7 @@ namespace SenseNetIndexTools
                     // Fall back to direct Lucene.NET access
                     try
                     {
-                        using (var directory = FSDirectory.Open(new DirectoryInfo(path)))
+                        using (var directory = FSDirectory.Open(new DirectoryInfo(actualPath)))
                         {
                             if (IndexReader.IndexExists(directory))
                             {
@@ -149,15 +162,22 @@ namespace SenseNetIndexTools
                     Console.Error.WriteLine($"Stack trace: {ex.StackTrace}");
                     Environment.Exit(1);
                 }
-            }, pathOption);
+            });
 
-            setCommand.SetHandler(async (string path, long id, bool backup, string? backupPath, bool offline) =>
+            setCommand.SetHandler(async (context) =>
             {
+                var path = context.ParseResult.GetValueForOption(pathOption);
+                var id = context.ParseResult.GetValueForOption(idOption);
+                var backup = context.ParseResult.GetValueForOption(backupOption);
+                var backupPath = context.ParseResult.GetValueForOption(backupPathOption);
+                var offline = context.ParseResult.GetValueForOption(offlineOption);
                 try
                 {
-                    if (!IndexUtilities.IsValidLuceneIndex(path))
+                    var actualPath = await setInput.ResolveAsync(context);
+
+                    if (!IndexUtilities.IsValidLuceneIndex(actualPath))
                     {
-                        Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {path}");
+                        Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {actualPath}");
                         Environment.Exit(1);
                         return;
                     }
@@ -171,15 +191,13 @@ namespace SenseNetIndexTools
 
                     if (backup)
                     {
-                        IndexUtilities.CreateBackup(path, backupPath);
+                        IndexUtilities.CreateBackup(actualPath, backupPath);
                     }
 
                     // First try using SenseNet API method
-                    bool useSenseNetApi = false;
-
                     try
                     {
-                        var directory = new IndexDirectory(path);
+                        var directory = new IndexDirectory(actualPath);
                         var engine = new Lucene29LocalIndexingEngine(directory);
 
                         // Get current status to preserve gaps
@@ -203,7 +221,6 @@ namespace SenseNetIndexTools
                         else
                             Console.WriteLine($"Warning: Verification returned different value: {verificationStatus.LastActivityId}");
 
-                        useSenseNetApi = true;
                         return;
                     }
                     catch (Exception ex)
@@ -218,7 +235,7 @@ namespace SenseNetIndexTools
                         Console.WriteLine("Using direct Lucene.NET access to update LastActivityId...");
 
                         // Open the index with write access
-                        using (var directory = FSDirectory.Open(new DirectoryInfo(path)))
+                        using (var directory = FSDirectory.Open(new DirectoryInfo(actualPath)))
                         {
                             if (IndexReader.IndexExists(directory))
                             {
@@ -226,9 +243,7 @@ namespace SenseNetIndexTools
                                 bool isLocked = IndexWriter.IsLocked(directory);
                                 if (isLocked)
                                 {
-                                    Console.WriteLine("Index is locked. Attempting to unlock...");
-                                    IndexWriter.Unlock(directory);
-                                    Console.WriteLine("Index unlocked successfully.");
+                                throw new InvalidOperationException("Index is locked. Stop the writer and inspect the lock before modifying it.");
                                 }
 
                                 // Get existing commit user data first
@@ -333,17 +348,24 @@ namespace SenseNetIndexTools
                     Console.Error.WriteLine($"Stack trace: {ex.StackTrace}");
                     Environment.Exit(1);
                 }
-            }, pathOption, idOption, backupOption, backupPathOption, offlineOption);
+            });
 
             // New command specifically for initializing a non-SenseNet index
-            initCommand.SetHandler(async (string path, long id, bool backup, string? backupPath, bool offline) =>
+            initCommand.SetHandler(async (context) =>
             {
+                var path = context.ParseResult.GetValueForOption(pathOption);
+                var id = context.ParseResult.GetValueForOption(idOption);
+                var backup = context.ParseResult.GetValueForOption(backupOption);
+                var backupPath = context.ParseResult.GetValueForOption(backupPathOption);
+                var offline = context.ParseResult.GetValueForOption(offlineOption);
                 try
                 {
+                    var actualPath = await initInput.ResolveAsync(context);
+
                     // First verify this is a valid Lucene index
-                    if (!IndexUtilities.IsValidLuceneIndex(path))
+                    if (!IndexUtilities.IsValidLuceneIndex(actualPath))
                     {
-                        Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {path}");
+                        Console.Error.WriteLine($"The directory does not appear to be a valid Lucene index: {actualPath}");
                         Environment.Exit(1);
                         return;
                     }
@@ -357,17 +379,17 @@ namespace SenseNetIndexTools
 
                     if (backup)
                     {
-                        IndexUtilities.CreateBackup(path, backupPath);
+                        IndexUtilities.CreateBackup(actualPath, backupPath);
                     }
 
-                    Console.WriteLine($"Opening index directory: {path}");
+                    Console.WriteLine($"Opening index directory: {actualPath}");
 
                     // First check if LastActivityId already exists
                     bool alreadyInitialized = false;
 
                     try
                     {
-                        using (var directory = FSDirectory.Open(new DirectoryInfo(path)))
+                        using (var directory = FSDirectory.Open(new DirectoryInfo(actualPath)))
                         {
                             if (IndexReader.IndexExists(directory))
                             {
@@ -402,7 +424,7 @@ namespace SenseNetIndexTools
 
                     try
                     {
-                        var directory = new IndexDirectory(path);
+                        var directory = new IndexDirectory(actualPath);
                         var engine = new Lucene29LocalIndexingEngine(directory);
 
                         // Try to initialize with SenseNet API
@@ -439,7 +461,7 @@ namespace SenseNetIndexTools
                         Console.WriteLine("Using direct Lucene.NET access to initialize LastActivityId...");
 
                         // Open the index with write access
-                        using (var directory = FSDirectory.Open(new DirectoryInfo(path)))
+                        using (var directory = FSDirectory.Open(new DirectoryInfo(actualPath)))
                         {
                             if (IndexReader.IndexExists(directory))
                             {
@@ -520,7 +542,7 @@ namespace SenseNetIndexTools
                     Console.Error.WriteLine($"Stack trace: {ex.StackTrace}");
                     Environment.Exit(1);
                 }
-            }, pathOption, idOption, backupOption, backupPathOption, offlineOption);
+            });
 
             return await rootCommand.InvokeAsync(args);
         }

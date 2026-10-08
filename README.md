@@ -1,210 +1,86 @@
 # SenseNet Index Maintenance Suite
 
-A comprehensive toolkit for managing and maintaining SenseNet Lucene.NET indexes. This suite currently includes tools for managing the LastActivityId value in SenseNet indexes and other index maintenance capabilities.
+.NET 8 CLI and Blazor Server tools for examining SenseNet Lucene 2.9 indexes, comparing their documents with SQL Server data, and performing explicit repairs on offline copies.
 
-## Repository
-
-This project is maintained at: https://github.com/VargaJoe/sensenet-index-tools
-
-## Requirements
-
-- .NET 8.0 or higher
-- Compatible with SenseNet Lucene.NET indexes
-
-## Usage
-
-```bash
-# Get the current LastActivityId value
-dotnet run -- lastactivityid-get --path "<path-to-index>"
-
-# Set a new LastActivityId value
-dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value>
-
-# Initialize LastActivityId in a non-SenseNet index
-dotnet run -- lastactivityid-init --path "<path-to-index>" --id <initial-value>
-
-# Working with live production indexes
-dotnet run -- lastactivityid-get --path "<path-to-index>" --live-index true
-dotnet run -- list-index --index-path "<path-to-index>" --repository-path "/Root" --live-index true
-dotnet run -- validate --path "<path-to-index>" --live-index true
-
-# Set a new LastActivityId value with a custom backup location
-dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value> --backup-path "<custom-backup-path>"
-
-# Validate index structure and integrity and save report
-dotnet run -- validate --path "<path-to-index>" --detailed --output "<report-file>"
-
-# List items from index and/or database
-dotnet run -- list-items --index-path "<path-to-index>" --repository-path "/Root/Path" --source "index" --recursive true --depth 1
-
-# Check if database content exists in the index for a subtree
-dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path/To/Check"
-
-# Check specific path without recursion and save detailed report
-dotnet run -- check-subtree --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path/To/Check" --recursive false --detailed --output "report.md"
-
-# Clean up orphaned index entries (items that exist in index but not in database)
-dotnet run -- clean-orphaned --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path/To/Check"
-
-# Clean up orphaned index entries (items that exist in index but not in database)
-dotnet run -- clean-orphaned --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path/To/Check"
-```
-
-## PowerShell Helper Scripts
-
-For convenience, PowerShell helper scripts are included in the root directory:
+## Start
 
 ```powershell
-# Run the subtree checker with the PowerShell script
-./CheckSubtree.ps1 -indexPath "D:\path\to\index" -connectionString "Data Source=server;Initial Catalog=sensenet;Integrated Security=True" -repositoryPath "/Root/Content" -detailed $true -openReport
+dotnet restore sensenet-index-tools.sln
+dotnet build sensenet-index-tools.sln
+dotnet test test/IndexTools.Tests/IndexTools.Tests.csproj
+dotnet run --project src/MainProgram -- --help
+dotnet run --project src/WebApp/WebApp -- --urls http://localhost:5168
 ```
 
-## Commands
+An old checkout with stale NuGet assets may need `dotnet restore sensenet-index-tools.sln -p:RestoreFallbackFolders= --source https://api.nuget.org/v3/index.json`.
 
-The suite provides several commands for managing SenseNet indexes:
+## Capabilities
 
-### lastactivityid-get
+| Command | Purpose | Index option |
+| --- | --- | --- |
+| `lastactivityid-get` | Read activity metadata | `--path` |
+| `lastactivityid-set`, `lastactivityid-init` | Set or initialize activity metadata; require `--offline`, backup by default | `--path` |
+| `validate` | Read index integrity and produce reports; no backup by default | `--path` |
+| `list-index` | List index documents under a repository path | `--index-path` |
+| `list-db` | List SQL repository content | None |
+| `compare`, `check-subtree` | Compare each node/version and both timestamps; produce Markdown/HTML reports | `--index-path` |
+| `clean-orphaned` | Preview/remove exact index documents absent from SQL; dry run by default, `--offline` required for deletion | `--index-path` |
+| `rebuild-index` | Request rebuild through the SenseNet REST API | None |
 
-Retrieves the current LastActivityId from a Lucene index.
+Use `<command> --help` for the complete options. `list-items` and `--live-index` are not registered commands/options.
 
-```bash
-dotnet run -- lastactivityid-get --path "<path-to-index>"
+```powershell
+dotnet run --project src/MainProgram -- validate --path "D:\Indexes\copy" --output validation.html --format html
+dotnet run --project src/MainProgram -- list-index --index-path "D:\Indexes\copy" --repository-path /Root/Content
+dotnet run --project src/MainProgram -- lastactivityid-set --path "D:\Indexes\copy" --id 42 --offline
 ```
 
-### lastactivityid-set
+Comparison pairs path, type, node ID and version ID. Published/draft versions and duplicate index documents remain visible. A matching node timestamp with a missing/different version timestamp is not reported as `Match`.
 
-Sets a new LastActivityId value in an existing Lucene index. By default, this creates a backup of the index before making changes.
+## Kubernetes input
 
-```bash
-dotnet run -- lastactivityid-set --path "<path-to-index>" --id <new-value> [--backup false] [--backup-path "<custom-backup-location>"]
+All CLI commands that read a local index accept `--auto-copy-index` instead of their local path option, including validation, comparison, subtree checks and orphan cleanup. `kubectl` must be on PATH; the selected container must provide `ls`, `test` and `tar` for `kubectl cp`.
+
+```powershell
+dotnet run --project src/MainProgram -- validate --auto-copy-index --namespace example --deployment repository --container sensenet --copy-output-path "D:\IndexBackups"
+dotnet run --project src/MainProgram -- check-subtree --auto-copy-index --namespace example --deployment repository --connection-string "<SQL connection string>" --repository-path /Root/Content
 ```
 
-### lastactivityid-init
+Options: `--kubeconfig` (optional; omitted uses the current kubectl context), `--namespace` (default `default`), `--deployment` (required), `--container` (optional for a single-container pod or one named `sensenet`), `--index-path-in-pod` (default `/app/App_Data/LocalIndex`), `--copy-output-path`.
 
-Initializes a LastActivityId in a Lucene index that doesn't have one yet. This is useful for integrating non-SenseNet indexes with SenseNet's activity tracking.
+The deployment's actual label selector selects a running, ready pod. The latest numeric directory beginning with `20` (14 or 15 digits) is copied to a unique `.partial` directory. A copy becomes usable only after Lucene can open it; failed copies retain `.partial` for diagnosis. Modifying commands change the local copy only; there is no upload-back operation.
 
-```bash
-dotnet run -- lastactivityid-init --path "<path-to-index>" --id <initial-value> [--backup false] [--backup-path "<custom-backup-location>"]
+`kubectl cp` is not an atomic snapshot of a changing index. Use a quiesced source or a consistent volume snapshot for reliable comparisons/repairs. Successful parsing does not prove all source files came from the same commit. Live cluster, SQL and repository API behavior require an environment integration test; the automated suite uses local synthetic indexes and simulated kubectl/API responses. Kubernetes input is currently a CLI capability; the web interface operates on server-local paths.
+
+## REST rebuild
+
+Exactly one of `--content-path`, `--content-id` or `--file-path` is required. Batch files contain one `/Root/...` path or positive numeric ID per line, with optional `#` comments. Empty/error batches fail. `--repo-url` is the repository origin and `--api-key` is supplied explicitly.
+
+```powershell
+dotnet run --project src/MainProgram -- rebuild-index --repo-url https://repository.invalid --api-key "<API key>" --content-id 123 --recursive false
 ```
 
-### clean-orphaned
+The CLI and web interface share the OData URL builder and send the key through the `apikey` header. See [SenseNet addressing](https://docs.sensenet.com/api-docs/basic-concepts/01-entry/) and [API-key authentication](https://docs.sensenet.com/tutorials/authentication/how-to-authenticate-apikey/). Keys/connection strings must not be committed. The IndexFix PowerShell scripts are legacy helpers requiring explicit endpoint and key input.
 
-Clean up orphaned index entries that exist in the index but not in the database.
+## Web interface
 
-```bash 
-dotnet run -- clean-orphaned --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path" [options]
+Validation, subtree checks, activity metadata, REST rebuild, reports and saved configurations are available. The content-listing page is still a placeholder. Rebuild batch files are specified by server-local path.
+
+The app accepts direct loopback requests by default. Remote access requires explicit `AllowRemoteAccess=true` configuration and an authenticated external proxy; the app has no built-in user authentication. Directory browsing of source files is disabled.
+
+Saved connection strings use ASP.NET Data Protection; legacy plaintext files are encrypted on the next save. Back up both `Data` and `App_Data/keys`. Windows keys are protected for the executing user's account; on other platforms protect the key directory with filesystem permissions. Configuration/report files are intended for one running app process; in-process concurrent writes are serialized and JSON replacement is atomic.
+
+Offline index writes refuse existing writer locks. Stop the writer and investigate stale locks explicitly; the tool does not unlock a running index automatically. Activity IDs must fit the SenseNet Int32 range.
+
+## Tests and publishing
+
+The xUnit regression suite covers comparison versions/timestamps, >10,000 documents, exact orphan deletion, metadata writes/locks, Kubernetes selection/copy failures, REST requests, web startup/pages and local storage. CI runs it on Windows and Linux with .NET 8. The legacy TestSubtreeChecker launcher invokes the comparison tests and propagates failures.
+
+```powershell
+dotnet build sensenet-index-tools.sln -c Release
+dotnet test test/IndexTools.Tests/IndexTools.Tests.csproj -c Release --no-build
+dotnet publish src/MainProgram/sn-index-maintenance-suite.csproj -c Release -o publish/cli
+dotnet publish src/WebApp/WebApp/WebApp.csproj -c Release -o publish/web
 ```
 
-Options:
-- `--recursive`: Process all content items under the specified path (default: true)
-- `--verbose`: Enable detailed logging of the cleanup process (default: false)
-- `--dry-run`: Only show what would be deleted without making changes (default: true)
-- `--backup`: Create a backup of the index before making changes (default: true)
-
-### clean-orphaned
-
-Clean up orphaned index entries that exist in the index but not in the database.
-
-```bash 
-dotnet run -- clean-orphaned --index-path "<path-to-index>" --connection-string "<sql-connection-string>" --repository-path "/Root/Path" [options]
-```
-
-Options:
-- `--recursive`: Process all content items under the specified path (default: true)
-- `--verbose`: Enable detailed logging of the cleanup process (default: false)
-- `--dry-run`: Only show what would be deleted without making changes (default: true)
-- `--backup`: Create a backup of the index before making changes (default: true)
-- `--offline`: Confirm that the index is not in use and can be safely modified (required for actual cleanup)
-
-## Options
-
-### Common Options
-- `--path`: (Required) Path to the Lucene index directory
-- `--id`: (Required for set/init) The LastActivityId value to set
-- `--backup`: (Optional) Create a backup of the index before making changes (default: true)
-- `--backup-path`: (Optional) Custom path for storing backups. If not specified, backups will be stored in an 'IndexBackups' folder
-
-### List Items Command Options
-- `--index-path`: (Required) Path to the Lucene index directory
-- `--repository-path`: (Required) Path in the content repository to list items from
-- `--source`: (Required) Source to list items from: 'index', 'db', or 'both'
-- `--recursive`: (Optional) Whether to list items recursively (default: true)
-- `--depth`: (Optional) Limit listing to specified depth (1=direct children only, 0=all descendants)
-
-## Building the Project
-
-```bash
-dotnet build
-```
-
-## Running the Tests
-
-```bash
-# Run the subtree checker test
-dotnet run --project src/TestSubtreeChecker/TestSubtreeChecker.csproj
-```
-
-## Creating a Release
-
-```bash
-dotnet publish -c Release
-```
-
-The output will be in the `bin/Release/net8.0/publish` directory.
-
-## Repository
-
-This tool is available on GitHub: [VargaJoe/sensenet-index-tools](https://github.com/VargaJoe/sensenet-index-tools)
-
-## Test Projects
-
-The solution includes several test and diagnostic projects:
-
-### TestDuplicatePaths
-Tests handling of duplicate paths with different IDs in the Lucene index. This helps verify the ContentComparer's behavior when the index contains multiple entries for the same path.
-
-```bash
-# Run the duplicate paths test
-dotnet run --project src/TestDuplicatePaths/TestDuplicatePaths.csproj
-```
-
-### TestIndexLoader
-Loads and validates Lucene indexes using SenseNet's indexing engine. Useful for testing index compatibility and diagnosing loading issues.
-
-```bash
-# Test loading an index
-dotnet run --project src/TestIndexLoader/TestIndexLoader.csproj -- "path/to/index"
-```
-
-### TestSubtreeChecker
-Tests the enhanced search functionality in SubtreeIndexChecker with generated test data. Verifies different indexing patterns and search strategies.
-
-```bash
-# Run the subtree checker tests
-dotnet run --project src/TestSubtreeChecker/TestSubtreeChecker.csproj
-```
-
-These test projects are valuable for:
-- Regression testing after changes
-- Debugging edge cases and indexing issues
-- Verifying compatibility with different index structures
-- Understanding how the tools handle various data patterns
-
-## Project Structure
-
-## New Features
-
-### Live Index Flag
-Added the `--live-index` flag for all operations to ensure safety when working with production indexes. When this flag is set, write operations will be blocked to prevent accidental modifications to live indexes.
-
-### Optional Backups for Read-Only Operations
-Backup creation is now disabled by default for read-only operations and enabled by default for write operations. You can still request backups for any operation with `--backup true`.
-
-### Enhanced Paging
-Index operations now properly support large indexes by implementing efficient paging, removing the previous 10,000 document limit.
-
-### Clean Orphaned Entries
-New `clean-orphaned` command for cleaning up index entries that exist in the index but not in the database.
-
-### Enhanced Content Comparison
-Significantly improved content comparison logic with better handling of multiple versions, renamed items, and path normalization. See [Enhanced Comparer Documentation](ENHANCED_COMPARER.md) for details.
+`create-index` belongs to the separate experimental create-index PR and is not part of this branch. It must not be treated as a production-compatible native SenseNet builder before its schema, overwrite safeguards and full-repository validation are completed.

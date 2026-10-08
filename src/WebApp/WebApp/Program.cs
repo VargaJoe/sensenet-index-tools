@@ -2,8 +2,13 @@ using WebApp.Components;
 using WebApp.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.AspNetCore.DataProtection;
+using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
+var protection = builder.Services.AddDataProtection().SetApplicationName("SenseNetIndexTools")
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys")));
+if (OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -36,21 +41,15 @@ builder.Services.AddScoped<ConfigurationService>();
 // Add ReportStorageService
 builder.Services.AddScoped<ReportStorageService>();
 
+// Add RebuildIndexService
+builder.Services.AddHttpClient<RebuildIndexService>();
+
 // Add logging
 builder.Services.AddLogging(logging =>
 {
     logging.AddConsole();
     logging.AddDebug();
     logging.SetMinimumLevel(LogLevel.Debug);
-});
-
-// Add CORS
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(builder =>
-        builder.AllowAnyOrigin()
-               .AllowAnyMethod()
-               .AllowAnyHeader());
 });
 
 var app = builder.Build();
@@ -67,25 +66,18 @@ else
     app.UseHsts();
 }
 
-// Enable CORS
-app.UseCors();
-
-// Enable file system access in development
-if (app.Environment.IsDevelopment())
+// This maintenance UI has no user authentication. Keep it local unless explicitly enabled by the operator.
+app.Use(async (context, next) =>
 {
-    app.UseDirectoryBrowser(new DirectoryBrowserOptions
+    var remote = context.Connection.RemoteIpAddress;
+    if (!app.Configuration.GetValue<bool>("AllowRemoteAccess") &&
+        (remote == null || !IPAddress.IsLoopback(remote) || context.Request.Headers.ContainsKey("X-Forwarded-For")))
     {
-        FileProvider = new PhysicalFileProvider(
-            Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..")))
-    });
-
-    app.UseStaticFiles(new StaticFileOptions
-    {
-        FileProvider = new PhysicalFileProvider(
-            Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, ".."))),
-        RequestPath = "/files"
-    });
-}
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+    await next(context);
+});
 
 app.UseHttpsRedirection();
 
@@ -98,3 +90,5 @@ app.MapRazorComponents<App>()
     .AddAdditionalAssemblies(typeof(WebApp.Client._Imports).Assembly);
 
 app.Run();
+
+public partial class Program { }

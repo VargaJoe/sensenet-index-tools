@@ -50,7 +50,7 @@ public class LastActivityIdService
     public async Task<LastActivityInfo> GetLastActivityIdAsync(string indexPath)
     {
         _logger.LogInformation("Getting LastActivityId from index at {Path}", indexPath);
-        
+
         if (!ValidatePath(indexPath))
         {
             throw new DirectoryNotFoundException($"Index directory not found: {indexPath}");
@@ -61,19 +61,19 @@ public class LastActivityIdService
         {
             var directory = new IndexDirectory(indexPath);
             var engine = new Lucene29LocalIndexingEngine(directory);
-            
+
             var status = await engine.ReadActivityStatusFromIndexAsync(CancellationToken.None);
-            
+
             if (status == null)
             {
                 throw new InvalidOperationException("No LastActivityId found using SenseNet API");
             }
-            
+
             _logger.LogInformation("Successfully read LastActivityId using SenseNet API: {LastActivityId}", status.LastActivityId);
-            return new LastActivityInfo 
-            { 
+            return new LastActivityInfo
+            {
                 LastActivityId = status.LastActivityId,
-                Gaps = status.Gaps 
+                Gaps = status.Gaps
             };
         }
         catch (Exception ex)
@@ -102,7 +102,7 @@ public class LastActivityIdService
                     }
                 }
             }
-            
+
             throw new InvalidOperationException("No LastActivityId found in index commit data");
         }
         catch (Exception ex)
@@ -114,9 +114,8 @@ public class LastActivityIdService
 
     public async Task<long?> GetLastActivityIdFromDatabaseAsync(string connectionString)
     {
-        _logger.LogInformation("Getting LastActivityId from database with connection: {ConnectionString}", 
-            connectionString?.Substring(0, Math.Min(50, connectionString?.Length ?? 0)) + "...");
-        
+        _logger.LogInformation("Getting LastActivityId from database");
+
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             throw new ArgumentException("Connection string cannot be null or empty", nameof(connectionString));
@@ -126,18 +125,18 @@ public class LastActivityIdService
         {
             using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync();
-            
+
             var query = "SELECT TOP 1 [IndexingActivityId] FROM [dbo].[IndexingActivities] ORDER BY IndexingActivityId DESC";
             using var command = new SqlCommand(query, connection);
-            
+
             var result = await command.ExecuteScalarAsync();
-            
+
             if (result == null || result == DBNull.Value)
             {
                 _logger.LogWarning("No IndexingActivityId found in database");
                 return null;
             }
-            
+
             var lastActivityId = Convert.ToInt64(result);
             _logger.LogInformation("Successfully retrieved LastActivityId from database: {LastActivityId}", lastActivityId);
             return lastActivityId;
@@ -152,7 +151,7 @@ public class LastActivityIdService
     public async Task<LastActivityIdComparison> CompareLastActivityIdAsync(string indexPath, string connectionString)
     {
         _logger.LogInformation("Comparing LastActivityId between index and database");
-        
+
         var comparison = new LastActivityIdComparison
         {
             IndexPath = indexPath,
@@ -187,7 +186,7 @@ public class LastActivityIdService
             // Continue even if database fails
         }
 
-        _logger.LogInformation("Comparison result - Index: {IndexValue}, Database: {DatabaseValue}, Status: {Status}", 
+        _logger.LogInformation("Comparison result - Index: {IndexValue}, Database: {DatabaseValue}, Status: {Status}",
             comparison.IndexValue, comparison.DatabaseValue, comparison.Status);
 
         return comparison;
@@ -195,6 +194,7 @@ public class LastActivityIdService
 
     public async Task SetLastActivityIdAsync(string indexPath, long id, bool backup = true, string? backupPath = null)
     {
+        if (id < 0 || id > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(id));
         if (backup)
         {
             CreateBackup(indexPath, backupPath);
@@ -205,10 +205,10 @@ public class LastActivityIdService
         {
             var directory = new IndexDirectory(indexPath);
             var engine = new Lucene29LocalIndexingEngine(directory);
-            
+
             // Get current status to preserve gaps
             var currentStatus = await engine.ReadActivityStatusFromIndexAsync(CancellationToken.None);
-            
+
             var newStatus = new IndexingActivityStatus
             {
                 LastActivityId = (int)id,
@@ -223,7 +223,7 @@ public class LastActivityIdService
             {
                 throw new InvalidOperationException($"Verification failed: LastActivityId was not properly updated. Expected {id}, got {verificationStatus.LastActivityId}");
             }
-            
+
             _logger.LogInformation("Successfully set LastActivityId using SenseNet API: {LastActivityId}", id);
             return;
         }
@@ -247,6 +247,12 @@ public class LastActivityIdService
 
     public async Task InitializeLastActivityIdAsync(string indexPath, long id, bool backup = true, string? backupPath = null)
     {
+        if (id < 0 || id > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(id));
+        LastActivityInfo? existing = null;
+        try { existing = await GetLastActivityIdAsync(indexPath); }
+        catch (InvalidOperationException) { /* A readable index without activity metadata needs initialization. */ }
+        if (existing != null) throw new InvalidOperationException($"Index already has LastActivityId {existing.LastActivityId}. Use Set to modify it.");
+
         if (backup)
         {
             CreateBackup(indexPath, backupPath);
@@ -257,20 +263,6 @@ public class LastActivityIdService
         {
             var directory = new IndexDirectory(indexPath);
             var engine = new Lucene29LocalIndexingEngine(directory);
-
-            try
-            {
-                // Check if already initialized
-                var currentStatus = await engine.ReadActivityStatusFromIndexAsync(CancellationToken.None);
-                if (currentStatus != null)
-                {
-                    throw new InvalidOperationException($"Index already has LastActivityId set to {currentStatus.LastActivityId}. Use SetLastActivityIdAsync to modify it.");
-                }
-            }
-            catch
-            {
-                // If reading fails, assume it needs initialization
-            }
 
             var newStatus = new IndexingActivityStatus
             {
@@ -286,7 +278,7 @@ public class LastActivityIdService
             {
                 throw new InvalidOperationException($"Verification failed: LastActivityId was not properly initialized. Expected {id}, got {verificationStatus.LastActivityId}");
             }
-            
+
             _logger.LogInformation("Successfully initialized LastActivityId using SenseNet API: {LastActivityId}", id);
             return;
         }
@@ -318,12 +310,10 @@ public class LastActivityIdService
                 throw new InvalidOperationException("Index does not exist or cannot be opened.");
             }
 
-            // Check if index is locked and unlock if necessary
+            // Never clear a writer's lock automatically.
             if (IndexWriter.IsLocked(directory))
             {
-                _logger.LogInformation("Index is locked. Attempting to unlock...");
-                IndexWriter.Unlock(directory);
-                _logger.LogInformation("Index unlocked successfully.");
+                throw new InvalidOperationException("Index is locked. Stop the writer and inspect the lock before modifying it.");
             }
 
             // Get existing commit user data first
@@ -358,7 +348,7 @@ public class LastActivityIdService
             // Create and add commit document
             const string COMMITFIELDNAME = "CommitMarker";
             const string COMMITDATAFIELDNAME = "CommitData";
-            
+
             var value = Guid.NewGuid().ToString();
             var doc = new Document();
             doc.Add(new Field(COMMITFIELDNAME, COMMITFIELDNAME,

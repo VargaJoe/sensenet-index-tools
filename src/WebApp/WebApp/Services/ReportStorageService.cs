@@ -5,6 +5,7 @@ namespace WebApp.Services;
 
 public class ReportStorageService
 {
+    private static readonly SemaphoreSlim StorageGate = new(1, 1);
     private readonly ILogger<ReportStorageService> _logger;
     private readonly IWebHostEnvironment _environment;
     private readonly string _dataDirectory;
@@ -18,7 +19,7 @@ public class ReportStorageService
         _dataDirectory = Path.Combine(_environment.ContentRootPath, "Data");
         _reportsFilePath = Path.Combine(_dataDirectory, "reports.json");
         _reportsDataDirectory = Path.Combine(_dataDirectory, "Reports");
-        
+
         EnsureDirectoriesExist();
     }
 
@@ -30,60 +31,67 @@ public class ReportStorageService
 
     public async Task<string> SaveReportAsync(StoredReport report)
     {
+        await StorageGate.WaitAsync();
         try
         {
-            // Generate auto name if not provided
-            if (string.IsNullOrWhiteSpace(report.Name))
+
+            try
             {
-                report.Name = GenerateReportName(report);
+                // Generate auto name if not provided
+                if (string.IsNullOrWhiteSpace(report.Name))
+                {
+                    report.Name = GenerateReportName(report);
+                }
+
+                // Save report content to file if it's large
+                if (report.Content.Length > 50000) // 50KB threshold
+                {
+                    var fileName = $"{report.Id}.{report.Format}";
+                    var filePath = Path.Combine(_reportsDataDirectory, fileName);
+                    await File.WriteAllTextAsync(filePath, report.Content);
+
+                    report.FilePath = filePath;
+                    report.FileSizeBytes = new FileInfo(filePath).Length;
+
+                    // Clear content from memory to save space
+                    report.Content = $"[Content stored in file: {fileName}]";
+
+                    _logger.LogInformation("Saved large report content to file: {FilePath}", filePath);
+                }
+                else
+                {
+                    report.FileSizeBytes = System.Text.Encoding.UTF8.GetByteCount(report.Content);
+                }
+
+                // Load existing reports
+                var reports = await LoadReportsAsync();
+
+                // Add or update report
+                var existingIndex = reports.FindIndex(r => r.Id == report.Id);
+                if (existingIndex >= 0)
+                {
+                    reports[existingIndex] = report;
+                    _logger.LogInformation("Updated existing report: {ReportId}", report.Id);
+                }
+                else
+                {
+                    reports.Add(report);
+                    _logger.LogInformation("Added new report: {ReportId}", report.Id);
+                }
+
+                // Save reports index
+                await SaveReportsAsync(reports);
+
+                return report.Id;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save report: {ReportId}", report.Id);
+                throw;
             }
 
-            // Save report content to file if it's large
-            if (report.Content.Length > 50000) // 50KB threshold
-            {
-                var fileName = $"{report.Id}.{report.Format}";
-                var filePath = Path.Combine(_reportsDataDirectory, fileName);
-                await File.WriteAllTextAsync(filePath, report.Content);
-                
-                report.FilePath = filePath;
-                report.FileSizeBytes = new FileInfo(filePath).Length;
-                
-                // Clear content from memory to save space
-                report.Content = $"[Content stored in file: {fileName}]";
-                
-                _logger.LogInformation("Saved large report content to file: {FilePath}", filePath);
-            }
-            else
-            {
-                report.FileSizeBytes = System.Text.Encoding.UTF8.GetByteCount(report.Content);
-            }
-
-            // Load existing reports
-            var reports = await LoadReportsAsync();
-            
-            // Add or update report
-            var existingIndex = reports.FindIndex(r => r.Id == report.Id);
-            if (existingIndex >= 0)
-            {
-                reports[existingIndex] = report;
-                _logger.LogInformation("Updated existing report: {ReportId}", report.Id);
-            }
-            else
-            {
-                reports.Add(report);
-                _logger.LogInformation("Added new report: {ReportId}", report.Id);
-            }
-
-            // Save reports index
-            await SaveReportsAsync(reports);
-            
-            return report.Id;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to save report: {ReportId}", report.Id);
-            throw;
-        }
+        finally { StorageGate.Release(); }
     }
 
     public async Task<List<StoredReport>> GetReportsAsync(ReportSearchFilter? filter = null)
@@ -91,12 +99,12 @@ public class ReportStorageService
         try
         {
             var reports = await LoadReportsAsync();
-            
+
             if (filter != null)
             {
                 reports = ApplyFilter(reports, filter);
             }
-            
+
             return reports.OrderByDescending(r => r.CreatedAt).ToList();
         }
         catch (Exception ex)
@@ -108,92 +116,111 @@ public class ReportStorageService
 
     public async Task<StoredReport?> GetReportAsync(string reportId)
     {
+        await StorageGate.WaitAsync();
         try
         {
-            var reports = await LoadReportsAsync();
-            var report = reports.FirstOrDefault(r => r.Id == reportId);
-            
-            if (report != null)
+            try
             {
-                // Update view statistics
-                report.LastViewedAt = DateTime.Now;
-                report.ViewCount++;
-                await SaveReportsAsync(reports);
-                
-                // Load content from file if needed
-                if (report.FilePath != null && File.Exists(report.FilePath))
+                var reports = await LoadReportsAsync();
+                var report = reports.FirstOrDefault(r => r.Id == reportId);
+
+                if (report != null)
                 {
-                    report.Content = await File.ReadAllTextAsync(report.FilePath);
+                    // Update view statistics
+                    report.LastViewedAt = DateTime.Now;
+                    report.ViewCount++;
+                    await SaveReportsAsync(reports);
+
+                    // Load content from file if needed
+                    if (report.FilePath != null && File.Exists(report.FilePath))
+                    {
+                        report.Content = await File.ReadAllTextAsync(report.FilePath);
+                    }
+
+                    _logger.LogInformation("Retrieved report: {ReportId}", reportId);
                 }
-                
-                _logger.LogInformation("Retrieved report: {ReportId}", reportId);
+
+                return report;
             }
-            
-            return report;
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get report: {ReportId}", reportId);
+                return null;
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to get report: {ReportId}", reportId);
-            return null;
-        }
+        finally { StorageGate.Release(); }
     }
 
     public async Task<bool> DeleteReportAsync(string reportId)
     {
+        await StorageGate.WaitAsync();
         try
         {
-            var reports = await LoadReportsAsync();
-            var report = reports.FirstOrDefault(r => r.Id == reportId);
-            
-            if (report == null)
+
+            try
             {
+                var reports = await LoadReportsAsync();
+                var report = reports.FirstOrDefault(r => r.Id == reportId);
+
+                if (report == null)
+                {
+                    return false;
+                }
+
+                // Delete file if exists
+                if (report.FilePath != null && File.Exists(report.FilePath))
+                {
+                    File.Delete(report.FilePath);
+                    _logger.LogInformation("Deleted report file: {FilePath}", report.FilePath);
+                }
+
+                // Remove from index
+                reports.RemoveAll(r => r.Id == reportId);
+                await SaveReportsAsync(reports);
+
+                _logger.LogInformation("Deleted report: {ReportId}", reportId);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete report: {ReportId}", reportId);
                 return false;
             }
 
-            // Delete file if exists
-            if (report.FilePath != null && File.Exists(report.FilePath))
-            {
-                File.Delete(report.FilePath);
-                _logger.LogInformation("Deleted report file: {FilePath}", report.FilePath);
-            }
-
-            // Remove from index
-            reports.RemoveAll(r => r.Id == reportId);
-            await SaveReportsAsync(reports);
-            
-            _logger.LogInformation("Deleted report: {ReportId}", reportId);
-            return true;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to delete report: {ReportId}", reportId);
-            return false;
-        }
+        finally { StorageGate.Release(); }
     }
 
     public async Task<bool> ToggleFavoriteAsync(string reportId)
     {
+        await StorageGate.WaitAsync();
         try
         {
-            var reports = await LoadReportsAsync();
-            var report = reports.FirstOrDefault(r => r.Id == reportId);
-            
-            if (report == null)
+
+            try
             {
+                var reports = await LoadReportsAsync();
+                var report = reports.FirstOrDefault(r => r.Id == reportId);
+
+                if (report == null)
+                {
+                    return false;
+                }
+
+                report.IsFavorite = !report.IsFavorite;
+                await SaveReportsAsync(reports);
+
+                _logger.LogInformation("Toggled favorite for report: {ReportId} -> {IsFavorite}", reportId, report.IsFavorite);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to toggle favorite for report: {ReportId}", reportId);
                 return false;
             }
 
-            report.IsFavorite = !report.IsFavorite;
-            await SaveReportsAsync(reports);
-            
-            _logger.LogInformation("Toggled favorite for report: {ReportId} -> {IsFavorite}", reportId, report.IsFavorite);
-            return true;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to toggle favorite for report: {ReportId}", reportId);
-            return false;
-        }
+        finally { StorageGate.Release(); }
     }
 
     public async Task<Dictionary<string, int>> GetReportStatisticsAsync()
@@ -201,7 +228,7 @@ public class ReportStorageService
         try
         {
             var reports = await LoadReportsAsync();
-            
+
             return new Dictionary<string, int>
             {
                 ["Total"] = reports.Count,
@@ -234,7 +261,9 @@ public class ReportStorageService
     private async Task SaveReportsAsync(List<StoredReport> reports)
     {
         var json = JsonSerializer.Serialize(reports, new JsonSerializerOptions { WriteIndented = true });
-        await File.WriteAllTextAsync(_reportsFilePath, json);
+        var temporaryFile = _reportsFilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        await File.WriteAllTextAsync(temporaryFile, json);
+        File.Move(temporaryFile, _reportsFilePath, overwrite: true);
     }
 
     private List<StoredReport> ApplyFilter(List<StoredReport> reports, ReportSearchFilter filter)

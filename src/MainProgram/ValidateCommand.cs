@@ -19,7 +19,7 @@ namespace SenseNetIndexTools
 
             // Add path option same as the other commands
             var pathOption = new Option<string>(
-                name: "--path", 
+                name: "--path",
                 description: "Path to the Lucene index directory");
             pathOption.IsRequired = true;
 
@@ -52,7 +52,7 @@ namespace SenseNetIndexTools
             var backupOption = new Option<bool>(
                 name: "--backup",
                 description: "Create a backup of the index before validation",
-                getDefaultValue: () => true);
+                getDefaultValue: () => false);
 
             // Option for backup path
             var backupPathOption = new Option<string?>(
@@ -83,9 +83,10 @@ namespace SenseNetIndexTools
 
             // Set the handler for the command
             // Use a custom binding to support more than 8 parameters
+            var indexInput = new IndexInputOptions(validateCommand, pathOption);
             validateCommand.SetHandler(async (System.CommandLine.Invocation.InvocationContext context) =>
             {
-                var path = context.ParseResult.GetValueForOption(pathOption)!;
+                var path = await indexInput.ResolveAsync(context);
                 var detailed = context.ParseResult.GetValueForOption(detailedOption);
                 var output = context.ParseResult.GetValueForOption(outputOption);
                 var backup = context.ParseResult.GetValueForOption(backupOption);
@@ -133,7 +134,8 @@ namespace SenseNetIndexTools
                     {
                         validator.RequiredFields = customFields;
                     }
-                    var results = validator.Validate(detailed);
+                    var results = validator.Validate(detailed).ToList();
+                    if (results.Any(r => r.Severity == ValidationSeverity.Error)) context.ExitCode = 1;
 
                     var errorCount = results.Count(r => r.Severity == ValidationSeverity.Error);
                     var warningCount = results.Count(r => r.Severity == ValidationSeverity.Warning);

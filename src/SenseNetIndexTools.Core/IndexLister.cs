@@ -42,20 +42,20 @@ namespace SenseNetIndexTools
             command.AddOption(repositoryPathOption);
             command.AddOption(recursiveOption);
             command.AddOption(depthOption);
-            command.SetHandler((context) =>
+            var indexInput = new IndexInputOptions(command, indexPathOption);
+            command.SetHandler(async context =>
             {
-                var indexPath = context.ParseResult.GetValueForOption(indexPathOption) ?? string.Empty;
-                var repositoryPath = context.ParseResult.GetValueForOption(repositoryPathOption) ?? string.Empty;
-                var recursive = context.ParseResult.GetValueForOption(recursiveOption);
-                var depth = context.ParseResult.GetValueForOption(depthOption);
-
-                if (string.IsNullOrEmpty(indexPath) || string.IsNullOrEmpty(repositoryPath))
+                try
                 {
-                    Console.Error.WriteLine("Index path and repository path are required.");
-                    return Task.CompletedTask;
+                    var indexPath = await indexInput.ResolveAsync(context);
+                    await ListIndexItems(indexPath, context.ParseResult.GetValueForOption(repositoryPathOption)!,
+                        context.ParseResult.GetValueForOption(recursiveOption), context.ParseResult.GetValueForOption(depthOption));
                 }
-
-                return ListIndexItems(indexPath, repositoryPath, recursive, depth);
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Error reading index: {ex.Message}");
+                    context.ExitCode = 1;
+                }
             });
 
             return command;
@@ -65,7 +65,7 @@ namespace SenseNetIndexTools
             if (!IODirectory.Exists(indexPath))
             {
                 Console.Error.WriteLine($"Index directory not found: {indexPath}");
-                return Task.CompletedTask;
+                throw new DirectoryNotFoundException($"Index directory not found: {indexPath}");
             }
 
             try
@@ -98,50 +98,16 @@ namespace SenseNetIndexTools
 
                 int pathSegmentCount = normalizedPath.Split('/').Length - 1;
 
-                // Implement paging for large indexes
-                const int PageSize = 10000; // Process 10000 documents at a time
-                int totalProcessed = 0;
-
-                // Create a collector to find all matching documents
-                var initialCollector = TopScoreDocCollector.Create(1000000, true); // Use a large limit
-                searcher.Search(query, initialCollector);
-                var topDocs = initialCollector.TopDocs();
-                int totalHits = topDocs.TotalHits;
-
-                Console.WriteLine($"Found {totalHits} items in index matching the query...");
-
-                // Process in batches to avoid memory issues
-                while (totalProcessed < totalHits)
+                searcher.Search(query, new IndexDocumentCollector(docId =>
                 {
-                    var collector = TopScoreDocCollector.Create(1000000, true); // Use a large limit
-                    searcher.Search(query, collector);
-                    var searchHits = collector.TopDocs(totalProcessed, Math.Min(PageSize, totalHits - totalProcessed)).ScoreDocs;
-
-                    if (searchHits.Length == 0) break; // No more results
-
-                    foreach (var hitDoc in searchHits)
-                    {
-                        var doc = searcher.Doc(hitDoc.Doc);
-                        var docPath = doc.Get("Path") ?? "?";
-
-                        // Skip if we're filtering by depth and this item exceeds our depth
-                        if (depth == 1 && recursive)
-                        {
-                            // Count path segments to determine depth
-                            int docPathSegments = docPath.Split('/').Length - 1;
-                            if (docPathSegments > pathSegmentCount + 1)
-                                continue;
-                        }
-
-                        // Get values with fallbacks for different field names
-                        var id = doc.Get("Id") ?? doc.Get("NodeId") ?? "?";
-                        var versionId = doc.Get("VersionId") ?? "?";
-                        var type = doc.Get("Type") ?? doc.Get("NodeType") ?? "?";
-                        items.Add((id, versionId, docPath, type));
-                    }
-
-                    totalProcessed += searchHits.Length;
-                }
+                    var doc = searcher.Doc(docId);
+                    var docPath = doc.Get("Path") ?? "?";
+                    if (depth > 0 && docPath.Count(c => c == '/') - normalizedPath.TrimEnd('/').Count(c => c == '/') > depth)
+                        return;
+                    items.Add((doc.Get("Id") ?? doc.Get("NodeId") ?? "?",
+                        doc.Get("VersionId") ?? doc.Get("Version_") ?? "?", docPath,
+                        doc.Get("Type") ?? doc.Get("NodeType") ?? "?"));
+                }));
                 // Sort the items by path (case-insensitive)
                 items = items.OrderBy(item => item.Path, StringComparer.OrdinalIgnoreCase).ToList();
 
@@ -185,7 +151,7 @@ namespace SenseNetIndexTools
             {
                 Console.Error.WriteLine($"Error reading index: {ex.Message}");
                 Console.Error.WriteLine(ex.StackTrace);
-                return Task.CompletedTask;
+                throw;
             }
         }
     }

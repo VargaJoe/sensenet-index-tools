@@ -19,10 +19,10 @@ public class SubtreeCheckingService
     {
         if (string.IsNullOrWhiteSpace(indexPath))
             return false;
-        
+
         if (string.IsNullOrWhiteSpace(connectionString))
             return false;
-        
+
         if (string.IsNullOrWhiteSpace(repositoryPath))
             return false;
 
@@ -36,17 +36,14 @@ public class SubtreeCheckingService
     public async Task<SubtreeCheckResult> CheckSubtreeAsync(SubtreeCheckOptions options)
     {
         _logger.LogInformation("Starting subtree check for path: {RepositoryPath}", options.RepositoryPath);
-        _logger.LogInformation("RECEIVED CONNECTION STRING: '{ConnectionString}'", options.ConnectionString);
         _logger.LogInformation("RECEIVED INDEX PATH: '{IndexPath}'", options.IndexPath);
-        
+
         var startTime = DateTime.Now;
 
         try
         {
-            // For now, we'll simulate the subtree check operation
-            // In the real implementation, this would call the CLI command or shared logic
             var result = await ExecuteSubtreeCheckAsync(options);
-            
+
             var endTime = DateTime.Now;
             var duration = endTime - startTime;
 
@@ -79,7 +76,7 @@ public class SubtreeCheckingService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during subtree check");
-            
+
             var failedResult = new SubtreeCheckResult
             {
                 IndexPath = options.IndexPath,
@@ -103,10 +100,9 @@ public class SubtreeCheckingService
     private async Task<SubtreeCheckExecutionResult> ExecuteSubtreeCheckAsync(SubtreeCheckOptions options)
     {
         _logger.LogInformation("Executing subtree check with real logic");
-        _logger.LogInformation("Connection String: {ConnectionString}", options.ConnectionString);
         _logger.LogInformation("Index Path: {IndexPath}", options.IndexPath);
         _logger.LogInformation("Repository Path: {RepositoryPath}", options.RepositoryPath);
-        
+
         try
         {
             // Verify this is a valid Lucene index
@@ -117,18 +113,12 @@ public class SubtreeCheckingService
 
             // Use the shared SubtreeIndexChecker for proper detailed report generation (same as CLI)
             _logger.LogInformation("Executing subtree check using SubtreeIndexChecker (same as CLI)...");
-            
-            var checker = new SubtreeIndexChecker();
-            var reportContent = await Task.Run(() => 
-                // Generate report using the shared logic from Core library
-                checker.GenerateSubtreeReport(options.IndexPath, options.ConnectionString, options.RepositoryPath, 
-                    options.Recursive, options.Depth, options.ReportFormat, options.Format));
 
-            // Get statistics by running a quick comparison for display
-            var comparer = new ContentComparer();
-            var items = await Task.Run(() => 
-                comparer.CompareContent(options.IndexPath, options.ConnectionString, options.RepositoryPath, 
-                    options.Recursive, options.Depth));
+            var checker = new SubtreeIndexChecker();
+            var items = await Task.Run(() => new ContentComparer().CompareContent(
+                options.IndexPath, options.ConnectionString, options.RepositoryPath, options.Recursive, options.Depth));
+            var reportContent = checker.GenerateSubtreeReportFromItems(items, options.RepositoryPath,
+                options.Recursive, options.ReportFormat, options.Format);
 
             var itemsInDatabase = items.Count(item => item.InDatabase);
             var itemsInIndex = items.Count(item => item.InIndex);
@@ -216,17 +206,17 @@ public class SubtreeCheckingService
         var reportType = options.ReportFormat switch
         {
             "summary" => "Summary",
-            "detailed" => "Detailed", 
+            "detailed" => "Detailed",
             "full" => "Full",
             _ => "Check"
         };
-        
+
         // Use configuration name when available for better readability
         if (!string.IsNullOrEmpty(options.ConfigurationName))
         {
             return $"Subtree ({reportType}) - {options.ConfigurationName} - {timestamp}";
         }
-        
+
         // Fallback to path-based naming when no configuration is used
         var indexName = Path.GetFileName(indexPath.TrimEnd('\\', '/'));
         var repoName = Path.GetFileName(repositoryPath.TrimEnd('\\', '/'));
@@ -245,7 +235,7 @@ public class SubtreeCheckOptions
     public string ReportFormat { get; set; } = "summary"; // summary, detailed, full, tree
     public string Format { get; set; } = "md"; // md, html
     public string? OutputPath { get; set; }
-    
+
     // Configuration tracking for better report naming
     public string? ConfigurationId { get; set; }
     public string? ConfigurationName { get; set; }
@@ -264,7 +254,7 @@ public class SubtreeCheckResult
     public string? ReportContent { get; set; }
     public string? ReportPath { get; set; }
     public SubtreeCheckOptions? Options { get; set; }
-    
+
     // Statistics
     public int ItemsInDatabase { get; set; }
     public int ItemsInIndex { get; set; }

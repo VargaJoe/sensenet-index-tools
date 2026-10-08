@@ -15,8 +15,9 @@ namespace SenseNetIndexTools
         public string? IndexNodeId { get; set; }
         public string? IndexVersionId { get; set; }
         public string? IndexTimestamp { get; set; }
-        public string? IndexVersionTimestamp { get; set; } 
-        
+        public string? IndexVersionTimestamp { get; set; }
+        public int? IndexDocumentId { get; set; }
+
         public string Status
         {
             get
@@ -27,51 +28,17 @@ namespace SenseNetIndexTools
                 bool idsMatch = string.Equals(NodeId.ToString(), IndexNodeId) &&
                                string.Equals(VersionId.ToString(), IndexVersionId);
 
-                // For timestamp comparison
-                bool timestampMatch = false;
-                if (!string.IsNullOrEmpty(IndexTimestamp) && TimestampNumeric > 0)
-                {
-                    // Debug timestamp comparison
-                    if (ContentComparer.VerboseLogging)
-                    {
-                        Console.WriteLine($"TIMESTAMP COMPARISON:");
-                        Console.WriteLine($"  DB Timestamp (raw numeric): {TimestampNumeric}");
-                        Console.WriteLine($"  Index Timestamp (raw string): {IndexTimestamp}");
-                    }
-                    
-                    // Directly compare the numeric values - both are bigint values
-                    if (long.TryParse(IndexTimestamp, out long indexTimestampNumeric))
-                    {
-                        timestampMatch = (indexTimestampNumeric == TimestampNumeric);
-                        if (ContentComparer.VerboseLogging)
-                        {
-                            Console.WriteLine($"  Index Timestamp (parsed numeric): {indexTimestampNumeric}");
-                            Console.WriteLine($"  Comparison result: {(timestampMatch ? "MATCH" : "MISMATCH")}");
-                        }
-                    }
-                    else if (ContentComparer.VerboseLogging)
-                    {
-                        Console.WriteLine($"  Failed to parse index timestamp as numeric value");
-                    }
-                }
-                else if (idsMatch)
-                {
-                    // If IDs match but we can't compare timestamps (missing or invalid), assume it's a match
-                    timestampMatch = true;
-                    if (ContentComparer.VerboseLogging)
-                    {
-                        Console.WriteLine($"TIMESTAMP COMPARISON: Assuming match due to matching IDs and missing/invalid timestamp data");
-                        Console.WriteLine($"  DB Timestamp: {TimestampNumeric}");
-                        Console.WriteLine($"  Index Timestamp: {IndexTimestamp}");
-                    }
-                }
+                if (!idsMatch) return "ID mismatch";
+                if (TimestampNumeric <= 0 || VersionTimestampNumeric <= 0 ||
+                    !long.TryParse(IndexTimestamp, out var nodeTimestamp) ||
+                    !long.TryParse(IndexVersionTimestamp, out var versionTimestamp))
+                    return "Timestamp unavailable";
+                return nodeTimestamp == TimestampNumeric && versionTimestamp == VersionTimestampNumeric
+                    ? "Match" : "Timestamp mismatch";
 
-                if (idsMatch && timestampMatch) return "Match";
-                if (idsMatch && !timestampMatch) return "Timestamp mismatch";
-                return "ID mismatch";
             }
         }
-        
+
         public override string ToString()
         {
             return $"{(InDatabase ? NodeId.ToString() : "-")}\t{(InDatabase ? VersionId.ToString() : "-")}\t" +
