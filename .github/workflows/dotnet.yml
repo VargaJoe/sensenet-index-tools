@@ -19,7 +19,7 @@ jobs:
       with:
         dotnet-version: 8.0.x
     - name: Restore dependencies
-      run: dotnet restore sensenet-index-tools.sln
+      run: dotnet restore sensenet-index-tools.sln --locked-mode
     - name: Build
       run: dotnet build sensenet-index-tools.sln -c Release --no-restore
     - name: Test
@@ -30,3 +30,14 @@ jobs:
     - name: Publish Web
       if: matrix.os == 'ubuntu-latest'
       run: dotnet publish src/WebApp/WebApp/WebApp.csproj -c Release --no-build -o ./publish/web
+    - name: Export synthetic Docker test index
+      if: matrix.os == 'ubuntu-latest'
+      env:
+        INDEXTOOLS_SMOKE_EXPORT: ${{ github.workspace }}/.private/smoke
+      run: dotnet test test/IndexTools.Tests/IndexTools.Tests.csproj -c Release --no-build --filter FullyQualifiedName~NativeActivityMetadataReads
+    - name: Build Docker image
+      if: matrix.os == 'ubuntu-latest'
+      run: docker build -t index-tools:smoke .
+    - name: Start and test CLI and web containers
+      if: matrix.os == 'ubuntu-latest'
+      run: sh docker/smoke.sh

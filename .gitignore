@@ -108,3 +108,10 @@ Reports/
 # Local backup sources and standalone published CLI output
 *.bak
 src/MainProgram/SensenetIndexTools/
+
+# Private operator configuration, credentials and Docker state
+.private/
+.env
+.env.*
+secrets/
+docker-state/

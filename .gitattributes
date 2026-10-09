@@ -34,3 +34,9 @@
 *.xlsx binary
 *.dll binary
 *.exe binary
+
+# Container files
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yaml text eol=lf
+packages.lock.json text eol=lf

@@ -12,10 +12,7 @@ namespace SenseNetIndexTools
         {
             var command = new Command("list-db", "List content items from the database");
 
-            var connectionStringOption = new Option<string>(
-                name: "--connection-string",
-                description: "SQL Connection string to the SenseNet database");
-            connectionStringOption.IsRequired = true;
+            var connectionStringOption = RuntimeSettings.SqlOption();
 
             var repositoryPathOption = new Option<string>(
                 name: "--repository-path",

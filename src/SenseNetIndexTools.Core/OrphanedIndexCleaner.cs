@@ -18,6 +18,7 @@ public static class OrphanedIndexCleaner
     /// <summary>Remove only the exact documents found by an offline comparison.</summary>
     public static int Remove(string indexPath, IEnumerable<ContentItem> orphanedItems)
     {
+        RuntimeSettings.EnsureWritableCopy(indexPath);
         var items = orphanedItems.ToArray();
         using var directory = FSDirectory.Open(new DirectoryInfo(indexPath));
         if (IndexWriter.IsLocked(directory))

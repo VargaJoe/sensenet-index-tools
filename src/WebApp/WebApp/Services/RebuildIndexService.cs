@@ -155,7 +155,7 @@ namespace WebApp.Services
             try
             {
                 using var request = RebuildIndexRequest.Create(options.RepoUrl, options.ApiKey,
-                    options.ContentPath, options.ContentId, options.Recursive, options.RebuildLevel);
+                    options.ContentPath, options.ContentId, options.Recursive, options.RebuildLevel, SenseNetIndexTools.RuntimeSettings.Load().BearerToken);
                 if (options.Verbose) _logger.LogInformation("Request URL: {Url}", request.RequestUri);
                 using var response = await _httpClient.SendAsync(request);
                 if (options.Verbose) _logger.LogInformation("Response status: {Status}", response.StatusCode);
@@ -180,6 +180,7 @@ namespace WebApp.Services
     public class RebuildIndexOptions
     {
         public string RepoUrl { get; set; } = string.Empty;
+        [System.Text.Json.Serialization.JsonIgnore]
         public string ApiKey { get; set; } = string.Empty;
         public string? ContentPath { get; set; }
         public string? ContentId { get; set; }

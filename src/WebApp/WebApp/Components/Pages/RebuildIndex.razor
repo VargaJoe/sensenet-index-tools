@@ -263,6 +263,9 @@
 
     protected override void OnInitialized()
     {
+        var runtime = SenseNetIndexTools.RuntimeSettings.Load();
+        rebuildOptions.RepoUrl = runtime.RepositoryUrl ?? "";
+        rebuildOptions.ApiKey = runtime.ApiKey;
         rebuildOptions.RebuildLevel = "IndexOnly"; // Default value
     }
 

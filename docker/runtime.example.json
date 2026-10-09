@@ -1,0 +1,12 @@
+{
+  "RepositoryUrl": "https://repository.example.invalid",
+  "SqlConnectionStringFile": "/run/secrets/sql-connection-string",
+  "ApiKeyFile": "/run/secrets/api-key",
+  "BearerTokenFile": null,
+  "SourcePath": "/source/index",
+  "SnapshotDirectory": "/state/copies",
+  "OutputDirectory": "/state/reports",
+  "BackupDirectory": "/state/backups",
+  "DataDirectory": "/state/data",
+  "KeyDirectory": "/state/keys"
+}

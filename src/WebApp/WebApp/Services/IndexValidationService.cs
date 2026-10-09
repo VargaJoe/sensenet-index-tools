@@ -45,6 +45,7 @@ public class IndexValidationService
 
         try
         {
+            options.IndexPath = IndexSnapshot.Resolve(options.IndexPath);
             if (!ValidatePath(options.IndexPath))
             {
                 throw new DirectoryNotFoundException($"Index directory not found: {options.IndexPath}");
@@ -65,7 +66,9 @@ public class IndexValidationService
             {
                 var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                 var fileName = $"validation_report_{timestamp}.{options.Format}";
-                outputPath = Path.Combine(Path.GetTempPath(), fileName);
+                var outputDirectory = RuntimeSettings.Load().OutputDirectory ?? Path.GetTempPath();
+                Directory.CreateDirectory(outputDirectory);
+                outputPath = Path.Combine(outputDirectory, fileName);
             }
 
             // Execute the validation command
@@ -97,7 +100,7 @@ public class IndexValidationService
                 StartTime = DateTime.UtcNow,
                 EndTime = DateTime.UtcNow,
                 Success = false,
-                Message = $"Validation failed: {ex.Message}",
+                Message = $"Validation failed: {SecretRedactor.Redact(ex.Message)}",
                 Options = options
             };
 
@@ -135,7 +138,7 @@ public class IndexValidationService
                 }
                 catch (Exception ex)
                 {
-                    throw new InvalidOperationException($"Failed to parse required fields JSON: {ex.Message}");
+                    throw new InvalidOperationException($"Failed to parse required fields JSON: {SecretRedactor.Redact(ex.Message)}");
                 }
             }
 
