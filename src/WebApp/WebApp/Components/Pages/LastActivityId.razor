@@ -313,7 +313,7 @@
 }
 
 @code {
-    private string _indexPath = string.Empty;
+    private string _indexPath = SenseNetIndexTools.RuntimeSettings.Load().SourcePath ?? "";
     private string IndexPath
     {
         get => _indexPath;
@@ -327,14 +327,14 @@
             }
         }
     }
-    private string _connectionString = string.Empty;
+    private string _connectionString = SenseNetIndexTools.RuntimeSettings.Load().ConnectionString;
     private string ConnectionString
     {
         get => _connectionString;
         set => _connectionString = value;
     }
     private bool CreateBackup { get; set; } = true;
-    private string? BackupPath { get; set; }
+    private string? BackupPath { get; set; } = SenseNetIndexTools.RuntimeSettings.Load().BackupDirectory;
     private bool IsOffline { get; set; }
     private long NewId { get; set; }
     private string? ErrorMessage { get; set; }

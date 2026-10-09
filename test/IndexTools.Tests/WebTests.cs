@@ -16,18 +16,44 @@ public class WebTests
     public async Task WebStartsAndOperationPagesRender()
     {
         using var fixture = new IndexFixture();
+        var tokenFile = Path.Combine(fixture.Root, "web-token");
+        const string token = "synthetic-web-token-for-regression-tests";
+        File.WriteAllText(tokenFile, token);
         await using var factory = new WebApplicationFactory<global::Program>().WithWebHostBuilder(builder =>
         {
             builder.UseContentRoot(fixture.Root);
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?> {
-                ["AllowRemoteAccess"] = "true"
+                ["AllowRemoteAccess"] = "true", ["WebAccess:TokenFile"] = tokenFile
             }));
         });
         using var scope = factory.Services.CreateScope();
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<RebuildIndexService>());
         using var client = factory.CreateClient(new() { BaseAddress = new Uri("https://localhost") });
+        await client.PostAsync("/login", new FormUrlEncodedContent(new Dictionary<string, string> { ["token"] = token }));
         foreach (var path in new[] { "/", "/validation", "/subtree-check", "/lastactivityid", "/rebuild-index", "/reports", "/settings" })
             Assert.True((await client.GetAsync(path)).IsSuccessStatusCode, path);
+    }
+
+    [Fact]
+    public async Task RemoteModeRequiresTokenAndRejectsUnauthenticatedPages()
+    {
+        using var fixture = new IndexFixture();
+        var tokenFile = Path.Combine(fixture.Root, "web-token");
+        File.WriteAllText(tokenFile, "synthetic-web-token-for-regression-tests");
+        await using var factory = new WebApplicationFactory<global::Program>().WithWebHostBuilder(builder => {
+            builder.UseContentRoot(fixture.Root);
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?> {
+                ["AllowRemoteAccess"] = "true", ["WebAccess:TokenFile"] = tokenFile, ["WebAccess:HttpsRedirect"] = "false"
+            }));
+        });
+        using var client = factory.CreateClient(new() { AllowAutoRedirect = false, BaseAddress = new Uri("http://localhost") });
+        Assert.Equal("/login", (await client.GetAsync("/settings")).Headers.Location!.ToString());
+        Assert.Equal(System.Net.HttpStatusCode.OK, (await client.GetAsync("/healthz")).StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, (await client.PostAsync("/login", new FormUrlEncodedContent(new Dictionary<string,string> { ["token"] = "wrong" }))).StatusCode);
+        client.DefaultRequestHeaders.Add("X-Forwarded-Proto", "https");
+        var login = await client.PostAsync("/login", new FormUrlEncodedContent(new Dictionary<string,string> { ["token"] = "synthetic-web-token-for-regression-tests" }));
+        Assert.Equal(System.Net.HttpStatusCode.Redirect, login.StatusCode);
+        Assert.DoesNotContain("secure", login.Headers.GetValues("Set-Cookie").Single().ToLowerInvariant());
     }
 
     [Fact]

@@ -19,6 +19,13 @@ namespace SenseNetIndexTools
 
         public static async Task<int> Main(string[] args)
         {
+            if (args.Length == 1 && args[0] == "healthcheck")
+            {
+                try { using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) }; return (await client.GetAsync("http://127.0.0.1:8080/healthz")).IsSuccessStatusCode ? 0 : 1; }
+                catch { return 1; }
+            }
+            Console.SetOut(new SecretRedactor.Writer(Console.Out));
+            Console.SetError(new SecretRedactor.Writer(Console.Error));
             var rootCommand = new RootCommand("SenseNet Index Maintenance Suite - Tools for managing SenseNet Lucene indices");
 
             var pathOption = new Option<string>(
@@ -69,6 +76,8 @@ namespace SenseNetIndexTools
                 var value = result.GetValueForOption(idOption);
                 if (value < 0 || value > int.MaxValue) result.ErrorMessage = "LastActivityId must be between 0 and 2147483647.";
             });
+            rootCommand.AddCommand(SnapshotCommand.Create());
+            rootCommand.AddCommand(VerifyRepositoryCommand.Create());
             rootCommand.AddCommand(getCommand);
             rootCommand.AddCommand(setCommand);
             rootCommand.AddCommand(initCommand);
@@ -98,63 +107,9 @@ namespace SenseNetIndexTools
                         return;
                     }
 
-                    // First try using SenseNet API method
-                    try
-                    {
-                        var directory = new IndexDirectory(actualPath);
-                        Console.WriteLine("Created IndexDirectory object successfully.");
-
-                        var engine = new Lucene29LocalIndexingEngine(directory);
-                        Console.WriteLine("Created Lucene29LocalIndexingEngine object successfully.");
-
-                        Console.WriteLine("Attempting to read activity status using SenseNet API...");
-                        var status = await engine.ReadActivityStatusFromIndexAsync(CancellationToken.None);
-                        Console.WriteLine($"Last activity ID: {status.LastActivityId}");
-                        if (status.Gaps?.Any() == true)
-                            Console.WriteLine($"Activity gaps: {string.Join(", ", status.Gaps)}");
-
-                        return;
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"SenseNet API method failed: {ex.Message}");
-                        Console.WriteLine("Falling back to direct Lucene.NET access method...");
-                    }
-
-                    // Fall back to direct Lucene.NET access
-                    try
-                    {
-                        using (var directory = FSDirectory.Open(new DirectoryInfo(actualPath)))
-                        {
-                            if (IndexReader.IndexExists(directory))
-                            {
-                                using (var reader = IndexReader.Open(directory, true))
-                                {
-                                    var commitUserData = reader.GetCommitUserData();
-                                    if (commitUserData != null && commitUserData.ContainsKey("LastActivityId"))
-                                    {
-                                        var lastActivityId = commitUserData["LastActivityId"];
-                                        Console.WriteLine($"Last activity ID (from commit user data): {lastActivityId}");
-                                    }
-                                    else
-                                    {
-                                        Console.WriteLine("No LastActivityId found in commit user data.");
-                                    }
-                                    reader.Close();
-                                }
-                            }
-                            else
-                            {
-                                Console.WriteLine("Index does not exist or cannot be opened.");
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Could not read LastActivityId from index: {ex.Message}");
-                        Console.WriteLine("The index may not have a LastActivityId set or may not be a SenseNet index.");
-                        Console.WriteLine($"Stack trace: {ex.StackTrace}");
-                    }
+                    var status = ActivityStatusReader.Read(actualPath);
+                    Console.WriteLine($"Last activity ID: {status.LastActivityId}");
+                    if (status.Gaps.Length > 0) Console.WriteLine($"Activity gaps: {string.Join(", ", status.Gaps)}");
                 }
                 catch (Exception ex)
                 {
@@ -189,6 +144,8 @@ namespace SenseNetIndexTools
                         return;
                     }
 
+                    RuntimeSettings.EnsureWritableCopy(actualPath);
+                    backupPath ??= RuntimeSettings.Load().BackupDirectory;
                     if (backup)
                     {
                         IndexUtilities.CreateBackup(actualPath, backupPath);
@@ -377,6 +334,8 @@ namespace SenseNetIndexTools
                         return;
                     }
 
+                    RuntimeSettings.EnsureWritableCopy(actualPath);
+                    backupPath ??= RuntimeSettings.Load().BackupDirectory;
                     if (backup)
                     {
                         IndexUtilities.CreateBackup(actualPath, backupPath);

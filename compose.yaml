@@ -1,0 +1,52 @@
+x-runtime: &runtime
+  image: ${INDEXTOOLS_IMAGE:-index-tools:local}
+  build: .
+  user: "${RUN_UID:-1654}:${RUN_GID:-1654}"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: [/tmp:mode=1777]
+  environment: &environment
+    INDEXTOOLS_CONFIG_FILE: /run/secrets/runtime.json
+    INDEXTOOLS_WEB_TOKEN_FILE: /run/secrets/web-token
+    AllowRemoteAccess: "true"
+    WebAccess__HttpsRedirect: "false"
+    WebAccess__TrustedProxies: ${TRUSTED_PROXIES:-}
+    AllowedHosts: ${WEB_ALLOWED_HOSTS:-localhost;127.0.0.1}
+  volumes:
+    - type: bind
+      source: ${INDEX_SOURCE:?Set INDEX_SOURCE to the host index directory or dated-index parent}
+      target: /source/index
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${PRIVATE_CONFIG_DIRECTORY:?Set PRIVATE_CONFIG_DIRECTORY to the private configuration and secret directory}
+      target: /run/secrets
+      read_only: true
+      bind:
+        create_host_path: false
+    - state:/state
+  networks: [repository]
+
+services:
+  web:
+    <<: *runtime
+    command: [web]
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-5187}:8080"
+    restart: unless-stopped
+  cli:
+    <<: *runtime
+    profiles: [cli]
+    command: [cli, --help]
+    healthcheck:
+      disable: true
+
+volumes:
+  state:
+    name: ${STATE_VOLUME:-index-tools-state}
+networks:
+  repository:
+    external: true
+    name: ${DOCKER_NETWORK:?Set DOCKER_NETWORK to an existing repository network}

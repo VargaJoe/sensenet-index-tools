@@ -14,13 +14,13 @@ namespace SenseNetIndexTools
 
             var repoUrlOption = new Option<string>(
                 name: "--repo-url",
-                description: "SenseNet repository URL (e.g., https://your-repo.sensenet.cloud)");
-            repoUrlOption.IsRequired = true;
+                getDefaultValue: () => RuntimeSettings.Load().RepositoryUrl ?? "",
+                description: "SenseNet repository URL (e.g., https://repository.example.invalid)");
 
             var apiKeyOption = new Option<string>(
                 name: "--api-key",
-                description: "API key for SenseNet repository authentication");
-            apiKeyOption.IsRequired = true;
+                getDefaultValue: () => RuntimeSettings.Load().ApiKey,
+                description: "API key (prefer a configured secret file)");
 
             var contentPathOption = new Option<string>(
                 name: "--content-path",
@@ -69,6 +69,8 @@ namespace SenseNetIndexTools
             // Ensure either content-path, content-id, or file-path is provided
             command.AddValidator(result =>
             {
+                if (string.IsNullOrWhiteSpace(result.GetValueForOption(repoUrlOption))) result.ErrorMessage = "Repository URL is required.";
+                if (string.IsNullOrWhiteSpace(result.GetValueForOption(apiKeyOption)) && string.IsNullOrWhiteSpace(RuntimeSettings.Load().BearerToken)) result.ErrorMessage = "Configure an API key or bearer token secret file.";
                 var contentPath = result.GetValueForOption(contentPathOption);
                 var contentId = result.GetValueForOption(contentIdOption);
                 var filePath = result.GetValueForOption(filePathOption);
@@ -189,7 +191,7 @@ namespace SenseNetIndexTools
             using var httpClient = new HttpClient();
             httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("SenseNet-Index-Tools/1.0");
 
-            using var request = RebuildIndexRequest.Create(repoUrl, apiKey, contentPath, contentId, recursive, rebuildLevel);
+            using var request = RebuildIndexRequest.Create(repoUrl, apiKey, contentPath, contentId, recursive, rebuildLevel, RuntimeSettings.Load().BearerToken);
             if (verbose) Console.WriteLine($"Request URL: {request.RequestUri}");
             using var response = await httpClient.SendAsync(request);
             if (verbose) Console.WriteLine($"Response status: {response.StatusCode}");

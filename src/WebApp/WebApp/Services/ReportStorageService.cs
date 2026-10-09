@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SenseNetIndexTools;
 using WebApp.Models;
 
 namespace WebApp.Services;
@@ -16,9 +17,9 @@ public class ReportStorageService
     {
         _logger = logger;
         _environment = environment;
-        _dataDirectory = Path.Combine(_environment.ContentRootPath, "Data");
+        _dataDirectory = RuntimeSettings.Load().DataDirectory ?? Path.Combine(_environment.ContentRootPath, "Data");
         _reportsFilePath = Path.Combine(_dataDirectory, "reports.json");
-        _reportsDataDirectory = Path.Combine(_dataDirectory, "Reports");
+        _reportsDataDirectory = RuntimeSettings.Load().OutputDirectory ?? Path.Combine(_dataDirectory, "Reports");
 
         EnsureDirectoriesExist();
     }
@@ -48,7 +49,7 @@ public class ReportStorageService
                 {
                     var fileName = $"{report.Id}.{report.Format}";
                     var filePath = Path.Combine(_reportsDataDirectory, fileName);
-                    await File.WriteAllTextAsync(filePath, report.Content);
+                    await File.WriteAllTextAsync(filePath, SecretRedactor.Redact(report.Content));
 
                     report.FilePath = filePath;
                     report.FileSizeBytes = new FileInfo(filePath).Length;
@@ -260,7 +261,7 @@ public class ReportStorageService
 
     private async Task SaveReportsAsync(List<StoredReport> reports)
     {
-        var json = JsonSerializer.Serialize(reports, new JsonSerializerOptions { WriteIndented = true });
+        var json = SecretRedactor.RedactJson(JsonSerializer.Serialize(reports, new JsonSerializerOptions { WriteIndented = true }));
         var temporaryFile = _reportsFilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         await File.WriteAllTextAsync(temporaryFile, json);
         File.Move(temporaryFile, _reportsFilePath, overwrite: true);

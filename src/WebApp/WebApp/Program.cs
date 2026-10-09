@@ -4,10 +4,20 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.DataProtection;
 using System.Net;
+using SenseNetIndexTools;
 
 var builder = WebApplication.CreateBuilder(args);
+var settings = RuntimeSettings.Load();
+foreach (var directory in new[] { settings.DataDirectory, settings.OutputDirectory, settings.KeyDirectory, settings.SnapshotDirectory, settings.BackupDirectory }.Where(p => p != null))
+{
+    Directory.CreateDirectory(directory!);
+    var probe = Path.Combine(directory!, ".startup-" + Guid.NewGuid().ToString("N"));
+    File.WriteAllText(probe, ""); File.Delete(probe);
+}
+if (settings.SourcePath != null) IndexSnapshot.Resolve(settings.SourcePath);
+WebAccess.ConfigureForwarding(builder);
 var protection = builder.Services.AddDataProtection().SetApplicationName("SenseNetIndexTools")
-    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys")));
+    .PersistKeysToFileSystem(new DirectoryInfo(settings.KeyDirectory ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys")));
 if (OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi();
 
 // Add services to the container.
@@ -47,9 +57,8 @@ builder.Services.AddHttpClient<RebuildIndexService>();
 // Add logging
 builder.Services.AddLogging(logging =>
 {
-    logging.AddConsole();
-    logging.AddDebug();
-    logging.SetMinimumLevel(LogLevel.Debug);
+    logging.ClearProviders();
+    logging.AddProvider(new RedactingConsoleLoggerProvider());
 });
 
 var app = builder.Build();
@@ -66,20 +75,10 @@ else
     app.UseHsts();
 }
 
-// This maintenance UI has no user authentication. Keep it local unless explicitly enabled by the operator.
-app.Use(async (context, next) =>
-{
-    var remote = context.Connection.RemoteIpAddress;
-    if (!app.Configuration.GetValue<bool>("AllowRemoteAccess") &&
-        (remote == null || !IPAddress.IsLoopback(remote) || context.Request.Headers.ContainsKey("X-Forwarded-For")))
-    {
-        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        return;
-    }
-    await next(context);
-});
-
-app.UseHttpsRedirection();
+app.UseWhen(context => context.Connection.RemoteIpAddress != null, branch => branch.UseForwardedHeaders());
+WebAccess.UseAccess(app);
+if (app.Configuration.GetValue<bool?>("WebAccess:HttpsRedirect") ?? true) app.UseHttpsRedirection();
+app.MapGet("/healthz", () => Results.Text("healthy"));
 
 app.UseStaticFiles();
 app.UseAntiforgery();

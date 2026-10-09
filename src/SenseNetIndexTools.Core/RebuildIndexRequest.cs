@@ -36,13 +36,17 @@ public static class RebuildIndexRequest
     }
 
     public static HttpRequestMessage Create(string repoUrl, string apiKey, string? path, string? id,
-        bool recursive, string rebuildLevel)
+        bool recursive, string rebuildLevel) => Create(repoUrl, apiKey, path, id, recursive, rebuildLevel, null);
+
+    public static HttpRequestMessage Create(string repoUrl, string apiKey, string? path, string? id,
+        bool recursive, string rebuildLevel, string? bearerToken)
     {
-        if (string.IsNullOrWhiteSpace(apiKey)) throw new ArgumentException("API key is required.");
+        if (string.IsNullOrWhiteSpace(apiKey) && string.IsNullOrWhiteSpace(bearerToken)) throw new ArgumentException("API key or bearer token is required.");
         if (rebuildLevel is not ("IndexOnly" or "DatabaseOnly" or "IndexAndDatabase"))
             throw new ArgumentException("Invalid rebuild level.");
         var request = new HttpRequestMessage(HttpMethod.Post, GetActionUrl(repoUrl, path, id));
-        request.Headers.Add("apikey", apiKey);
+        if (!string.IsNullOrWhiteSpace(bearerToken)) request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearerToken);
+        else request.Headers.Add("apikey", apiKey);
         request.Content = new StringContent(JsonSerializer.Serialize(new { Recursive = recursive, RebuildLevel = rebuildLevel }),
             Encoding.UTF8, "application/json");
         return request;

@@ -25,10 +25,7 @@ namespace SenseNetIndexTools
                 description: "Path to the Lucene index directory");
             indexPathOption.IsRequired = true;
 
-            var connectionStringOption = new Option<string>(
-                name: "--connection-string",
-                description: "SQL Connection string to the SenseNet database");
-            connectionStringOption.IsRequired = true;
+            var connectionStringOption = RuntimeSettings.SqlOption();
 
             var repositoryPathOption = new Option<string>(
                 name: "--repository-path",

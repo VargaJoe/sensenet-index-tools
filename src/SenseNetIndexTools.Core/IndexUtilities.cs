@@ -9,34 +9,8 @@ namespace SenseNetIndexTools
     {
         public static void CreateBackup(string path, string? backupPath = null)
         {
-            // Get the index directory name
-            var indexDirInfo = new DirectoryInfo(path);
-            var indexDirName = indexDirInfo.Name;
-
-            // Create a "Backups" directory next to the index directory, not inside it
-            var parentDir = indexDirInfo.Parent?.FullName ?? ".";
-            var backupsRootDir = backupPath ?? Path.Combine(parentDir, "IndexBackups");
-
-            // Make sure the backups root directory exists
-            if (!IODirectory.Exists(backupsRootDir))
-            {
-                IODirectory.CreateDirectory(backupsRootDir);
-            }
-
-            // Create a backup directory with timestamp and index name
-            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            var backupPathFinal = Path.Combine(backupsRootDir, $"{indexDirName}_backup_{timestamp}");
-
-            Console.WriteLine($"Creating backup at {backupPathFinal}");
-            IODirectory.CreateDirectory(backupPathFinal);
-
-            // Copy all files from the index directory to the backup
-            foreach (var file in IODirectory.GetFiles(path))
-            {
-                File.Copy(file, Path.Combine(backupPathFinal, Path.GetFileName(file)));
-            }
-
-            Console.WriteLine("Backup completed successfully.");
+            var output = backupPath ?? RuntimeSettings.Load().BackupDirectory ?? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, "IndexBackups");
+            Console.WriteLine($"Backup completed: {IndexSnapshot.Create(path, output)}");
         }
 
         // Helper method to check if a directory is a valid Lucene index
