@@ -1,6 +1,9 @@
 # Docker integration evidence
 
-Checked on 2026-10-09, starting from develop `c1e035f`.
+Initial checks on 2026-10-09, starting from develop `c1e035f`.
+The current milestone is single-host Docker operation against the existing
+repository. Additional hosts/legs are a separate feature; their unverified
+status below does not block this milestone.
 Actual host identities, routing, source paths and operator configuration are
 recorded in private project/infrastructure memory. Host A and Host B below are
 stable labels for those targets; no credential or customer routing is needed
@@ -22,7 +25,20 @@ to reproduce the application build.
 Host A's SSH server presented a different host key from the saved identity.
 Its integration remains pending until the infrastructure owner confirms the
 new identity. No identity bypass, repository deployment or service restart was
-performed there. Two-host acceptance is therefore **incomplete**.
+performed there. Multi-host acceptance is deferred to its own feature.
+
+## Single-host recheck (2026-10-14)
+
+The existing tools web remained healthy without restarting either application
+or repository. A loopback SSH tunnel exposed the web to the operator's local
+browser; health returned HTTP 200 and protected pages redirected to login.
+Fresh read-only container acceptance passed with index and SQL LastActivityId
+20944, one selected item, zero mismatches and zero validation errors (the same
+manifest warning). No REST write was needed for this recheck.
+
+The current milestone covers the verified single host. Multi-host operation
+and owner-facing browser acceptance are tracked separately from these backend
+checks. Web access continues to require its private token.
 
 Host B used the committed Compose definition with private network, source,
 SQL/API secret-file and loopback-port parameters. The application requires

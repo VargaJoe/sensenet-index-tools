@@ -40,9 +40,10 @@ docker compose --env-file .private/operator.env up -d --no-build --wait web
 docker compose --env-file .private/operator.env run --rm cli cli --help
 ```
 
-Set `INDEXTOOLS_IMAGE` to the same immutable image reference on both hosts.
+Set `INDEXTOOLS_IMAGE` to an immutable image reference for the selected host.
 An image built once can also be moved with `docker save` / `docker load`.
-The Compose definition stays identical; only private configuration differs.
+This milestone verifies one host. Additional hosts/legs require separate
+acceptance; the generic Compose definition supports private per-host parameters.
 No socket mount, privileged mode, repository-container restart or repository
 configuration change is required. The source bind mount and application root
 filesystem are read-only. The application drops Linux capabilities and runs
