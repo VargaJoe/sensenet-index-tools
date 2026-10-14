@@ -5,6 +5,11 @@ image digests and NuGet lock files. The supported source format is SenseNet
 Lucene 2.9 (`SenseNet.Search.Lucene29` 7.5.1). Newer Lucene formats require a
 compatible reader; this image does not convert them or create a new repository.
 
+Local builds and CI use exactly SDK 8.0.425, matching the Docker build stage.
+Install that SDK for local .NET commands, or build with Docker. Floating SDK
+patch versions can change implicit WebAssembly linker dependencies and invalidate
+the locked restore; update SDK pins and lock files together when upgrading.
+
 ## Private configuration
 
 1. Copy `docker/example.env` to `.private/operator.env` and
