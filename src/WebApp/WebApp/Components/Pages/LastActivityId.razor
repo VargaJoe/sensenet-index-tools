@@ -70,10 +70,19 @@
             <span class="input-group-text">
                 <i class="bi bi-server"></i>
             </span>
-            <input type="password"
+            <input id="lastactivity-connection-string"
+                   type="@(_showConnectionString ? "text" : "password")"
                    class="form-control" 
                    @bind="ConnectionString"
                    placeholder="Enter SQL Server connection string for database comparison" />
+            <button type="button" class="btn btn-outline-secondary"
+                    @onclick="() => _showConnectionString = !_showConnectionString"
+                    title="@ConnectionStringVisibilityLabel"
+                    aria-label="@ConnectionStringVisibilityLabel"
+                    aria-controls="lastactivity-connection-string"
+                    aria-pressed="@(_showConnectionString ? "true" : "false")">
+                <i class="bi @(_showConnectionString ? "bi-eye-slash" : "bi-eye")" aria-hidden="true"></i>
+            </button>
         </div>
         <div class="form-text mb-2">
             <small class="text-muted">
@@ -328,6 +337,8 @@
         }
     }
     private string _connectionString = SenseNetIndexTools.RuntimeSettings.Load().ConnectionString;
+    private bool _showConnectionString;
+    private string ConnectionStringVisibilityLabel => _showConnectionString ? "Hide connection string" : "Show connection string";
     private string ConnectionString
     {
         get => _connectionString;

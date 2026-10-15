@@ -45,7 +45,8 @@ checks. Web access continues to require its private token.
 An operator found that the configured index path left the initial activity-read
 button disabled. The page initialized its path but did not initialize the
 validation state. It now validates the configured path before its first render;
-the SQL connection field is masked. Two render regressions cover configured and
+the SQL connection field is masked by default and has a show/hide eye button.
+Two render regressions cover configured and
 absent sources, bringing the suite to 45 passing tests.
 
 An authenticated headless browser reproduced the disabled controls before the

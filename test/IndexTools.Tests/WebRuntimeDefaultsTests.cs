@@ -47,6 +47,10 @@ public class WebRuntimeDefaultsTests
             Assert.Equal(!configured, buttons.Single(b => b.TextContent.Contains("Get Index LastActivityId")).HasAttribute("disabled"));
             Assert.Equal(!configured, buttons.Single(b => b.TextContent.Contains("Compare Index vs Database")).HasAttribute("disabled"));
             Assert.Equal("password", document.QuerySelector("input[placeholder^='Enter SQL']")!.GetAttribute("type"));
+            var reveal = document.QuerySelector("button[aria-label='Show connection string']")!;
+            Assert.Equal("button", reveal.GetAttribute("type"));
+            Assert.Equal("false", reveal.GetAttribute("aria-pressed"));
+            Assert.Equal(document.QuerySelector("input[placeholder^='Enter SQL']")!.Id, reveal.GetAttribute("aria-controls"));
         }
         finally
         {
