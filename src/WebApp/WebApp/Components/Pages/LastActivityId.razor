@@ -70,7 +70,7 @@
             <span class="input-group-text">
                 <i class="bi bi-server"></i>
             </span>
-            <input type="text" 
+            <input type="password"
                    class="form-control" 
                    @bind="ConnectionString"
                    placeholder="Enter SQL Server connection string for database comparison" />
@@ -354,6 +354,12 @@
     private bool IsValidPath => _isValidPathCache ?? false;
     private bool CanModify => IsValidPath && IsOffline && NewId >= 0;
     private bool CanCompare => IsValidPath && !string.IsNullOrWhiteSpace(ConnectionString);
+
+    protected override void OnInitialized()
+    {
+        // Configured defaults bypass the input setter; validate before first render.
+        _isValidPathCache = LastActivityService.ValidatePath(IndexPath);
+    }
 
     private async Task HandlePathKeyUp(KeyboardEventArgs e)
     {

@@ -40,6 +40,20 @@ The current milestone covers the verified single host. Multi-host operation
 and owner-facing browser acceptance are tracked separately from these backend
 checks. Web access continues to require its private token.
 
+## Web interaction recheck (2026-10-15)
+
+An operator found that the configured index path left the initial activity-read
+button disabled. The page initialized its path but did not initialize the
+validation state. It now validates the configured path before its first render;
+the SQL connection field is masked. Two render regressions cover configured and
+absent sources, bringing the suite to 45 passing tests.
+
+An authenticated headless browser reproduced the disabled controls before the
+fix. On the updated tools web, both read and compare were enabled without editing
+the path. Clicking the index read displayed 20968; clicking SQL/index comparison
+displayed 20968 on both sides and confirmed synchronization. The existing
+repository container ID, start time and restart count were unchanged.
+
 Host B used the committed Compose definition with private network, source,
 SQL/API secret-file and loopback-port parameters. The application requires
 neither a Docker socket nor elevated container privileges. Administrative SSH
