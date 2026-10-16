@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.DataProtection;
 using System.Text.Json.Nodes;
 using System.Text.Json;
+using SenseNetIndexTools;
 using WebApp.Models;
 
 namespace WebApp.Services;
@@ -27,7 +28,7 @@ public class ConfigurationService
         _protector = provider.CreateProtector("SavedConfiguration.ConnectionString.v1");
         _logger = logger;
         // Store configurations in a JSON file in the Data directory
-        var dataDirectory = Path.Combine(environment.ContentRootPath, "Data");
+        var dataDirectory = RuntimeSettings.Load().DataDirectory ?? Path.Combine(environment.ContentRootPath, "Data");
         Directory.CreateDirectory(dataDirectory);
         _configurationFilePath = Path.Combine(dataDirectory, "configurations.json");
 

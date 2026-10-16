@@ -362,6 +362,9 @@
     protected override void OnInitialized()
     {
         // Set default values
+        var runtime = SenseNetIndexTools.RuntimeSettings.Load();
+        checkOptions.IndexPath = runtime.SourcePath ?? "";
+        checkOptions.ConnectionString = runtime.ConnectionString;
         checkOptions.RepositoryPath = "/Root";
         checkOptions.Recursive = true;
         checkOptions.Depth = 0;

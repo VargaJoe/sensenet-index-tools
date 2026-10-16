@@ -18,6 +18,8 @@ public sealed class IndexInputOptions
     public IndexInputOptions(Command command, Option<string> path)
     {
         _path = path;
+        var configuredPath = RuntimeSettings.Load().SourcePath;
+        if (!string.IsNullOrWhiteSpace(configuredPath)) path.SetDefaultValue(configuredPath);
         path.IsRequired = false;
         foreach (var option in new Option[] { _copy, _kubeconfig, _namespace, _deployment, _container, _podPath, _output })
             command.AddOption(option);
@@ -25,7 +27,7 @@ public sealed class IndexInputOptions
             if (result.GetValueForOption(_copy))
             {
                 if (string.IsNullOrWhiteSpace(result.GetValueForOption(_deployment))) result.ErrorMessage = "--deployment is required with --auto-copy-index";
-                else if (!string.IsNullOrWhiteSpace(result.GetValueForOption(_path))) result.ErrorMessage = $"Use either {_path.Name} or --auto-copy-index.";
+                else if (result.FindResultFor(_path)?.IsImplicit == false && !string.IsNullOrWhiteSpace(result.GetValueForOption(_path))) result.ErrorMessage = $"Use either {_path.Name} or --auto-copy-index.";
             }
             else if (string.IsNullOrWhiteSpace(result.GetValueForOption(_path))) result.ErrorMessage = $"{_path.Name} is required without --auto-copy-index";
         });
@@ -33,7 +35,7 @@ public sealed class IndexInputOptions
 
     public Task<string> ResolveAsync(InvocationContext context)
     {
-        if (!context.ParseResult.GetValueForOption(_copy)) return Task.FromResult(context.ParseResult.GetValueForOption(_path)!);
+        if (!context.ParseResult.GetValueForOption(_copy)) return Task.FromResult(IndexSnapshot.Resolve(context.ParseResult.GetValueForOption(_path)!));
         return new KubernetesIndexCopier().CopyAsync(new KubernetesIndexCopyOptions {
             Kubeconfig = context.ParseResult.GetValueForOption(_kubeconfig), Namespace = context.ParseResult.GetValueForOption(_namespace)!,
             Deployment = context.ParseResult.GetValueForOption(_deployment)!, Container = context.ParseResult.GetValueForOption(_container),

@@ -70,10 +70,19 @@
             <span class="input-group-text">
                 <i class="bi bi-server"></i>
             </span>
-            <input type="text" 
+            <input id="lastactivity-connection-string"
+                   type="@(_showConnectionString ? "text" : "password")"
                    class="form-control" 
                    @bind="ConnectionString"
                    placeholder="Enter SQL Server connection string for database comparison" />
+            <button type="button" class="btn btn-outline-secondary"
+                    @onclick="() => _showConnectionString = !_showConnectionString"
+                    title="@ConnectionStringVisibilityLabel"
+                    aria-label="@ConnectionStringVisibilityLabel"
+                    aria-controls="lastactivity-connection-string"
+                    aria-pressed="@(_showConnectionString ? "true" : "false")">
+                <i class="bi @(_showConnectionString ? "bi-eye-slash" : "bi-eye")" aria-hidden="true"></i>
+            </button>
         </div>
         <div class="form-text mb-2">
             <small class="text-muted">
@@ -313,7 +322,7 @@
 }
 
 @code {
-    private string _indexPath = string.Empty;
+    private string _indexPath = SenseNetIndexTools.RuntimeSettings.Load().SourcePath ?? "";
     private string IndexPath
     {
         get => _indexPath;
@@ -327,14 +336,16 @@
             }
         }
     }
-    private string _connectionString = string.Empty;
+    private string _connectionString = SenseNetIndexTools.RuntimeSettings.Load().ConnectionString;
+    private bool _showConnectionString;
+    private string ConnectionStringVisibilityLabel => _showConnectionString ? "Hide connection string" : "Show connection string";
     private string ConnectionString
     {
         get => _connectionString;
         set => _connectionString = value;
     }
     private bool CreateBackup { get; set; } = true;
-    private string? BackupPath { get; set; }
+    private string? BackupPath { get; set; } = SenseNetIndexTools.RuntimeSettings.Load().BackupDirectory;
     private bool IsOffline { get; set; }
     private long NewId { get; set; }
     private string? ErrorMessage { get; set; }
@@ -352,8 +363,18 @@
     }
 
     private bool IsValidPath => _isValidPathCache ?? false;
-    private bool CanModify => IsValidPath && IsOffline && NewId >= 0;
+    private bool CanModify => IsValidPath && IsOffline && NewId >= 0 && IsWritablePath;
+    private bool IsWritablePath
+    {
+        get { try { SenseNetIndexTools.RuntimeSettings.EnsureWritableCopy(IndexPath); return true; } catch { return false; } }
+    }
     private bool CanCompare => IsValidPath && !string.IsNullOrWhiteSpace(ConnectionString);
+
+    protected override void OnInitialized()
+    {
+        // Configured defaults bypass the input setter; validate before first render.
+        _isValidPathCache = LastActivityService.ValidatePath(IndexPath);
+    }
 
     private async Task HandlePathKeyUp(KeyboardEventArgs e)
     {

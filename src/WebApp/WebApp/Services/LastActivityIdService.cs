@@ -15,6 +15,8 @@ using Lucene.Net.Documents;
 using Lucene.Net.Analysis.Standard;
 using System.Data.SqlClient;
 
+using SenseNetIndexTools;
+
 namespace WebApp.Services;
 
 using WebApp.Models;
@@ -47,69 +49,10 @@ public class LastActivityIdService
         }
     }
 
-    public async Task<LastActivityInfo> GetLastActivityIdAsync(string indexPath)
+    public Task<LastActivityInfo> GetLastActivityIdAsync(string indexPath)
     {
-        _logger.LogInformation("Getting LastActivityId from index at {Path}", indexPath);
-
-        if (!ValidatePath(indexPath))
-        {
-            throw new DirectoryNotFoundException($"Index directory not found: {indexPath}");
-        }
-
-        // First try using SenseNet API method
-        try
-        {
-            var directory = new IndexDirectory(indexPath);
-            var engine = new Lucene29LocalIndexingEngine(directory);
-
-            var status = await engine.ReadActivityStatusFromIndexAsync(CancellationToken.None);
-
-            if (status == null)
-            {
-                throw new InvalidOperationException("No LastActivityId found using SenseNet API");
-            }
-
-            _logger.LogInformation("Successfully read LastActivityId using SenseNet API: {LastActivityId}", status.LastActivityId);
-            return new LastActivityInfo
-            {
-                LastActivityId = status.LastActivityId,
-                Gaps = status.Gaps
-            };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "SenseNet API method failed, falling back to direct Lucene.NET access");
-        }
-
-        // Fall back to direct Lucene.NET access
-        try
-        {
-            using var directory = FSDirectory.Open(new DirectoryInfo(indexPath));
-            if (IndexReader.IndexExists(directory))
-            {
-                using var reader = IndexReader.Open(directory, true);
-                var commitUserData = reader.GetCommitUserData();
-                if (commitUserData != null && commitUserData.TryGetValue("LastActivityId", out var lastActivityIdString))
-                {
-                    if (int.TryParse(lastActivityIdString, out var lastActivityId))
-                    {
-                        _logger.LogInformation("Successfully read LastActivityId using direct Lucene access: {LastActivityId}", lastActivityId);
-                        return new LastActivityInfo
-                        {
-                            LastActivityId = lastActivityId,
-                            Gaps = new int[0] // Gaps not available via direct access
-                        };
-                    }
-                }
-            }
-
-            throw new InvalidOperationException("No LastActivityId found in index commit data");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error reading LastActivityId from index: {Path}", indexPath);
-            throw;
-        }
+        var status = ActivityStatusReader.Read(indexPath);
+        return Task.FromResult(new LastActivityInfo { LastActivityId = status.LastActivityId, Gaps = status.Gaps });
     }
 
     public async Task<long?> GetLastActivityIdFromDatabaseAsync(string connectionString)
@@ -155,7 +98,7 @@ public class LastActivityIdService
         var comparison = new LastActivityIdComparison
         {
             IndexPath = indexPath,
-            ConnectionString = connectionString
+            ConnectionString = "[redacted]"
         };
 
         // Get index value
@@ -195,6 +138,8 @@ public class LastActivityIdService
     public async Task SetLastActivityIdAsync(string indexPath, long id, bool backup = true, string? backupPath = null)
     {
         if (id < 0 || id > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(id));
+        RuntimeSettings.EnsureWritableCopy(indexPath);
+        backupPath ??= RuntimeSettings.Load().BackupDirectory;
         if (backup)
         {
             CreateBackup(indexPath, backupPath);
@@ -253,6 +198,8 @@ public class LastActivityIdService
         catch (InvalidOperationException) { /* A readable index without activity metadata needs initialization. */ }
         if (existing != null) throw new InvalidOperationException($"Index already has LastActivityId {existing.LastActivityId}. Use Set to modify it.");
 
+        RuntimeSettings.EnsureWritableCopy(indexPath);
+        backupPath ??= RuntimeSettings.Load().BackupDirectory;
         if (backup)
         {
             CreateBackup(indexPath, backupPath);
@@ -393,19 +340,6 @@ public class LastActivityIdService
             throw new ArgumentException("Index path cannot be null or empty", nameof(indexPath));
 
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        var indexName = new DirectoryInfo(indexPath).Name;
-        var backupName = $"{indexName}_backup_{timestamp}";
-
-        backupPath ??= Path.Combine(Path.GetDirectoryName(indexPath)!, "IndexBackups");
-        IODirectory.CreateDirectory(backupPath);
-
-        var backupFolderPath = Path.Combine(backupPath, backupName);
-        IODirectory.CreateDirectory(backupFolderPath);
-
-        foreach (var file in IODirectory.GetFiles(indexPath))
-        {
-            var destFile = Path.Combine(backupFolderPath, Path.GetFileName(file));
-            File.Copy(file, destFile);
-        }
+        IndexUtilities.CreateBackup(indexPath, backupPath);
     }
 }

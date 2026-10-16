@@ -399,6 +399,8 @@
         // Initialize with default values
         validationOptions = new ValidationOptions
         {
+            IndexPath = SenseNetIndexTools.RuntimeSettings.Load().SourcePath ?? "",
+            BackupPath = SenseNetIndexTools.RuntimeSettings.Load().BackupDirectory,
             Detailed = false,
             ReportFormat = "summary",
             Format = "md",

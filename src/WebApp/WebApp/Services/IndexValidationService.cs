@@ -45,6 +45,7 @@ public class IndexValidationService
 
         try
         {
+            options.IndexPath = IndexSnapshot.Resolve(options.IndexPath);
             if (!ValidatePath(options.IndexPath))
             {
                 throw new DirectoryNotFoundException($"Index directory not found: {options.IndexPath}");
@@ -65,11 +66,16 @@ public class IndexValidationService
             {
                 var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                 var fileName = $"validation_report_{timestamp}.{options.Format}";
-                outputPath = Path.Combine(Path.GetTempPath(), fileName);
+                var outputDirectory = RuntimeSettings.Load().OutputDirectory ?? Path.GetTempPath();
+                Directory.CreateDirectory(outputDirectory);
+                outputPath = Path.Combine(outputDirectory, fileName);
             }
 
             // Execute the validation command
-            var valid = await ExecuteValidationAsync(options, outputPath);
+            var findings = await ExecuteValidationAsync(options, outputPath);
+            result.ErrorCount = findings.Count(r => r.Severity == ValidationSeverity.Error);
+            result.WarningCount = findings.Count(r => r.Severity == ValidationSeverity.Warning);
+            result.InfoCount = findings.Count(r => r.Severity == ValidationSeverity.Info);
 
             // Read the generated report
             if (File.Exists(outputPath))
@@ -79,13 +85,13 @@ public class IndexValidationService
             }
 
             result.EndTime = DateTime.UtcNow;
-            result.Success = valid;
+            result.Success = result.ErrorCount == 0;
             result.Message = result.Success ? "Validation completed successfully" : "Validation found index errors";
 
             // Save report to storage
             await SaveReportAsync(result, options);
 
-            _logger.LogInformation("Index validation completed successfully for: {Path}", options.IndexPath);
+            _logger.LogInformation("Index validation finished for {Path}: {Errors} errors, {Warnings} warnings", options.IndexPath, result.ErrorCount, result.WarningCount);
             return result;
         }
         catch (Exception ex)
@@ -97,7 +103,7 @@ public class IndexValidationService
                 StartTime = DateTime.UtcNow,
                 EndTime = DateTime.UtcNow,
                 Success = false,
-                Message = $"Validation failed: {ex.Message}",
+                Message = $"Validation failed: {SecretRedactor.Redact(ex.Message)}",
                 Options = options
             };
 
@@ -108,7 +114,7 @@ public class IndexValidationService
         }
     }
 
-    private async Task<bool> ExecuteValidationAsync(ValidationOptions options, string outputPath)
+    private async Task<List<ValidationResult>> ExecuteValidationAsync(ValidationOptions options, string outputPath)
     {
         _logger.LogInformation("Executing validation with options: {Options}", JsonSerializer.Serialize(options));
 
@@ -135,7 +141,7 @@ public class IndexValidationService
                 }
                 catch (Exception ex)
                 {
-                    throw new InvalidOperationException($"Failed to parse required fields JSON: {ex.Message}");
+                    throw new InvalidOperationException($"Failed to parse required fields JSON: {SecretRedactor.Redact(ex.Message)}");
                 }
             }
 
@@ -162,7 +168,7 @@ public class IndexValidationService
                 await GenerateMarkdownReportAsync(results, outputPath, options.ReportFormat);
             }
 
-            return results.All(r => r.Severity != ValidationSeverity.Error);
+            return results;
         }
         catch (Exception ex)
         {
@@ -284,10 +290,9 @@ public class IndexValidationService
                 ConfigurationName = result.ConfigurationName,
                 Statistics = new Dictionary<string, object>
                 {
-                    // These will be extracted from actual validation results later
-                    ["TotalErrors"] = 0,
-                    ["TotalWarnings"] = 0,
-                    ["TotalInfoItems"] = 0
+                    ["TotalErrors"] = result.ErrorCount,
+                    ["TotalWarnings"] = result.WarningCount,
+                    ["TotalInfoItems"] = result.InfoCount
                 },
                 Parameters = new Dictionary<string, object>
                 {
@@ -347,6 +352,9 @@ public class ValidationOptions
 
 public class ValidationServiceResult
 {
+    public int ErrorCount { get; set; }
+    public int WarningCount { get; set; }
+    public int InfoCount { get; set; }
     public string IndexPath { get; set; } = string.Empty;
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }

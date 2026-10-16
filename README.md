@@ -2,6 +2,11 @@
 
 .NET 8 CLI and Blazor Server tools for examining SenseNet Lucene 2.9 indexes, comparing their documents with SQL Server data, and performing explicit repairs on offline copies.
 
+[Docker runtime and private configuration](docs/docker.md) describes the shared
+CLI/web image, read-only source mounts, commit snapshots, persistent state and
+scoped real repository acceptance. See the [integration results](docs/docker-integration-results.md)
+for per-host verification.
+
 ## Start
 
 ```powershell
@@ -18,6 +23,8 @@ An old checkout with stale NuGet assets may need `dotnet restore sensenet-index-
 
 | Command | Purpose | Index option |
 | --- | --- | --- |
+| `snapshot` | Capture and hash-verify one committed Lucene index into an isolated copy | `--path` |
+| `verify-repository` | Validate a snapshot, compare selected content with SQL and optionally verify its REST rebuild | `--path` |
 | `lastactivityid-get` | Read activity metadata | `--path` |
 | `lastactivityid-set`, `lastactivityid-init` | Set or initialize activity metadata; require `--offline`, backup by default | `--path` |
 | `validate` | Read index integrity and produce reports; no backup by default | `--path` |

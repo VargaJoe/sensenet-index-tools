@@ -86,7 +86,7 @@ public class SubtreeCheckingService
                 EndTime = DateTime.Now,
                 Duration = DateTime.Now - startTime,
                 Success = false,
-                Message = $"Subtree check failed: {ex.Message}",
+                Message = $"Subtree check failed: {SecretRedactor.Redact(ex.Message)}",
                 Options = options
             };
 
@@ -116,7 +116,7 @@ public class SubtreeCheckingService
 
             var checker = new SubtreeIndexChecker();
             var items = await Task.Run(() => new ContentComparer().CompareContent(
-                options.IndexPath, options.ConnectionString, options.RepositoryPath, options.Recursive, options.Depth));
+                IndexSnapshot.Resolve(options.IndexPath), options.ConnectionString, options.RepositoryPath, options.Recursive, options.Depth));
             var reportContent = checker.GenerateSubtreeReportFromItems(items, options.RepositoryPath,
                 options.Recursive, options.ReportFormat, options.Format);
 

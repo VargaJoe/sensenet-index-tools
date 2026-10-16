@@ -56,6 +56,10 @@
                     </div>
                     
                     <div class="btn-group" role="group">
+                        @if (report.Parameters.ContainsKey("ComparisonId"))
+                        {
+                            <a class="btn btn-outline-warning" href="@($"/operations?report={report.Id}")">Review repair candidates</a>
+                        }
                         <button class="btn btn-outline-secondary" @onclick="DownloadReport">
                             <i class="bi bi-download me-1"></i>Download
                         </button>
