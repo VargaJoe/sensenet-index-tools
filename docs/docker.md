@@ -13,6 +13,52 @@ Install that SDK for local .NET commands, or build with Docker. Floating SDK
 patch versions can change implicit WebAssembly linker dependencies and invalidate
 the locked restore; update SDK pins and lock files together when upgrading.
 
+## Docker Hub publication
+
+The **Build and publish Docker image** workflow publishes the shared CLI/web
+runtime as `vargajoe/sn-index-tools` for `linux/amd64`.
+
+| Source branch | Trigger | Moving image tag |
+| --- | --- | --- |
+| `main` or `master` | Push or manual run | `latest` |
+| `develop` | Push or manual run | `develop` |
+| Other branches | Manual run only | Sanitized final branch component |
+
+Every run also publishes a separate `YYYYMMDD-<short-sha>` tag, using the UTC
+build date and the first seven characters of the checked-out commit. For example,
+`feature/Docker-Containerization` produces `docker-containerization` and
+`20261016-abcdef0`. Sanitization lowercases the name, replaces unsupported
+characters with hyphens, removes leading dots/hyphens and limits it to 128
+characters. Feature names that would produce `latest`, `develop` or a date/SHA
+version tag receive a `branch-` prefix. Git tag refs and pull request refs cannot
+publish.
+
+Branches with the same final component share their moving alias. Use the separate
+version tag to select the source/date, or the recorded image digest to pin the
+exact image. A rerun can republish the same date/commit tag.
+
+Configure repository **Settings → Secrets and variables → Actions** secrets:
+
+- `DOCKERHUB_USERNAME`: the account with push access to this Docker Hub repository.
+- `DOCKERHUB_TOKEN`: its Docker Hub access token with the required push permission.
+
+The workflow checks that both secrets are present without printing their values,
+logs in with Docker's login action, builds the existing pinned Dockerfile and
+records image tags, source commit and digest in the Actions summary. No runtime
+SQL/API/web secrets are used during publication. Tag-rule tests run in normal
+Windows/Linux PR CI without registry credentials.
+
+After the workflow is merged into the default branch, use **Actions → Build and
+publish Docker image → Run workflow**, select the source branch, and start it.
+There is no separate source-branch input: the selected workflow branch is the
+checked-out build source. Pushing feature branches does not publish an image.
+Image publication is separate from deploying or restarting any repository.
+
+To use a published image, set `INDEXTOOLS_IMAGE=vargajoe/sn-index-tools:develop`
+(or a selected version/digest) in the private operator env file, then use
+`docker compose --env-file .private/operator.env pull web` and the normal
+`up -d --no-build --wait web` command.
+
 ## Private configuration
 
 1. Copy `docker/example.env` to `.private/operator.env` and

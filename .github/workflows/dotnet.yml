@@ -13,9 +13,11 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v6
+    - name: Test Docker publication tag rules
+      run: python -m unittest discover -s docker/tests -p "test_*.py"
     - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: 8.0.425
     - name: Restore dependencies
