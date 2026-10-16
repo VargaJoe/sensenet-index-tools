@@ -1,0 +1,14 @@
+# Optional overlay for a repository-managed backup directory on the same host.
+# Use with: docker compose -f compose.yaml -f docker/compose.backups.yaml ...
+x-backup-mount: &backup-mount
+  type: bind
+  source: ${INDEX_BACKUP_SOURCE:?Set INDEX_BACKUP_SOURCE to the repository backup directory on this host}
+  target: /source/backups
+  read_only: true
+  bind:
+    create_host_path: false
+services:
+  web:
+    volumes: [*backup-mount]
+  cli:
+    volumes: [*backup-mount]

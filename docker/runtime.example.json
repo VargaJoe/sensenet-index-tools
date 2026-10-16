@@ -1,5 +1,9 @@
 {
   "RepositoryUrl": "https://repository.example.invalid",
+  "RepositoryBackupRoot": "/app/App_Data/IndexBackups",
+  "BackupSourceRoot": "/source/backups",
+  "BackupTimeoutSeconds": 300,
+  "BackupPollMilliseconds": 1000,
   "SqlConnectionStringFile": "/run/secrets/sql-connection-string",
   "ApiKeyFile": "/run/secrets/api-key",
   "BearerTokenFile": null,

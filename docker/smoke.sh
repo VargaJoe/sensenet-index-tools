@@ -2,6 +2,8 @@
 set -eu
 cd "$(dirname "$0")/.."
 test -d .private/smoke/source || { echo "Export the synthetic fixture with INDEXTOOLS_SMOKE_EXPORT first." >&2; exit 1; }
+# A real running index keeps this file. Validation must not open it for writing.
+: > .private/smoke/source/write.lock
 umask 077
 mkdir -p .private/smoke/config
 printf '{}\n' > .private/smoke/config/runtime.json
@@ -35,6 +37,7 @@ test "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.
 curl --fail --silent --cookie-jar .private/smoke/cookies \
   --data-urlencode token@.private/smoke/config/web-token "http://127.0.0.1:$WEB_PORT/login" >/dev/null
 test "$(curl --silent --cookie .private/smoke/cookies --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:$WEB_PORT/settings")" = 200
+test "$(curl --silent --cookie .private/smoke/cookies --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:$WEB_PORT/operations")" = 200
 dc run --rm --no-deps cli cli --help >/dev/null
 dc run --rm --no-deps cli cli lastactivityid-get > .private/smoke/activity-source.log
 grep -q 'Last activity ID: 42' .private/smoke/activity-source.log

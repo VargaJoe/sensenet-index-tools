@@ -22,8 +22,7 @@ if (OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents()
-    .AddInteractiveWebAssemblyComponents();
+    .AddInteractiveServerComponents();
 
 // Configure security policy
 builder.Services.Configure<IISServerOptions>(options =>
@@ -52,7 +51,12 @@ builder.Services.AddScoped<ConfigurationService>();
 builder.Services.AddScoped<ReportStorageService>();
 
 // Add RebuildIndexService
-builder.Services.AddHttpClient<RebuildIndexService>();
+builder.Services.AddHttpClient<RebuildIndexService>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient("IndexWorkspace", client => client.Timeout = TimeSpan.FromSeconds(30))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddScoped(provider => new IndexWorkspace(RuntimeSettings.Load(), provider.GetRequiredService<IHttpClientFactory>().CreateClient("IndexWorkspace")));
+builder.Services.AddScoped<OperatorReportService>();
 
 // Add logging
 builder.Services.AddLogging(logging =>
@@ -66,7 +70,6 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.UseWebAssemblyDebugging();
     app.UseDeveloperExceptionPage();
 }
 else
@@ -84,9 +87,7 @@ app.UseStaticFiles();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode()
-    .AddInteractiveWebAssemblyRenderMode()
-    .AddAdditionalAssemblies(typeof(WebApp.Client._Imports).Assembly);
+    .AddInteractiveServerRenderMode();
 
 app.Run();
 

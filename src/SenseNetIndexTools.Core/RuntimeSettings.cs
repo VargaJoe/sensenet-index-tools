@@ -14,6 +14,10 @@ public sealed class RuntimeSettings
     public string? DataDirectory { get; set; }
     public string? KeyDirectory { get; set; }
     public string? RepositoryUrl { get; set; }
+    public string? RepositoryBackupRoot { get; set; }
+    public string? BackupSourceRoot { get; set; }
+    public int BackupTimeoutSeconds { get; set; } = 300;
+    public int BackupPollMilliseconds { get; set; } = 1000;
     public string? SqlConnectionStringFile { get; set; }
     public string? ApiKeyFile { get; set; }
     public string? BearerTokenFile { get; set; }
@@ -32,6 +36,7 @@ public sealed class RuntimeSettings
             (nameof(OutputDirectory), "OUTPUT_DIRECTORY"), (nameof(BackupDirectory), "BACKUP_DIRECTORY"),
             (nameof(DataDirectory), "DATA_DIRECTORY"), (nameof(KeyDirectory), "KEY_DIRECTORY"),
             (nameof(RepositoryUrl), "REPOSITORY_URL"), (nameof(SqlConnectionStringFile), "SQL_CONNECTION_STRING_FILE"),
+            (nameof(RepositoryBackupRoot), "REPOSITORY_BACKUP_ROOT"), (nameof(BackupSourceRoot), "BACKUP_SOURCE_ROOT"),
             (nameof(ApiKeyFile), "API_KEY_FILE"), (nameof(BearerTokenFile), "BEARER_TOKEN_FILE") })
         {
             var value = Environment.GetEnvironmentVariable("INDEXTOOLS_" + variable);
@@ -66,12 +71,19 @@ public sealed class RuntimeSettings
 
     public static void EnsureWritableCopy(string path)
     {
-        var source = Load().SourcePath;
-        if (string.IsNullOrWhiteSpace(source)) return;
+        EnsureWritableCopy(path, Load());
+    }
+
+    public static void EnsureWritableCopy(string path, RuntimeSettings settings)
+    {
         var full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
-        var root = Path.GetFullPath(source).TrimEnd(Path.DirectorySeparatorChar);
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        if (full.Equals(root, comparison) || full.StartsWith(root + Path.DirectorySeparatorChar, comparison))
-            throw new InvalidOperationException("Source index is read-only. Create an isolated snapshot before writing.");
+        WorkspacePaths.RejectLinks(full);
+        foreach (var source in new[] { settings.SourcePath, settings.BackupSourceRoot }.Where(p => !string.IsNullOrWhiteSpace(p)))
+            if (WorkspacePaths.IsWithin(full, source!))
+                throw new InvalidOperationException("Source index is read-only. Create an isolated snapshot before writing.");
+        if (Environment.GetEnvironmentVariable("INDEXTOOLS_CONTAINER_RUNTIME") == "1" &&
+            (settings.SnapshotDirectory == null || !WorkspacePaths.IsWithin(full, settings.SnapshotDirectory) ||
+             !File.Exists(Path.Combine(full, "snapshot-manifest.json"))))
+            throw new InvalidOperationException("Container writes require a verified copy in the configured working-copy directory.");
     }
 }

@@ -1,0 +1,67 @@
+name: index-tools-lab
+services:
+  sql:
+    image: mcr.microsoft.com/mssql/server@sha256:0ec7739e1c5ec2f57861facbe1f2b74f1d3e147c7c97edf91eeea920c5944d9c
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+    entrypoint: [/bin/bash, -ec]
+    command: ['export MSSQL_SA_PASSWORD="$$(cat /run/secrets/sql-admin-password)"; exec /opt/mssql/bin/sqlservr']
+    volumes:
+      - sql-data:/var/opt/mssql
+      - ${LAB_PRIVATE_DIRECTORY:?Run initialize.py first}/sql:/run/secrets:ro
+    healthcheck:
+      test: [CMD-SHELL, 'SQLCMDPASSWORD="$$(cat /run/secrets/sql-admin-password)" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -Q "SELECT 1" >/dev/null']
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+    networks: [lab]
+  database-init:
+    image: mcr.microsoft.com/mssql/server@sha256:0ec7739e1c5ec2f57861facbe1f2b74f1d3e147c7c97edf91eeea920c5944d9c
+    entrypoint: [/bin/bash, -ec]
+    command: ['export SQLCMDPASSWORD="$$(cat /run/secrets/sql-admin-password)"; for attempt in {1..30}; do /opt/mssql-tools18/bin/sqlcmd -S sql -U sa -C -b -i /run/secrets/initialize.sql && exit 0; sleep 2; done; exit 1']
+    volumes:
+      - ${LAB_PRIVATE_DIRECTORY}/sql:/run/secrets:ro
+    depends_on:
+      sql: {condition: service_healthy}
+    networks: [lab]
+  repository:
+    image: sensenetcsp/sn-api-sql@sha256:66485ef343d304741d2c2f9a6be92513eed9248d4862526ea5a63c71c05c8e63
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:80
+    ports: ["127.0.0.1:${LAB_REPOSITORY_PORT:-5186}:80"]
+    volumes:
+      - repository-data:/app/App_Data
+      - ${LAB_PRIVATE_DIRECTORY}/repository.json:/app/appsettings.Production.json:ro
+    depends_on:
+      database-init: {condition: service_completed_successfully}
+    networks: [lab]
+  tools:
+    image: index-tools:operator-local
+    build: {context: ../..}
+    user: "1654:1654"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp:mode=1777]
+    environment:
+      INDEXTOOLS_CONFIG_FILE: /run/secrets/runtime.json
+      INDEXTOOLS_WEB_TOKEN_FILE: /run/secrets/web-token
+      AllowRemoteAccess: "true"
+      WebAccess__HttpsRedirect: "false"
+      AllowedHosts: localhost;127.0.0.1
+    ports: ["127.0.0.1:${LAB_TOOLS_PORT:-5189}:8080"]
+    volumes:
+      - repository-data:/source/repository:ro
+      - tool-state:/state
+      - ${LAB_PRIVATE_DIRECTORY}/tools:/run/secrets:ro
+    networks: [lab]
+    profiles: [tools]
+volumes:
+  sql-data:
+  repository-data:
+  tool-state:
+networks:
+  lab:

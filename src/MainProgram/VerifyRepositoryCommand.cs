@@ -42,7 +42,7 @@ public static class VerifyRepositoryCommand
                 if (rebuilt)
                 {
                     if (errors > 0 || comparison.Count == 0 || comparison.All(i => !i.InDatabase)) throw new InvalidOperationException("Selected test content or source validation failed; rebuild was not sent.");
-                    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+                    using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(60) };
                     using var read = new HttpRequestMessage(HttpMethod.Get, action[..^"/RebuildIndex".Length] + "?$select=Id,Path");
                     AddAuthentication(read, settings);
                     using var before = await http.SendAsync(read, context.GetCancellationToken());

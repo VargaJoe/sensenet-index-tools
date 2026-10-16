@@ -188,7 +188,7 @@ namespace SenseNetIndexTools
 
         private static async Task RebuildIndexAsync(string repoUrl, string apiKey, string? contentPath, string? contentId, bool recursive, string rebuildLevel, bool verbose)
         {
-            using var httpClient = new HttpClient();
+            using var httpClient = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
             httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("SenseNet-Index-Tools/1.0");
 
             using var request = RebuildIndexRequest.Create(repoUrl, apiKey, contentPath, contentId, recursive, rebuildLevel, RuntimeSettings.Load().BearerToken);

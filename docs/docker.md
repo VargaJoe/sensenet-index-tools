@@ -1,5 +1,8 @@
 # Docker runtime
 
+For an isolated local repository and the complete operator UI workflow, see
+[Local operator workflow](local-operations.md).
+
 The .NET 8 image contains the CLI and Blazor server. It uses pinned SDK/runtime
 image digests and NuGet lock files. The supported source format is SenseNet
 Lucene 2.9 (`SenseNet.Search.Lucene29` 7.5.1). Newer Lucene formats require a
@@ -85,6 +88,8 @@ override its values. Existing CLI options override the configured defaults.
 | DataDirectory | INDEXTOOLS_DATA_DIRECTORY | Saved web configurations and report catalog |
 | KeyDirectory | INDEXTOOLS_KEY_DIRECTORY | Persistent Data Protection key ring |
 | RepositoryUrl | INDEXTOOLS_REPOSITORY_URL | HTTP(S) repository base URL |
+| RepositoryBackupRoot | INDEXTOOLS_REPOSITORY_BACKUP_ROOT | Target root inside the repository container |
+| BackupSourceRoot | INDEXTOOLS_BACKUP_SOURCE_ROOT | Same backup storage mounted read-only into the tools |
 | SqlConnectionStringFile | INDEXTOOLS_SQL_CONNECTION_STRING_FILE | Read-only SQL secret file |
 | ApiKeyFile | INDEXTOOLS_API_KEY_FILE | Read-only API key file |
 | BearerTokenFile | INDEXTOOLS_BEARER_TOKEN_FILE | Optional bearer-token file |
@@ -97,6 +102,14 @@ and `backups`. The configuration/secret directory is an external read-only bind.
 Back up the state volume and secret directory through the operator's normal
 backup process. `docker compose down` preserves the state volume; `down -v`
 deletes it.
+
+`BackupTimeoutSeconds` (300) and `BackupPollMilliseconds` (1000) are JSON settings
+for repository-managed backup waiting. For an existing repository backup bind,
+combine `compose.yaml` with `docker/compose.backups.yaml` and set
+`INDEX_BACKUP_SOURCE` to the corresponding host directory. The operator workspace
+is available at `/operations`. Container index writes require verified copies in
+the configured `SnapshotDirectory`; both configured live and backup roots are
+protected from direct modification.
 
 ## Index snapshots and operations
 

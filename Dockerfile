@@ -6,6 +6,9 @@ RUN dotnet restore sensenet-index-tools.sln --locked-mode --source https://api.n
 RUN dotnet publish src/MainProgram/sn-index-maintenance-suite.csproj -c Release --no-restore -o /out/cli \
     && dotnet publish src/WebApp/WebApp/WebApp.csproj -c Release --no-restore -o /out/web
 
+FROM build AS tests
+RUN dotnet build test/IndexTools.Tests/IndexTools.Tests.csproj -c Release --no-restore
+
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-bookworm-slim@sha256:a3cd573ac05cf88ca496e3309cb7f7c44aa16664352d1ee41eda93154f50cdbf AS runtime
 WORKDIR /app/web
 COPY --from=build /out/cli /app/cli

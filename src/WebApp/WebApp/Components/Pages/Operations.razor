@@ -1,0 +1,229 @@
+@page "/operations"
+@rendermode InteractiveServer
+@using SenseNetIndexTools
+@inject IndexWorkspace Workspace
+@inject OperatorReportService Reports
+@inject IndexValidationService Validation
+@inject LastActivityIdService ActivityService
+@inject IJSRuntime JS
+
+<PageTitle>Operator workspace - SenseNet Index Tools</PageTitle>
+<div class="container-fluid py-3">
+    <h1>Operator workspace</h1>
+    <p class="text-muted">Prepare an index source, inspect it, then preview and apply a specific repair.</p>
+    @if (error != null) { <div class="alert alert-danger" role="alert">@error</div> }
+    @if (message != null) { <div class="alert alert-info" role="status">@message</div> }
+    @if (busy) { <div class="alert alert-secondary"><span class="spinner-border spinner-border-sm me-2"></span>@progress <button class="btn btn-sm btn-outline-secondary ms-3" @onclick="Cancel">Cancel</button></div> }
+
+    <fieldset disabled="@busy">
+    <div class="card mb-3">
+        <div class="card-header"><h2 class="h5 mb-0">1. Index source</h2></div>
+        <div class="card-body">
+            <label class="form-label" for="operator-source">Selected index</label>
+            <div class="input-group mb-3">
+                <select id="operator-source" class="form-select" value="@selectedId" @onchange="SelectSource">
+                    @foreach (var item in sources) { <option value="@item.Id">@item.Name — @item.Kind</option> }
+                </select>
+                <button class="btn btn-outline-secondary" @onclick="Reload">Refresh sources</button>
+            </div>
+            @if (source != null)
+            {
+                <div class="mb-3" data-testid="source-info">
+                    <span class="badge @(source.Writable ? "bg-warning text-dark" : "bg-success")">@(source.Writable ? "Writable working copy" : "Read-only source")</span>
+                    <code class="ms-2">@source.Path</code>
+                    @if (source.Kind != IndexSourceKind.Live) { <div class="small mt-1">Prepared (UTC): @source.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss") · Captured LastActivityId: @(source.CapturedActivityId?.ToString() ?? "Unavailable — validate metadata")</div> }
+                    @if (source.Kind == IndexSourceKind.Live) { <div class="small mt-2">Live reads do not edit index files. Prepare a repository backup for stable validation and comparison results.</div> }
+                </div>
+            }
+            <div class="row g-3">
+                <div class="col-lg-6">
+                    <h3 class="h6">Running repository</h3>
+                    <p class="small">SenseNet creates a consistent backup while its site stays online. The completed backup becomes the selected source.</p>
+                    <label for="backup-folder" class="form-label">New backup folder name (optional)</label>
+                    <input id="backup-folder" class="form-control mb-2" @bind="backupFolder" placeholder="Automatically generated unique folder" />
+                    <div class="small text-muted mb-2">Repository target root: <code>@runtime.RepositoryBackupRoot</code><br />Tool mount: <code>@runtime.BackupSourceRoot</code></div>
+                    <button class="btn btn-primary" @onclick="Backup" disabled="@(string.IsNullOrWhiteSpace(runtime.BackupSourceRoot) || string.IsNullOrWhiteSpace(runtime.RepositoryBackupRoot))">Create repository backup</button>
+                    <button class="btn btn-outline-secondary ms-2" @onclick="Recover" disabled="@(string.IsNullOrWhiteSpace(runtime.BackupSourceRoot))">Discover completed backups</button>
+                </div>
+                <div class="col-lg-6">
+                    <h3 class="h6">Isolated working copy</h3>
+                    <p class="small">Keep the original backup intact. Index-file repairs are allowed only in a separate managed working copy.</p>
+                    @if (source?.Kind == IndexSourceKind.Live)
+                    {
+                        <label class="form-check mb-2"><input class="form-check-input" type="checkbox" @bind="offlineConfirmed" />All index writers are stopped. This confirmation does not stop the repository.</label>
+                    }
+                    <button class="btn btn-outline-primary" @onclick="Copy" disabled="@(source == null || source.Kind == IndexSourceKind.Live && !offlineConfirmed)">Create working copy</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header"><h2 class="h5 mb-0">2. Read and validate</h2></div>
+        <div class="card-body">
+            <div class="d-flex gap-2 flex-wrap mb-3">
+                <button class="btn btn-outline-primary" @onclick="ReadActivity" disabled="@(source == null)">Read LastActivityId</button>
+                <button class="btn btn-outline-primary" @onclick="Validate" disabled="@(source == null)">Validate index</button>
+                <label class="form-check align-self-center mb-0"><input class="form-check-input" type="checkbox" @bind="fullValidation" />Inspect all documents</label>
+            </div>
+            @if (indexActivity != null)
+            {
+                <div data-testid="activity-result">Index LastActivityId: <strong>@indexActivity</strong> · Database LastActivityId: <strong>@databaseActivity</strong></div>
+                <p class="small text-muted mb-0">SQL is live. A saved backup can lag behind changes made after it was captured.</p>
+            }
+            @if (validationResult != null) { <div data-testid="validation-result" class="mt-2">@validationResult.Message · @validationResult.ErrorCount errors, @validationResult.WarningCount warnings. <a href="/reports">View validation reports</a></div> }
+            @if (source?.Writable == true)
+            {
+                <details class="mt-3"><summary>Modify LastActivityId in this working copy</summary>
+                    <div class="alert alert-warning mt-2">This changes indexing metadata, not content documents. The live repository is unaffected.</div>
+                    <label for="working-activity" class="form-label">New LastActivityId</label>
+                    <input id="working-activity" type="number" min="0" max="2147483647" class="form-control mb-2" @bind="newActivity" />
+                    <label class="form-check mb-2"><input class="form-check-input" type="checkbox" @bind="confirmActivity" />Confirm metadata change on this working copy</label>
+                    <button class="btn btn-warning me-2" @onclick="SetActivity" disabled="@(!confirmActivity)">Set LastActivityId</button>
+                    <button class="btn btn-outline-warning" @onclick="InitializeActivity" disabled="@(!confirmActivity)">Initialize missing LastActivityId</button>
+                </details>
+            }
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header"><h2 class="h5 mb-0">3. Subtree check and content report</h2></div>
+        <div class="card-body">
+            <label for="operator-scope" class="form-label">Repository path</label>
+            <input id="operator-scope" class="form-control mb-2" @bind="scope" />
+            <label class="form-check mb-3"><input class="form-check-input" type="checkbox" @bind="recursive" />Include descendants</label>
+            <button class="btn btn-primary" @onclick="Compare" disabled="@(source == null)">Compare subtree</button>
+            @if (comparison != null)
+            {
+                <div class="mt-3" data-testid="comparison-summary">@comparison.Items.Count rows · @comparison.Items.Count(i => i.Status != "Match") differences · @comparison.Orphans.Count confirmed orphan candidates · <a href="@($"/reports/{comparison.Id}")">Saved report</a></div>
+                <label class="form-label mt-3" for="listing-filter">Content listing</label>
+                <select id="listing-filter" class="form-select mb-2" @bind="listingFilter">
+                    <option value="all">All comparison rows</option><option value="database">Database contents</option><option value="index">Index contents</option><option value="differences">Differences</option>
+                </select>
+                <button class="btn btn-sm btn-outline-secondary mb-2" @onclick="Export">Download structured comparison</button>
+                <div class="table-responsive" style="max-height:360px;overflow:auto"><table class="table table-sm"><thead><tr><th>Path</th><th>DB node/version</th><th>Index node/version</th><th>Status</th></tr></thead><tbody>
+                    @foreach (var row in ListedRows().Take(300)) { <tr><td>@row.Path</td><td>@row.NodeId / @row.VersionId</td><td>@row.IndexNodeId / @row.IndexVersionId</td><td>@row.Status</td></tr> }
+                </tbody></table></div>
+                <p class="small text-muted">The table shows up to 300 rows. The saved report and download contain the complete result.</p>
+            }
+        </div>
+    </div>
+
+    @if (comparison != null)
+    {
+        <div class="card mb-3">
+            <div class="card-header"><h2 class="h5 mb-0">4. Repair selected repository content</h2></div>
+            <div class="card-body">
+                <p>These requests affect the running repository through OData. Each selected item uses <strong>IndexOnly, Recursive=false</strong>. The report source itself is not edited.</p>
+                @foreach (var row in comparison.RepairCandidates)
+                {
+                    <label class="form-check"><input type="checkbox" class="form-check-input" checked="@selectedNodes.Contains(row.NodeId)" @onchange="e => Toggle(row.NodeId, e.Value is true)" />@row.Path (ID @row.NodeId) — @row.Status</label>
+                }
+                @if (!comparison.RepairCandidates.Any()) { <p>No repository rebuild candidates in this report.</p> }
+                <label class="form-check mt-3"><input type="checkbox" class="form-check-input" @bind="confirmRepair" />Confirm OData rebuild for the selected @selectedNodes.Count content items</label>
+                <button class="btn btn-warning mt-2" @onclick="Repair" disabled="@(!confirmRepair || selectedNodes.Count == 0)">Rebuild selected content and verify</button>
+                @foreach (var result in repairResults) { <div class="mt-2 alert @(result.Success ? "alert-success" : "alert-danger")">@result.Path: @result.Message Activity: @result.ActivityId</div> }
+                @if (repairResults.Count > 0) { <p class="small mt-2">The original backup remains a historical snapshot. Create a fresh repository backup to update the report source.</p> }
+            </div>
+        </div>
+        <div class="card mb-3">
+            <div class="card-header"><h2 class="h5 mb-0">5. Orphan cleanup in a working copy</h2></div>
+            <div class="card-body">
+                <p>Preview: <strong>@comparison.Orphans.Count</strong> index documents whose node/version is absent from the entire database, including outside the selected subtree.</p>
+                @foreach (var row in comparison.Orphans.Take(100)) { <div><code>@row.Path</code> — @row.IndexNodeId / @row.IndexVersionId</div> }
+                @if (source?.Writable != true) { <p class="text-muted mt-2">Create a working copy and compare it before applying cleanup. The live index and original backup are protected.</p> }
+                <label class="form-check mt-3"><input type="checkbox" class="form-check-input" @bind="confirmCleanup" disabled="@(source?.Writable != true)" />Confirm deletion of only the previewed orphan documents from this working copy</label>
+                <button class="btn btn-danger mt-2" @onclick="Clean" disabled="@(source?.Writable != true || !confirmCleanup || comparison.Orphans.Count == 0 || comparison.CleanupApplied)">Clean previewed orphans</button>
+            </div>
+        </div>
+    }
+    </fieldset>
+    <p class="small text-muted">Reports and working copies persist across restarts. No repair copy is automatically installed into the live repository. <a href="/rebuild-index">Manual REST rebuild / target list</a> · <a href="/reports">Report history</a></p>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "source")] public string? SourceQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "report")] public string? ReportQuery { get; set; }
+    private RuntimeSettings runtime = RuntimeSettings.Load();
+    private List<IndexSource> sources = [];
+    private IndexSource? source;
+    private string selectedId = "live", backupFolder = "", scope = "/Root/Content", listingFilter = "all";
+    private bool busy, offlineConfirmed, fullValidation, recursive = true, confirmRepair, confirmCleanup, confirmActivity;
+    private int newActivity;
+    private int? indexActivity;
+    private long? databaseActivity;
+    private string? error, message;
+    private string progress = "Working...";
+    private ValidationServiceResult? validationResult;
+    private IndexComparison? comparison;
+    private List<RepositoryRepairResult> repairResults = [];
+    private HashSet<int> selectedNodes = [];
+    private CancellationTokenSource? cancellation;
+
+    protected override void OnInitialized()
+    {
+        try
+        {
+            Reload();
+            if (SourceQuery != null) Choose(SourceQuery);
+            if (ReportQuery != null) { comparison = Workspace.GetComparison(ReportQuery); Choose(comparison.SourceId, false); scope = comparison.Scope; recursive = comparison.Recursive; }
+        }
+        catch (Exception ex) { error = SecretRedactor.Redact(ex.Message); }
+    }
+    private void Reload() { sources = Workspace.Sources(); Choose(sources.Any(s => s.Id == selectedId) ? selectedId : sources.FirstOrDefault()?.Id ?? ""); }
+    private void Choose(string id, bool clear = true)
+    {
+        selectedId = id; source = sources.SingleOrDefault(s => s.Id == id); offlineConfirmed = confirmRepair = confirmCleanup = confirmActivity = false;
+        selectedNodes.Clear(); indexActivity = null; databaseActivity = null; validationResult = null;
+        if (clear) { comparison = null; repairResults = []; }
+    }
+    private void SelectSource(ChangeEventArgs e) => Choose(e.Value?.ToString() ?? "");
+    private void SelectCreated(IndexSource created) { sources = Workspace.Sources(); Choose(created.Id); }
+    private async Task Run(Func<CancellationToken, Task> action)
+    {
+        if (busy) return;
+        busy = true; error = message = null; progress = "Working...";
+        using var operation = new CancellationTokenSource(); cancellation = operation;
+        try { await action(operation.Token); }
+        catch (OperationCanceledException) { error = "Stopped waiting. A repository request already accepted may still finish; no original source was deleted."; }
+        catch (Exception ex) { error = SecretRedactor.Redact(ex.Message); }
+        finally { busy = false; cancellation = null; }
+    }
+    private void Cancel() => cancellation?.Cancel();
+    private Task Backup() => Run(async token => {
+        var status = new Progress<string>(text => { progress = text; _ = InvokeAsync(StateHasChanged); });
+        SelectCreated(await Workspace.BackupAsync(backupFolder, status, token)); backupFolder = ""; message = "Completed repository backup selected.";
+    });
+    private Task Recover() => Run(async token => { var count = await Workspace.RecoverCompletedBackupsAsync(token); Reload(); message = $"Discovered {count} completed backups from the repository's backup history."; });
+    private Task Copy() => Run(async token => { SelectCreated(await Task.Run(() => Workspace.Copy(selectedId, offlineConfirmed), token)); message = "Isolated working copy selected. The original source was preserved."; });
+    private Task ReadActivity() => Run(async token => { indexActivity = await Task.Run(() => ActivityStatusReader.Read(source!.Path).LastActivityId, token); databaseActivity = await Workspace.DatabaseActivityAsync(token); });
+    private Task Validate() => Run(async token => {
+        validationResult = await Task.Run(() => Validation.ValidateIndexAsync(new() { IndexPath = source!.Path, Detailed = fullValidation, SampleSize = fullValidation ? 0 : 10, Format = "html" }), token);
+    });
+    private Task Compare() => Run(async token => { comparison = await Reports.CompareAsync(selectedId, scope, recursive, token); confirmRepair = confirmCleanup = false; selectedNodes.Clear(); repairResults = []; message = "Comparison saved. Review the candidates before applying a repair."; });
+    private void Toggle(int id, bool value) { if (value) selectedNodes.Add(id); else selectedNodes.Remove(id); }
+    private Task Repair() => Run(async token => {
+        var status = new Progress<string>(text => { progress = text; _ = InvokeAsync(StateHasChanged); });
+        repairResults = await Workspace.RepairAsync(comparison!.Id, selectedNodes, confirmRepair, token, status);
+        confirmRepair = false; await Reports.SaveActionAsync("Repository rebuild verification", repairResults);
+    });
+    private Task Clean() => Run(async token => {
+        var originalReport = comparison!.Id;
+        var removed = await Workspace.CleanAsync(originalReport, confirmCleanup, token);
+        confirmCleanup = false;
+        comparison = await Reports.CompareAsync(selectedId, scope, recursive, token);
+        await Reports.SaveActionAsync("Working copy orphan cleanup", new { SourceId = selectedId, OriginalReportId = originalReport, Removed = removed, VerificationReportId = comparison.Id, RemainingOrphans = comparison.Orphans.Count });
+        message = $"Removed {removed} orphan documents from the working copy. Fresh comparison: {comparison.Orphans.Count} orphan candidates. Live index unchanged.";
+    });
+    private Task SetActivity() => ChangeActivity(false);
+    private Task InitializeActivity() => ChangeActivity(true);
+    private Task ChangeActivity(bool initialize) => Run(async token => {
+        Workspace.RequireWorkingCopy(source!);
+        if (!confirmActivity) throw new InvalidOperationException("Confirm the working-copy metadata change.");
+        if (initialize) await ActivityService.InitializeLastActivityIdAsync(source!.Path, newActivity); else await ActivityService.SetLastActivityIdAsync(source!.Path, newActivity);
+        await Reports.SaveActionAsync("Working copy activity metadata", new { source!.Id, Initialize = initialize, Value = newActivity });
+        confirmActivity = false; comparison = null; indexActivity = ActivityStatusReader.Read(source!.Path).LastActivityId; message = "Working-copy metadata updated. Run a fresh comparison before further repairs.";
+    });
+    private IEnumerable<ContentItem> ListedRows() => (comparison?.Items ?? []).Where(i => listingFilter switch { "database" => i.InDatabase, "index" => i.InIndex, "differences" => i.Status != "Match", _ => true });
+    private async Task Export() { if (comparison != null) await JS.InvokeVoidAsync("downloadFile", $"comparison-{comparison.Id}.json", System.Text.Json.JsonSerializer.Serialize(comparison), "application/json"); }
+}

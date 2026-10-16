@@ -77,6 +77,7 @@ namespace SenseNetIndexTools
                 if (value < 0 || value > int.MaxValue) result.ErrorMessage = "LastActivityId must be between 0 and 2147483647.";
             });
             rootCommand.AddCommand(SnapshotCommand.Create());
+            rootCommand.AddCommand(WorkspaceCommand.Create());
             rootCommand.AddCommand(VerifyRepositoryCommand.Create());
             rootCommand.AddCommand(getCommand);
             rootCommand.AddCommand(setCommand);

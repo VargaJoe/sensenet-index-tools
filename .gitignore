@@ -115,3 +115,7 @@ src/MainProgram/SensenetIndexTools/
 .env.*
 secrets/
 docker-state/
+
+# Local Python launch/check helpers
+__pycache__/
+*.pyc

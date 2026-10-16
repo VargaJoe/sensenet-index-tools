@@ -179,31 +179,18 @@ namespace SenseNetIndexTools
 
             try
             {
-                using (var directory = FSDirectory.Open(new DirectoryInfo(_indexPath)))
-                {
-                    if (IndexWriter.IsLocked(directory))
-                    {
-                        results.Add(new ValidationResult(
-                            ValidationSeverity.Warning,
-                            "Index is locked",
-                            "The index is currently locked which could indicate a crash or active write operation"
-                        ));
-                    }
-                    else
-                    {
-                        results.Add(new ValidationResult(
-                            ValidationSeverity.Info,
-                            "Index is not locked",
-                            "The index is not currently locked"
-                        ));
-                    }
-                }
+                // IsLocked may acquire/create a lock file. Validation must also work
+                // on read-only mounts, so only inspect its presence without probing.
+                var present = File.Exists(Path.Combine(_indexPath, "write.lock"));
+                results.Add(new ValidationResult(ValidationSeverity.Info,
+                    present ? "Writer lock file is present" : "Writer lock file is absent",
+                    "Read-only inspection: file presence alone does not establish whether a writer is active. No lock is acquired, created or removed."));
             }
             catch (Exception ex)
             {
                 results.Add(new ValidationResult(
-                    ValidationSeverity.Error,
-                    "Failed to check index lock status",
+                    ValidationSeverity.Warning,
+                    "Writer lock file could not be inspected",
                     ex.Message
                 ));
             }

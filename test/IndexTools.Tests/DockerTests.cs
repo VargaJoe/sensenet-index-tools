@@ -11,6 +11,17 @@ namespace IndexTools.Tests;
 public class DockerTests
 {
     [Fact]
+    public void ValidationInspectsLockPresenceWithoutChangingAnySourceFiles()
+    {
+        using var fixture = new IndexFixture();
+        File.WriteAllText(Path.Combine(fixture.IndexPath, "write.lock"), "existing-writer-lock");
+        var before = System.IO.Directory.GetFiles(fixture.IndexPath).ToDictionary(p => Path.GetFileName(p)!, File.ReadAllBytes);
+        var findings = new IndexValidator(fixture.IndexPath).Validate(false).ToList();
+        Assert.Contains(findings, f => f.Message == "Writer lock file is present" && f.Severity == ValidationSeverity.Info);
+        Assert.Equal(before.Keys.Order(), System.IO.Directory.GetFiles(fixture.IndexPath).Select(Path.GetFileName).Order());
+        foreach (var file in before) Assert.Equal(file.Value, File.ReadAllBytes(Path.Combine(fixture.IndexPath, file.Key!)));
+    }
+    [Fact]
     public void KubernetesCopyDoesNotConflictWithImplicitConfiguredSource()
     {
         var command = new System.CommandLine.Command("test");

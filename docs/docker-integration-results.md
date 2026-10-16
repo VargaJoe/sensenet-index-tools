@@ -1,5 +1,10 @@
 # Docker integration evidence
 
+The latest local operator acceptance is recorded in the
+[2026-10-16 section](#local-operator-workflow-2026-10-16). Earlier remote results
+below describe the application version tested on their stated dates; the new
+local workflow has not been deployed to those hosts.
+
 Initial checks on 2026-10-09, starting from develop `c1e035f`.
 The current milestone is single-host Docker operation against the existing
 repository. Additional hosts/legs are a separate feature; their unverified
@@ -82,3 +87,55 @@ CI performs Windows/Linux regressions, CLI/web publish, Docker build and the
 isolated container smoke test. It does not contain live repository credentials;
 real SQL/API acceptance must be run by an operator as described in
 [Docker runtime](docker.md).
+
+## Local operator workflow (2026-10-16)
+
+The workspace-started lab uses a new disposable SQL Server database, an unmodified
+pinned SenseNet SQL repository image and the current tools image in separate
+containers. All three use an isolated local Docker network and durable volumes.
+The repository and tools bind only to loopback; SQL has no published host port.
+No existing application, remote repository or SenseNet source was changed.
+
+| Check | Actual local result |
+| --- | --- |
+| Pinned test/runtime image builds | Passed |
+| Regular regressions | 64 passed, no failures or skips |
+| Native SQL/OData/Lucene workflow | Passed as UID 1654 with read-only repository storage |
+| Native online backup | Passed; completed source selected only after native status and Lucene verification; recovery and failure paths also covered by regressions |
+| Live LastActivityId and index validation | Passed from the browser; 0 validation errors and warnings |
+| SQL/subtree comparison | Fresh backup: all 3 fixture contents matched |
+| Report-selected OData repair | Selected non-recursive IndexOnly rebuild processed; fresh SQL/index parity passed; SQL content timestamps unchanged |
+| Orphan repair | Exactly 1 injected orphan removed from the working copy; a real version outside the subtree preserved |
+| Source preservation | Original backup file hashes unchanged; source writes and repeated/stale cleanup rejected |
+| Offline source copy | Active writer rejected; copy passed after stopping only the disposable local repository; repository restarted and API rechecked |
+| Browser acceptance | Backup, source selection, copy, activity, validation, comparison, selected REST repair and orphan cleanup passed |
+| Legacy activity page safety | Live-source set/initialize controls remained disabled |
+| Generic Compose smoke | Read-only source with a writer-lock file validated; isolated writes, health/auth and persistent session/key ring passed |
+| Container permissions | Tools UID/GID 1654, read-only root/source, no privileged mode or Docker socket; tool SQL login has db_datareader only |
+| Secret handling | Actual private credential values absent from the checked local/live service logs and changed/new public files |
+
+Run `python docker/local/check.py --browser` to repeat the native and browser
+acceptance, with the documented Playwright dependency configured. The successful
+run built both images and exercised the stopped-writer path before returning
+the repository to service. Browser defects were injected only into a working
+copy. Structured acceptance evidence, detailed logs and the operator screenshot
+remain under Git-ignored `.private/local/`.
+
+The read-only browser test exposed and fixed a validation bug: the old lock probe
+attempted write access to an existing `write.lock`. Validation now only inspects
+the file's presence, without acquiring, deleting or modifying writer locks.
+Offline copying separately checks for an active writer using read-only access.
+
+Pre-merge review added two regression-backed protections: old backup target names
+cannot be reused while present in native backup history, and authenticated CLI/web
+repository clients refuse HTTP redirects instead of forwarding API credentials.
+The redirect regression uses a real HTTP endpoint and checks that the redirect
+target receives no request.
+
+The new manual CI workflow repeats native lab acceptance. Existing PR CI includes
+regressions and Docker smoke. This section records local acceptance; remote CI
+results are recorded on the PR. This operator workflow has not been deployed
+to the earlier remote test hosts.
+Automatic installation of a repaired copy, retention and multiple repository
+profiles remain outside this workflow. See [local operation](local-operations.md)
+for startup, configuration, CLI parity and operator steps.
