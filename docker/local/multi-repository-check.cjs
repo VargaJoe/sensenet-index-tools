@@ -12,6 +12,19 @@ const compose = ['compose', '-p', 'index-tools-multirepo-lab', '-f', path.join(p
 const results = { repositories: {} };
 const tool = (...args) => execFileSync('docker', [...compose, 'exec', '-T', 'tools', ...args], { encoding: 'utf8' });
 const state = name => JSON.parse(tool('cat', '/state/data/' + name + '.json'));
+const databaseActivity = letter => {
+  assert.ok(['a', 'b'].includes(letter));
+  const query = `SET NOCOUNT ON; SELECT MAX(IndexingActivityId) FROM IndexToolsRepo${letter.toUpperCase()}.dbo.IndexingActivities`;
+  const value = Number(execFileSync('docker', [...compose, 'exec', '-T', 'sql', '/bin/bash', '-ec',
+    'export SQLCMDPASSWORD="$(cat /run/secrets/sql-admin-password)"; exec /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -h -1 -W -Q "$1"',
+    'sh', query], { encoding: 'utf8' }).trim());
+  assert.ok(Number.isSafeInteger(value) && value >= 0); return value;
+};
+const verifyDatabaseActivity = (displayed, before, after) => {
+  assert.match(displayed, /^\d+$/);
+  assert.ok(Number(displayed) >= before && Number(displayed) <= after,
+    `Displayed DB activity ${displayed} is outside observed range ${before}..${after}`);
+};
 
 (async () => {
   const browser = await chromium.launch({ headless: true,
@@ -65,11 +78,14 @@ const state = name => JSON.parse(tool('cat', '/state/data/' + name + '.json'));
       assert.ok(hashes.length > 100);
       assert.equal(await other.locator('#active-repository').inputValue(), ids[1 - position]);
       assert.equal(await other.locator('#operator-source option[value="' + backupId + '"]').count(), 0);
+      const dbBefore = databaseActivity(letter);
       await page.getByRole('button', { name: 'Read LastActivityId', exact: true }).click();
       results.stage = 'read and compare ' + letter;
       await page.getByTestId('activity-result').waitFor();
       const activity = await page.getByTestId('activity-result').locator('strong').allTextContents();
-      assert.equal(activity.length, 2); assert.equal(activity[0], activity[1]);
+      assert.equal(activity.length, 2);
+      assert.equal(activity[0], String(state('workspace/sources/' + backupId).CapturedActivityId));
+      verifyDatabaseActivity(activity[1], dbBefore, databaseActivity(letter));
       await page.getByRole('button', { name: 'Compare subtree', exact: true }).click();
       await page.getByTestId('comparison-summary').waitFor();
       assert.match(await page.getByTestId('comparison-summary').innerText(), /0 differences · 0 confirmed orphan candidates/);
@@ -84,9 +100,12 @@ const state = name => JSON.parse(tool('cat', '/state/data/' + name + '.json'));
       await page.getByRole('button', { name: 'Set LastActivityId', exact: true }).click();
       results.stage = 'metadata correction ' + letter;
       await page.waitForFunction(() => [...document.querySelectorAll('p.card-text')].some(e => e.textContent.includes('23456')));
+      const dbPageBefore = databaseActivity(letter);
       await page.getByRole('button', { name: /Get Database LastActivityId/ }).click();
       await page.getByRole('heading', { name: /Database LastActivityId/ }).waitFor();
-      assert.match(await page.getByRole('heading', { name: /Database LastActivityId/ }).locator('..').innerText(), new RegExp(activity[1]));
+      const dbText = await page.getByRole('heading', { name: /Database LastActivityId/ }).locator('..').innerText();
+      const dbMatch = dbText.match(/IndexingActivityId:\s*(\d+)/); assert.ok(dbMatch);
+      verifyDatabaseActivity(dbMatch[1], dbPageBefore, databaseActivity(letter));
       assert.equal(tool('/bin/sh', '-c', 'find "$1" -type f ! -name write.lock -exec sha256sum {} + | sort', 'sh', backupPath), hashes);
       await navigate(page, '/validation');
       results.stage = 'validation ' + letter;
@@ -116,7 +135,8 @@ const state = name => JSON.parse(tool('cat', '/state/data/' + name + '.json'));
       assert.equal(await page.locator('#active-repository').inputValue(), ids[position]);
       assert.equal(await page.locator('#operator-source').inputValue(), copyId);
       results.repositories['Repo ' + letter.toUpperCase()] = {
-        backupId, backupPath, copyId, nativeBackup: true, activityMatchesDatabase: true,
+        backupId, backupPath, copyId, nativeBackup: true, indexActivity: Number(activity[0]), databaseActivity: Number(activity[1]),
+        activityMatchesDatabase: activity[0] === activity[1], activityValuesVerified: true,
         arbitraryMetadataValue: 23456, originalBackupHashesPreserved: true,
         validation: true, subtreeHtml: true, bothExportFormats: true, reloadPreservesSelection: true
       };
