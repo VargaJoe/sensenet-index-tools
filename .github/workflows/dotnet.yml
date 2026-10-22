@@ -2,10 +2,9 @@ name: .NET Build and Test
 
 on:
   push:
-    branches: [ main, develop, 'codex/**' ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
-  workflow_dispatch:
 
 jobs:
   build:
