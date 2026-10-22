@@ -46,6 +46,7 @@ builder.Services.AddScoped<SubtreeCheckingService>();
 
 // Add ConfigurationService
 builder.Services.AddScoped<ConfigurationService>();
+builder.Services.AddScoped<ActiveRepositoryContext>();
 
 // Add ReportStorageService
 builder.Services.AddScoped<ReportStorageService>();
@@ -56,7 +57,7 @@ builder.Services.AddHttpClient<RebuildIndexService>()
 builder.Services.AddHttpClient("IndexWorkspace", client => client.Timeout = TimeSpan.FromSeconds(30))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped(provider => new IndexWorkspace(RuntimeSettings.Load(), provider.GetRequiredService<IHttpClientFactory>().CreateClient("IndexWorkspace")));
-builder.Services.AddScoped<OperatorReportService>();
+builder.Services.AddScoped(provider => new OperatorReportService(provider.GetRequiredService<ActiveRepositoryContext>(), provider.GetRequiredService<ReportStorageService>()));
 
 // Add logging
 builder.Services.AddLogging(logging =>

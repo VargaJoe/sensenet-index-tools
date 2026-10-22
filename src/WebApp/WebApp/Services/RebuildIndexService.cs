@@ -92,6 +92,7 @@ namespace WebApp.Services
                     {
                         RepoUrl = options.RepoUrl,
                         ApiKey = options.ApiKey,
+                        BearerToken = options.BearerToken,
                         Recursive = options.Recursive,
                         RebuildLevel = options.RebuildLevel,
                         Verbose = options.Verbose
@@ -155,7 +156,7 @@ namespace WebApp.Services
             try
             {
                 using var request = RebuildIndexRequest.Create(options.RepoUrl, options.ApiKey,
-                    options.ContentPath, options.ContentId, options.Recursive, options.RebuildLevel, SenseNetIndexTools.RuntimeSettings.Load().BearerToken);
+                    options.ContentPath, options.ContentId, options.Recursive, options.RebuildLevel, options.BearerToken);
                 if (options.Verbose) _logger.LogInformation("Request URL: {Url}", request.RequestUri);
                 using var response = await _httpClient.SendAsync(request);
                 if (options.Verbose) _logger.LogInformation("Response status: {Status}", response.StatusCode);
@@ -182,6 +183,8 @@ namespace WebApp.Services
         public string RepoUrl { get; set; } = string.Empty;
         [System.Text.Json.Serialization.JsonIgnore]
         public string ApiKey { get; set; } = string.Empty;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string BearerToken { get; set; } = string.Empty;
         public string? ContentPath { get; set; }
         public string? ContentId { get; set; }
         public string? FilePath { get; set; }

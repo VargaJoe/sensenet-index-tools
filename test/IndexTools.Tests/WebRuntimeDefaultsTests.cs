@@ -46,11 +46,11 @@ public class WebRuntimeDefaultsTests
             var buttons = document.QuerySelectorAll("button");
             Assert.Equal(!configured, buttons.Single(b => b.TextContent.Contains("Get Index LastActivityId")).HasAttribute("disabled"));
             Assert.Equal(!configured, buttons.Single(b => b.TextContent.Contains("Compare Index vs Database")).HasAttribute("disabled"));
-            Assert.Equal("password", document.QuerySelector("input[placeholder^='Enter SQL']")!.GetAttribute("type"));
-            var reveal = document.QuerySelector("button[aria-label='Show connection string']")!;
-            Assert.Equal("button", reveal.GetAttribute("type"));
-            Assert.Equal("false", reveal.GetAttribute("aria-pressed"));
-            Assert.Equal(document.QuerySelector("input[placeholder^='Enter SQL']")!.Id, reveal.GetAttribute("aria-controls"));
+            Assert.NotNull(document.QuerySelector("#active-repository"));
+            Assert.NotNull(document.QuerySelector("#operator-source"));
+            // Secret editors are opened deliberately from the common context panel.
+            Assert.Null(document.QuerySelector("input[placeholder^='Enter SQL']"));
+            Assert.Contains(buttons, button => button.TextContent.Contains("Connection settings"));
         }
         finally
         {

@@ -1,10 +1,12 @@
 @page "/subtree-check"
-@rendermode InteractiveServer
+@inject ActiveRepositoryContext Context
+@implements IDisposable
 @inject SubtreeCheckingService CheckingService
 @inject IJSRuntime JSRuntime
 @inject ILogger<SubtreeCheck> Logger
 
 <PageTitle>Subtree Check - SenseNet Index Tools</PageTitle>
+<fieldset disabled="@(Context.Busy || !Context.Ready)">
 
 <div class="container-fluid">
     <!-- Breadcrumb -->
@@ -18,7 +20,6 @@
     <div class="row">
         <div class="col-lg-8">
             <!-- Configuration Selector -->
-            <ConfigurationSelector OnConfigurationApplied="OnConfigurationApplied" />
             
             <!-- Configuration Card -->
             <div class="card mb-4">
@@ -33,23 +34,6 @@
                         <DataAnnotationsValidator />
                         
                         <div class="row">
-                            <!-- Index Path Selection -->
-                            <div class="col-md-6 mb-3">
-                                <label for="indexPath" class="form-label">Index Path <span class="text-danger">*</span></label>
-                                <div class="input-group">
-                                    <InputText id="indexPath" class="form-control" @bind-Value="checkOptions.IndexPath" 
-                                              placeholder="Path to Lucene index directory" />
-                                    <button type="button" class="btn btn-outline-secondary" @onclick="ShowFolderPicker">
-                                        <i class="bi bi-folder"></i>
-                                    </button>
-                                </div>
-                                <ValidationMessage For="() => checkOptions.IndexPath" />
-                                @if (!string.IsNullOrEmpty(pathValidationMessage))
-                                {
-                                    <div class="form-text text-danger">@pathValidationMessage</div>
-                                }
-                            </div>
-
                             <!-- Repository Path -->
                             <div class="col-md-6 mb-3">
                                 <label for="repositoryPath" class="form-label">Repository Path <span class="text-danger">*</span></label>
@@ -58,15 +42,6 @@
                                 <div class="form-text">SenseNet content path to check (e.g., /Root/Sites/Default_Site)</div>
                                 <ValidationMessage For="() => checkOptions.RepositoryPath" />
                             </div>
-                        </div>
-
-                        <!-- Connection String -->
-                        <div class="mb-3">
-                            <label for="connectionString" class="form-label">Database Connection String <span class="text-danger">*</span></label>
-                            <InputText id="connectionString" class="form-control" @bind-Value="checkOptions.ConnectionString" 
-                                      placeholder="Data Source=server;Initial Catalog=sensenet;Integrated Security=True" />
-                            <div class="form-text">SQL Server connection string for the SenseNet database</div>
-                            <ValidationMessage For="() => checkOptions.ConnectionString" />
                         </div>
 
                         <!-- Check Options Row -->
@@ -119,7 +94,7 @@
 
                         <!-- Action Buttons -->
                         <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-primary" disabled="@isChecking">
+                            <button type="submit" class="btn btn-primary" disabled="@(isChecking || Context.Source == null || string.IsNullOrWhiteSpace(Context.Settings.ConnectionString))">
                                 @if (isChecking)
                                 {
                                     <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -256,9 +231,10 @@
                         {
                             <div class="mt-3">
                                 <h6>Generated Report</h6>
+                                <ReportDownloads Html="@checkResult.HtmlContent" Markdown="@checkResult.MarkdownContent" Name="subtree-report" />
                                 @if (checkOptions.Format.ToLower() == "html")
                                 {
-                                    @((MarkupString)checkResult.ReportContent)
+                                    <ReportPreview Content="@checkResult.ReportContent" Format="html" Title="Subtree comparison report" />
                                 }
                                 else
                                 {
@@ -347,40 +323,28 @@
 </div>
 
 <!-- Server Folder Picker Modal -->
-<ServerFolderPicker @bind-Show="showFolderPicker" 
-                    InitialPath="@checkOptions.IndexPath"
-                    OnSelected="OnFolderSelected" />
 
+
+</fieldset>
 @code {
     private SubtreeCheckOptions checkOptions = new();
     private SubtreeCheckResult? checkResult;
     private SubtreeCheckResult? lastCheckResult;
     private bool isChecking = false;
-    private bool showFolderPicker = false;
     private string pathValidationMessage = string.Empty;
 
     protected override void OnInitialized()
     {
         // Set default values
-        var runtime = SenseNetIndexTools.RuntimeSettings.Load();
-        checkOptions.IndexPath = runtime.SourcePath ?? "";
+        Context.Changed += ContextChanged; revision = Context.Revision;
+        var runtime = Context.Settings;
+        checkOptions.IndexPath = Context.IndexPath;
         checkOptions.ConnectionString = runtime.ConnectionString;
-        checkOptions.RepositoryPath = "/Root";
+        checkOptions.RepositoryPath = Context.Selection.RepositoryPath;
         checkOptions.Recursive = true;
         checkOptions.Depth = 0;
         checkOptions.ReportFormat = "summary";
         checkOptions.Format = "html";
-    }
-
-    private void ShowFolderPicker()
-    {
-        showFolderPicker = true;
-    }
-
-    private void OnFolderSelected(string selectedPath)
-    {
-        checkOptions.IndexPath = selectedPath;
-        showFolderPicker = false;
     }
 
     private async Task StartSubtreeCheck()
@@ -399,6 +363,9 @@
 
         try
         {
+            using var operation = Context.BeginOperation();
+            checkOptions.IndexPath = Context.IndexPath; checkOptions.ConnectionString = Context.Settings.ConnectionString;
+            checkOptions.ConfigurationId = Context.Selection.ConfigurationId; checkOptions.ConfigurationName = Context.Selection.Name;
             checkResult = await CheckingService.CheckSubtreeAsync(checkOptions);
             
             if (checkResult.Success)
@@ -441,44 +408,10 @@
         }
     }
     
-    private void OnConfigurationApplied(SavedConfiguration configuration)
-    {
-        try
-        {
-            // Apply configuration values to the subtree check options
-            if (!string.IsNullOrEmpty(configuration.IndexPath))
-            {
-                checkOptions.IndexPath = configuration.IndexPath;
-            }
-            
-            if (!string.IsNullOrEmpty(configuration.ConnectionString))
-            {
-                checkOptions.ConnectionString = configuration.ConnectionString;
-            }
-            
-            if (!string.IsNullOrEmpty(configuration.RepositoryPath))
-            {
-                checkOptions.RepositoryPath = configuration.RepositoryPath;
-            }
-            
-            if (!string.IsNullOrEmpty(configuration.DefaultOutputPath))
-            {
-                checkOptions.OutputPath = configuration.DefaultOutputPath;
-            }
-            
-            // Set configuration info for better report naming
-            checkOptions.ConfigurationId = configuration.Id.ToString();
-            checkOptions.ConfigurationName = configuration.Name;
+    private long revision;
+    private void ContextChanged() { if (revision != Context.Revision) { revision = Context.Revision; checkOptions.IndexPath = Context.IndexPath; checkOptions.ConnectionString = Context.Settings.ConnectionString; checkOptions.RepositoryPath = Context.Selection.RepositoryPath; checkResult = lastCheckResult = null; pathValidationMessage = ""; } _ = InvokeAsync(StateHasChanged); }
+    public void Dispose() => Context.Changed -= ContextChanged;
 
-            StateHasChanged();
-            
-            Logger.LogInformation("Applied configuration: {ConfigurationName}", configuration.Name);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error applying configuration");
-        }
-    }
 }
 
 <style>

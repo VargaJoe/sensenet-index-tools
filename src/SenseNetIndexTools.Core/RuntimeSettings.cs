@@ -21,9 +21,12 @@ public sealed class RuntimeSettings
     public string? SqlConnectionStringFile { get; set; }
     public string? ApiKeyFile { get; set; }
     public string? BearerTokenFile { get; set; }
-    [JsonIgnore] public string ConnectionString => ReadSecret(SqlConnectionStringFile);
-    [JsonIgnore] public string ApiKey => ReadSecret(ApiKeyFile);
-    [JsonIgnore] public string BearerToken => ReadSecret(BearerTokenFile);
+    [JsonIgnore] public string? ConnectionStringValue { get; set; }
+    [JsonIgnore] public string? ApiKeyValue { get; set; }
+    [JsonIgnore] public string? BearerTokenValue { get; set; }
+    [JsonIgnore] public string ConnectionString => ConnectionStringValue ?? ReadSecret(SqlConnectionStringFile);
+    [JsonIgnore] public string ApiKey => ApiKeyValue ?? ReadSecret(ApiKeyFile);
+    [JsonIgnore] public string BearerToken => BearerTokenValue ?? ReadSecret(BearerTokenFile);
 
     public static RuntimeSettings Load()
     {

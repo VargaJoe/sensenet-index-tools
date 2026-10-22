@@ -126,7 +126,7 @@
         }
     }
 
-    private async Task OnConfigurationSelected(ChangeEventArgs e)
+    private void OnConfigurationSelected(ChangeEventArgs e)
     {
         if (Guid.TryParse(e.Value?.ToString(), out var configId))
         {

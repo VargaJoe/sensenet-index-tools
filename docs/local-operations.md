@@ -1,5 +1,75 @@
 # Local operator workflow
 
+## Two-repository Docker lab
+
+For multi-repository UI and container acceptance, run from the repository root:
+
+```sh
+python docker/local/multi_repository.py
+```
+
+Python 3 and Docker Desktop with Linux containers are required. This starts two
+unmodified SenseNet containers, separate `IndexToolsRepoA` / `IndexToolsRepoB`
+databases and separate index/backup volumes on one lab SQL Server. It builds the
+current Index Tools source into its own container. Existing Docker projects are
+unaffected. The first installation and build can take several minutes.
+
+- Tools: `http://127.0.0.1:5192/operations`
+- Repo A: `http://127.0.0.1:5193/`
+- Repo B: `http://127.0.0.1:5194/`
+
+The script saves **Repo A** and **Repo B** profiles with the correct index path,
+read-only SQL connection, API key, default subtree and both backup roots. The
+application's own `ConfigurationService` and persistent DataProtection keys protect
+the stored credentials. Only the active choice belongs to the browser tab. The
+setup helper is a separate, network-disabled SDK container; it adds no endpoint or
+startup import behavior to the application.
+
+All concrete Compose configuration, random credentials, assembly copies and logs
+are generated under ignored `.private/multi-repository-lab/`. Keep that directory
+together with the Docker volumes. Subsequent runs preserve the databases, profile
+IDs, keys, backups, reports and working copies. The script refreshes only the two
+profiles tagged `local-multirepo-lab`; it refuses to replace an unrelated profile
+with the same name. The tools stop briefly while profiles are updated.
+
+The tool sees `/source/repo-a` and `/source/repo-b` through read-only mounts. Each
+repository writes its own `/app/App_Data/IndexBackups`; the tool sees those as
+`/source/repo-a/IndexBackups` and `/source/repo-b/IndexBackups`. Copies, safety
+snapshots, reports and keys stay on the writable `tool-state` volume. The tool runs
+as UID1654 with a read-only root filesystem and without Docker socket access. All
+published ports bind to loopback; SQL has no host port.
+
+```sh
+python docker/local/multi_repository.py --no-build   # reuse the last tool image
+python docker/local/multi_repository.py --no-browser
+python docker/local/multi_repository.py --stop       # preserve all data
+python docker/local/multi_repository.py --no-browser --check  # regressions + both native workflows
+```
+
+To change ports, edit the generated private `ports.json` and rerun. To reopen an
+authenticated browser without rebuilding, use `--no-build`. The browser handoff
+does not print tokens or put them in URLs. Do not publish this disposable lab.
+
+Optional browser acceptance requires Node, Playwright and Chromium (or set
+`INDEXTOOLS_BROWSER_CHANNEL=msedge`). Run:
+
+```sh
+node docker/local/multi-repository-check.cjs
+```
+
+`INDEXTOOLS_PLAYWRIGHT_MODULE` may point to an installed Playwright module. The
+check creates real native backups and working copies for both repositories, reads
+SQL/index activity numbers, checks subtree parity, changes only working-copy
+LastActivityId metadata, validates both indexes, downloads HTML/Markdown and checks
+independent browser contexts. Evidence stays in the private lab directory.
+
+The optional `--check` builds the current test image and runs the regular regression
+suite plus native SQL/Lucene/backup/repair acceptance for each isolated repository.
+The manually dispatched **Local repository integration** GitHub workflow uses this
+same command and uploads only the credential-free acceptance summary.
+
+## Earlier single-repository lab
+
 The workspace includes an isolated SQL Server, an unmodified SenseNet repository
 image, and the CLI/web tools image. This is a local test environment with its own
 database, Docker network and persistent volumes. Existing applications and remote
@@ -49,6 +119,30 @@ be retained alongside existing volumes; replacing passwords does not reset an
 existing SQL database. The initializer preserves existing credentials.
 
 ## Operator steps
+
+The repository selector and index source at the top of every page belong to the
+current browser tab. Navigation and reload preserve that tab's selection; another
+browser or tab keeps its own selection. Session storage contains a server-protected
+value, not plaintext credentials. Saved profile
+definitions in Settings are shared, but selecting or editing manual connection
+values affects only the operator's session. A profile switch replaces all connection
+fields and clears previous results and confirmations.
+
+The common panel supports the default runtime repository, saved profiles, and
+manual session values. Use **Manage** to edit saved profiles and **Back to operation**
+to return. API credentials and backup roots belong to the profile; an incomplete
+profile does not inherit credentials from another repository.
+
+LastActivityId reads and compares activity numbers and supports an operator-entered
+number for metadata corrections, including debugging. These changes use a managed
+working copy, create a safety snapshot, and read the number back. They do not send
+rebuild requests. Content reindexing remains a separate feature. Gap analysis is
+outside this UI consolidation.
+
+Validation and subtree reports offer HTML and Markdown downloads from the same
+diagnostic result. HTML previews are sandboxed frames, so report styles cannot
+change the application layout. Saved reports retain both exports and source
+metadata; Dashboard shows the actual recent reports.
 
 1. **Prepare the source.** For a running repository, select **Create repository
    backup**. The API writes an empty, unique run folder inside the configured

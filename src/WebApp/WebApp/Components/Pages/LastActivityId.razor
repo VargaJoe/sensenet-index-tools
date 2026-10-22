@@ -1,95 +1,23 @@
 @page "/lastactivityid"
-@rendermode InteractiveServer
 @inject LastActivityIdService LastActivityService
 @inject ILogger<LastActivityId> Logger
 @inject IJSRuntime JS
+@inject ActiveRepositoryContext Context
+@inject OperatorReportService Reports
+@implements IDisposable
 @using WebApp.Components
 
 <PageTitle>LastActivityId Management</PageTitle>
+<fieldset disabled="@(Context.Busy || !Context.Ready)">
 
 <div class="sensenet-header mb-4">
     <div class="d-flex align-items-center mb-3">
-        <img src="_content/WebApp/images/sensenet-logo.png" alt="SenseNet Logo" height="40" class="me-3" />
+        <i class="bi bi-clock-history me-3" aria-hidden="true"></i>
         <h1 class="mb-0">LastActivityId Management</h1>
     </div>
     <div class="alert alert-info" role="alert">
         <i class="bi bi-info-circle-fill me-2"></i>
-        Manage LastActivityId values in sensenet Lucene indexes. Read operations are safe for live indexes.
-        Write operations require the index to be offline.
-    </div>
-</div>
-
-<!-- Configuration Selector -->
-<ConfigurationSelector OnConfigurationApplied="OnConfigurationApplied" />
-
-<div class="card mb-4 shadow-sm">
-    <div class="card-body">
-        <h5 class="card-title">
-            <i class="bi bi-folder2-open me-2"></i>
-            Index Path
-        </h5>
-        <div class="input-group mb-3">
-            <span class="input-group-text">
-                <i class="bi bi-folder"></i>
-            </span>
-            <input type="text" 
-                   class="form-control" 
-                   @bind="IndexPath"
-                   @bind:event="oninput"
-                   @onkeyup="HandlePathKeyUp"
-                   placeholder="Enter the path to your sensenet index (e.g., D:\indexes\myindex)" />
-            <button class="btn btn-outline-secondary" @onclick="OpenFolderPicker" title="Browse for index folder">
-                <i class="bi bi-folder2-open me-1"></i>
-                Browse
-            </button>
-        </div>
-        <div class="form-text mb-2">
-            <small class="text-muted">
-                <i class="bi bi-info-circle me-1"></i>
-                Type the full path to your index folder (e.g., <code>D:\indexes\myindex</code>). 
-                For security reasons, web browsers limit folder browsing capabilities.
-            </small>
-        </div>
-    @if (!string.IsNullOrEmpty(IndexPath) && !IsValidPath)
-        {
-            <div class="text-danger small mt-2">
-                <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                The specified path does not exist
-            </div>
-        }
-    </div>
-</div>
-
-<div class="card mb-4 shadow-sm">
-    <div class="card-body">
-        <h5 class="card-title">
-            <i class="bi bi-database me-2"></i>
-            Database Connection (Optional)
-        </h5>
-        <div class="input-group mb-3">
-            <span class="input-group-text">
-                <i class="bi bi-server"></i>
-            </span>
-            <input id="lastactivity-connection-string"
-                   type="@(_showConnectionString ? "text" : "password")"
-                   class="form-control" 
-                   @bind="ConnectionString"
-                   placeholder="Enter SQL Server connection string for database comparison" />
-            <button type="button" class="btn btn-outline-secondary"
-                    @onclick="() => _showConnectionString = !_showConnectionString"
-                    title="@ConnectionStringVisibilityLabel"
-                    aria-label="@ConnectionStringVisibilityLabel"
-                    aria-controls="lastactivity-connection-string"
-                    aria-pressed="@(_showConnectionString ? "true" : "false")">
-                <i class="bi @(_showConnectionString ? "bi-eye-slash" : "bi-eye")" aria-hidden="true"></i>
-            </button>
-        </div>
-        <div class="form-text mb-2">
-            <small class="text-muted">
-                <i class="bi bi-info-circle me-1"></i>
-                Optional: Provide a connection string to compare index LastActivityId with database IndexingActivities table.
-            </small>
-        </div>
+        Read, compare or correct the stored activity number.
     </div>
 </div>
 
@@ -126,13 +54,9 @@
     </div>
 </div>
 
-<ServerFolderPicker 
-    Show="_showFolderPicker" 
-    ShowChanged="OnPickerShowChanged"
-    InitialPath="@IndexPath"
-    OnSelected="OnFolderSelected" />
 
-@if (LastActivityInfo != null)
+
+@if (LastActivityInfo != null || Context.CanWrite)
 {
     <div class="card mb-4">
         <div class="card-body">
@@ -141,14 +65,9 @@
                 Index LastActivityId
             </h5>
             <p class="card-text">
-                <strong>LastActivityId:</strong> @LastActivityInfo.LastActivityId
+                <strong>LastActivityId:</strong> @(LastActivityInfo?.LastActivityId.ToString() ?? "Not initialized")
             </p>
-            @if (LastActivityInfo.Gaps != null && LastActivityInfo.Gaps.Any())
-            {
-                <p class="card-text">
-                    <strong>Gaps:</strong> @string.Join(", ", LastActivityInfo.Gaps)
-                </p>
-            }
+
         </div>
     </div>
 }
@@ -251,58 +170,25 @@
                 </div>
             </div>
             
-            @if (LastActivityComparison.IndexGaps != null && LastActivityComparison.IndexGaps.Any())
-            {
-                <div class="mt-3">
-                    <h6>Index Gaps:</h6>
-                    <p>@string.Join(", ", LastActivityComparison.IndexGaps)</p>
-                </div>
-            }
+
         </div>
     </div>
 }
 
-@if (LastActivityInfo != null)
+@if (LastActivityInfo != null || Context.CanWrite)
 {
     <div class="card mb-4">
         <div class="card-body">
-            <h5 class="card-title">Current LastActivityId</h5>
-            <p class="card-text">
-                <strong>LastActivityId:</strong> @LastActivityInfo.LastActivityId
-            </p>
-            @if (LastActivityInfo.Gaps != null && LastActivityInfo.Gaps.Any())
-            {
-                <p class="card-text">
-                    <strong>Gaps:</strong> @string.Join(", ", LastActivityInfo.Gaps)
-                </p>
-            }
-        </div>
-    </div>
-
-    <div class="card mb-4">
-        <div class="card-body">
             <h5 class="card-title">Modify LastActivityId</h5>
-            <div class="alert alert-warning" role="alert">
-                ⚠️ These operations require the index to be offline!
-            </div>
+            @if (!Context.CanWrite) { <p class="text-muted">Select a working copy using Prepare index source.</p> }
             <div class="mb-3">
                 <label for="newId" class="form-label">New LastActivityId Value</label>
-                <input type="number" class="form-control" id="newId" @bind="NewId" />
+                <input type="number" class="form-control" id="newId" min="0" max="2147483647" @bind="NewId" @bind:event="oninput" />
             </div>
-            <div class="mb-3 form-check">
-                <input type="checkbox" class="form-check-input" id="backup" @bind="CreateBackup">
-                <label class="form-check-label" for="backup">Create Backup</label>
-            </div>
-            @if (CreateBackup)
-            {
-                <div class="mb-3">
-                    <label for="backupPath" class="form-label">Backup Path (optional)</label>
-                    <input type="text" class="form-control" id="backupPath" @bind="BackupPath" placeholder="Leave empty for default backup location" />
-                </div>
-            }
+            <p class="small text-muted">A safety snapshot is created before each metadata change.</p>
             <div class="mb-3 form-check">
                 <input type="checkbox" class="form-check-input" id="offline" @bind="IsOffline">
-                <label class="form-check-label" for="offline">I confirm the index is offline</label>
+                <label class="form-check-label" for="offline">Confirm metadata change on this working copy</label>
             </div>
             <button class="btn btn-warning me-2" @onclick="SetLastActivityId" disabled="@(!CanModify)">
                 Set LastActivityId
@@ -321,7 +207,15 @@
     </div>
 }
 
+</fieldset>
 @code {
+    private long _contextRevision;
+    private void ContextChanged()
+    {
+        if (_contextRevision != Context.Revision) { _contextRevision = Context.Revision; _indexPath = Context.IndexPath; _connectionString = Context.Settings.ConnectionString; LastActivityInfo = null; DatabaseLastActivityId = null; LastActivityComparison = null; IsOffline = false; NewId = 0; ErrorMessage = null; _isValidPathCache = LastActivityService.ValidatePath(IndexPath); }
+        _ = InvokeAsync(StateHasChanged);
+    }
+    public void Dispose() { Context.Changed -= ContextChanged; }
     private string _indexPath = SenseNetIndexTools.RuntimeSettings.Load().SourcePath ?? "";
     private string IndexPath
     {
@@ -332,19 +226,16 @@
             {
                 _indexPath = value;
                 _isValidPathCache = null;
-                InvokeAsync(() => ValidatePathAsync());
+                _isValidPathCache = LastActivityService.ValidatePath(value);
             }
         }
     }
     private string _connectionString = SenseNetIndexTools.RuntimeSettings.Load().ConnectionString;
-    private bool _showConnectionString;
-    private string ConnectionStringVisibilityLabel => _showConnectionString ? "Hide connection string" : "Show connection string";
     private string ConnectionString
     {
         get => _connectionString;
         set => _connectionString = value;
     }
-    private bool CreateBackup { get; set; } = true;
     private string? BackupPath { get; set; } = SenseNetIndexTools.RuntimeSettings.Load().BackupDirectory;
     private bool IsOffline { get; set; }
     private long NewId { get; set; }
@@ -353,69 +244,29 @@
     private long? DatabaseLastActivityId { get; set; }
     private LastActivityIdComparison? LastActivityComparison { get; set; }
     private bool? _isValidPathCache;
-    private System.Threading.CancellationTokenSource? _validationCts;
-    private bool _showFolderPicker;
-    private Task OnPickerShowChanged(bool value)
-    {
-        _showFolderPicker = value;
-        StateHasChanged();
-        return Task.CompletedTask;
-    }
-
     private bool IsValidPath => _isValidPathCache ?? false;
-    private bool CanModify => IsValidPath && IsOffline && NewId >= 0 && IsWritablePath;
+    private bool CanModify => IsValidPath && IsOffline && NewId >= 0 && NewId <= int.MaxValue && IsWritablePath && !Context.Busy;
     private bool IsWritablePath
     {
-        get { try { SenseNetIndexTools.RuntimeSettings.EnsureWritableCopy(IndexPath); return true; } catch { return false; } }
+        get { try { if (Context.Source is not { } source) return false; Context.Workspace.RequireWorkingCopy(source); return true; } catch { return false; } }
     }
     private bool CanCompare => IsValidPath && !string.IsNullOrWhiteSpace(ConnectionString);
 
     protected override void OnInitialized()
     {
+        Context.Changed += ContextChanged;
+        _contextRevision = Context.Revision;
+        _indexPath = Context.IndexPath;
+        _connectionString = Context.Settings.ConnectionString;
         // Configured defaults bypass the input setter; validate before first render.
         _isValidPathCache = LastActivityService.ValidatePath(IndexPath);
-    }
-
-    private async Task HandlePathKeyUp(KeyboardEventArgs e)
-    {
-        await ValidatePathAsync();
-    }
-
-    private async Task ValidatePathAsync()
-    {
-        try
-        {
-            // Cancel any pending validation
-            _validationCts?.Cancel();
-            _validationCts?.Dispose();
-            _validationCts = new System.Threading.CancellationTokenSource();
-            var token = _validationCts.Token;
-
-            // Small delay to avoid too frequent validation
-            await Task.Delay(300, token);
-
-            if (!token.IsCancellationRequested)
-            {
-                _isValidPathCache = LastActivityService.ValidatePath(IndexPath);
-                await InvokeAsync(StateHasChanged);
-            }
-        }
-        catch (System.Threading.Tasks.TaskCanceledException)
-        {
-            // Ignore cancellation
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error validating path: {Path}", IndexPath);
-            _isValidPathCache = false;
-            await InvokeAsync(StateHasChanged);
-        }
     }
 
     private async Task GetLastActivityId()
     {
         try
         {
+            using var operation = Context.BeginOperation();
             ErrorMessage = null;
             Logger.LogInformation("Attempting to get LastActivityId from {IndexPath}", IndexPath);
             
@@ -440,6 +291,7 @@
     {
         try
         {
+            using var operation = Context.BeginOperation();
             ErrorMessage = null;
             Logger.LogInformation("Attempting to get LastActivityId from database");
             
@@ -463,6 +315,7 @@
     {
         try
         {
+            using var operation = Context.BeginOperation();
             ErrorMessage = null;
             Logger.LogInformation("Comparing LastActivityId between index and database");
             
@@ -479,6 +332,7 @@
             }
             
             LastActivityComparison = await LastActivityService.CompareLastActivityIdAsync(IndexPath, ConnectionString);
+            await Reports.SaveActionAsync("LastActivityId comparison", new { Index = LastActivityComparison.IndexValue, Database = LastActivityComparison.DatabaseValue, Match = LastActivityComparison.IsMatch });
             Logger.LogInformation("Successfully compared LastActivityId - Status: {Status}", LastActivityComparison.Status);
         }
         catch (Exception ex)
@@ -492,9 +346,13 @@
     {
         try
         {
+            using var operation = Context.BeginOperation();
             ErrorMessage = null;
-            await LastActivityService.SetLastActivityIdAsync(IndexPath, NewId, CreateBackup, BackupPath);
-            await GetLastActivityId(); // Refresh the display
+            if (!IsWritablePath || !IsOffline || NewId < 0 || NewId > int.MaxValue) throw new InvalidOperationException("Select a working copy, enter a valid number and confirm the change.");
+            await LastActivityService.SetLastActivityIdAsync(IndexPath, NewId, true, BackupPath);
+            LastActivityInfo = await LastActivityService.GetLastActivityIdAsync(IndexPath);
+            IsOffline = false; LastActivityComparison = null;
+            await Reports.SaveActionAsync("LastActivityId correction", new { Value = NewId });
         }
         catch (Exception ex)
         {
@@ -507,9 +365,13 @@
     {
         try
         {
+            using var operation = Context.BeginOperation();
             ErrorMessage = null;
-            await LastActivityService.InitializeLastActivityIdAsync(IndexPath, NewId, CreateBackup, BackupPath);
-            await GetLastActivityId(); // Refresh the display
+            if (!IsWritablePath || !IsOffline || NewId < 0 || NewId > int.MaxValue) throw new InvalidOperationException("Select a working copy, enter a valid number and confirm the change.");
+            await LastActivityService.InitializeLastActivityIdAsync(IndexPath, NewId, true, BackupPath);
+            LastActivityInfo = await LastActivityService.GetLastActivityIdAsync(IndexPath);
+            IsOffline = false; LastActivityComparison = null;
+            await Reports.SaveActionAsync("LastActivityId correction", new { Value = NewId });
         }
         catch (Exception ex)
         {
@@ -518,39 +380,4 @@
         }
     }
 
-    private void OpenFolderPicker()
-    {
-        _showFolderPicker = true;
-    }
-
-    private async Task OnFolderSelected(string path)
-    {
-        IndexPath = path;
-        await ValidatePathAsync();
-    }
-
-    private void OnConfigurationApplied(SavedConfiguration configuration)
-    {
-        try
-        {
-            // Apply configuration values to the LastActivityId page
-            if (!string.IsNullOrEmpty(configuration.IndexPath))
-            {
-                IndexPath = configuration.IndexPath;
-            }
-
-            if (!string.IsNullOrEmpty(configuration.ConnectionString))
-            {
-                ConnectionString = configuration.ConnectionString;
-            }
-
-            StateHasChanged();
-            
-            Logger.LogInformation("Applied configuration: {ConfigurationName}", configuration.Name);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error applying configuration");
-        }
-    }
 }

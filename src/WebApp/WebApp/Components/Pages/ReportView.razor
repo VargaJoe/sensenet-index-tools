@@ -1,10 +1,12 @@
 @page "/reports/{reportId}"
-@rendermode InteractiveServer
 @inject ReportStorageService ReportService
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Navigation
 @inject ILogger<ReportView> Logger
+@inject ActiveRepositoryContext Context
+@implements IDisposable
 
+<fieldset disabled="@(!Context.Ready)">
 <div class="container-fluid mt-3">
     @if (isLoading)
     {
@@ -63,6 +65,8 @@
                         <button class="btn btn-outline-secondary" @onclick="DownloadReport">
                             <i class="bi bi-download me-1"></i>Download
                         </button>
+                        @if (report.ExportFiles.ContainsKey("md") && report.Format != "md") { <button class="btn btn-outline-secondary" @onclick='() => DownloadExport("md")'>Markdown</button> }
+                        @if (report.ExportFiles.ContainsKey("html") && report.Format != "html") { <button class="btn btn-outline-secondary" @onclick='() => DownloadExport("html")'>HTML</button> }
                         <button class="btn @(report.IsFavorite ? "btn-warning" : "btn-outline-warning")" 
                                 @onclick="ToggleFavorite">
                             <i class="bi @(report.IsFavorite ? "bi-star-fill" : "bi-star") me-1"></i>
@@ -218,7 +222,7 @@
                             @if (report.Format == "html")
                             {
                                 <div class="p-3">
-                                    @((MarkupString)report.Content)
+                                    <ReportPreview Content="@report.Content" Format="html" Title="Saved report" />
                                 </div>
                             }
                             else
@@ -241,6 +245,7 @@
     }
 </div>
 
+</fieldset>
 @code {
     [Parameter] public string ReportId { get; set; } = string.Empty;
 
@@ -248,10 +253,20 @@
     private bool isLoading = true;
     private string viewMode = "rendered"; // "rendered" or "source"
 
+    private async Task DownloadExport(string format)
+    {
+        if (report == null) return;
+        var content = await ReportService.GetExportAsync(report.Id, format);
+        if (content != null) await JSRuntime.InvokeVoidAsync("downloadFile", $"report-{report.Id}.{format}", content, format == "html" ? "text/html" : "text/markdown");
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        Context.Changed += ContextChanged;
         await LoadReport();
     }
+    private void ContextChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => Context.Changed -= ContextChanged;
 
     private async Task LoadReport()
     {

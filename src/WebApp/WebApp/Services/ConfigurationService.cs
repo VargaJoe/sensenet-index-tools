@@ -124,6 +124,8 @@ public class ConfigurationService
                     Description = options.Description,
                     IndexPath = options.IndexPath,
                     ConnectionString = options.ConnectionString,
+                    RepositoryUrl = options.RepositoryUrl, ApiKey = options.ApiKey, BearerToken = options.BearerToken,
+                    RepositoryBackupRoot = options.RepositoryBackupRoot, BackupSourceRoot = options.BackupSourceRoot,
                     RepositoryPath = options.RepositoryPath,
                     DefaultOutputPath = options.DefaultOutputPath,
                     IsFavorite = options.IsFavorite,
@@ -192,6 +194,8 @@ public class ConfigurationService
                 configuration.Description = options.Description;
                 configuration.IndexPath = options.IndexPath;
                 configuration.ConnectionString = options.ConnectionString;
+                configuration.RepositoryUrl = options.RepositoryUrl; configuration.ApiKey = options.ApiKey; configuration.BearerToken = options.BearerToken;
+                configuration.RepositoryBackupRoot = options.RepositoryBackupRoot; configuration.BackupSourceRoot = options.BackupSourceRoot;
                 configuration.RepositoryPath = options.RepositoryPath;
                 configuration.DefaultOutputPath = options.DefaultOutputPath;
                 configuration.IsFavorite = options.IsFavorite;
@@ -335,8 +339,12 @@ public class ConfigurationService
                 var configurations = JsonSerializer.Deserialize<List<SavedConfiguration>>(json);
                 _configurations = configurations ?? new List<SavedConfiguration>();
                 foreach (var configuration in _configurations)
-                    if (configuration.ConnectionString?.StartsWith(ProtectedPrefix, StringComparison.Ordinal) == true)
-                        configuration.ConnectionString = _protector.Unprotect(configuration.ConnectionString[ProtectedPrefix.Length..]);
+                {
+                    string? Decode(string? value) => value?.StartsWith(ProtectedPrefix, StringComparison.Ordinal) == true ? _protector.Unprotect(value[ProtectedPrefix.Length..]) : value;
+                    configuration.ConnectionString = Decode(configuration.ConnectionString);
+                    configuration.ApiKey = Decode(configuration.ApiKey);
+                    configuration.BearerToken = Decode(configuration.BearerToken);
+                }
 
                 _logger.LogInformation("Loaded {Count} configurations from {FilePath}",
                     _configurations.Count, _configurationFilePath);
@@ -364,8 +372,11 @@ public class ConfigurationService
             var json = JsonSerializer.SerializeToNode(_configurations)!.AsArray();
             foreach (var configuration in json)
             {
-                var value = configuration!["ConnectionString"]?.GetValue<string>();
-                if (!string.IsNullOrWhiteSpace(value)) configuration["ConnectionString"] = ProtectedPrefix + _protector.Protect(value);
+                foreach (var field in new[] { "ConnectionString", "ApiKey", "BearerToken" })
+                {
+                    var value = configuration![field]?.GetValue<string>();
+                    if (!string.IsNullOrWhiteSpace(value)) configuration[field] = ProtectedPrefix + _protector.Protect(value);
+                }
             }
             var temporaryFile = _configurationFilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
             await File.WriteAllTextAsync(temporaryFile, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
