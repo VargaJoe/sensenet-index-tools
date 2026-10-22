@@ -25,6 +25,7 @@ const compose = ['compose', '-p', 'index-tools-lab', '--env-file', path.join(roo
       await Promise.race([circuit, new Promise((_, reject) => setTimeout(() => reject(new Error('Blazor circuit not ready')), 20000))]);
     };
     await navigate(base + '/operations');
+    await page.waitForFunction(() => !document.querySelector('#active-repository').closest('fieldset').disabled);
     assert.equal(await page.locator('#operator-source').inputValue(), 'live');
     await page.getByRole('button', { name: 'Read LastActivityId', exact: true }).click();
     await page.getByTestId('activity-result').waitFor();
@@ -36,12 +37,13 @@ const compose = ['compose', '-p', 'index-tools-lab', '--env-file', path.join(roo
     console.log(JSON.stringify({ ValidationText: validationText }));
     assert.match(validationText, /Validation completed successfully/);
     console.log('INDEX_VALIDATION_PASS');
+    await page.getByRole('button', { name: 'Prepare index source', exact: true }).click();
     await page.locator('#backup-folder').fill('browser-' + Date.now());
     await page.getByRole('button', { name: 'Create repository backup', exact: true }).click();
-    await page.getByRole('status').filter({ hasText: 'Completed repository backup selected.' }).waitFor({ timeout: 300000 });
-    assert.notEqual(await page.locator('#operator-source').inputValue(), 'live');
+    await page.waitForFunction(() => document.querySelector('#operator-source').value !== 'live', undefined, { timeout: 300000 });
     assert.match(await page.getByTestId('source-info').innerText(), /Read-only source/);
     console.log('NATIVE_BACKUP_SELECTION_PASS');
+    await page.getByRole('button', { name: 'Prepare index source', exact: true }).click();
     await page.getByRole('button', { name: 'Create working copy', exact: true }).click();
     await page.getByTestId('source-info').getByText('Writable working copy', { exact: true }).waitFor();
     await page.locator('#operator-scope').fill('/Root/Content/IndexToolsLab');
@@ -49,9 +51,23 @@ const compose = ['compose', '-p', 'index-tools-lab', '--env-file', path.join(roo
     await page.getByTestId('comparison-summary').waitFor({ timeout: 90000 });
     assert.match(await page.getByTestId('comparison-summary').innerText(), /0 differences/);
     console.log('WORKING_COPY_SUBTREE_COMPARE_PASS');
+    const operatorSource = await page.locator('#operator-source').inputValue();
+    const secondOperator = await browser.newContext();
+    await secondOperator.request.post(base + '/login', { form: { token } });
+    const secondPage = await secondOperator.newPage();
+    await secondPage.goto(base + '/operations', { waitUntil: 'networkidle' });
+    await secondPage.waitForFunction(() => !document.querySelector('#active-repository').closest('fieldset').disabled);
+    assert.equal(await secondPage.locator('#operator-source').inputValue(), 'live');
+    assert.equal(await page.locator('#operator-source').inputValue(), operatorSource);
+    await secondOperator.close();
+    console.log('INDEPENDENT_OPERATOR_SELECTIONS_PASS');
     assert.ok(!(await page.locator('body').innerText()).includes(token));
 
     await navigate(base + '/lastactivityid');
+    await page.waitForFunction(() => !document.querySelector('#active-repository').closest('fieldset').disabled);
+    assert.equal(await page.locator('#operator-source').inputValue(), operatorSource);
+    await page.locator('#operator-source').selectOption('live');
+    await page.waitForFunction(() => /Read-only source/.test(document.querySelector('[data-testid="source-info"]').textContent));
     await page.getByRole('button', { name: /Get Index LastActivityId/ }).click();
     await page.waitForFunction(() => Array.from(document.querySelectorAll('p.card-text')).some(p => /LastActivityId:\s*\d+/.test(p.textContent)));
     await page.locator('#offline').check();

@@ -1,0 +1,11 @@
+@inject IJSRuntime JS
+<div class="d-flex gap-2 flex-wrap my-3">
+    @if (!string.IsNullOrEmpty(Html)) { <button type="button" class="btn btn-sm btn-outline-primary" @onclick='() => Download("html", Html)'>Download HTML</button> }
+    @if (!string.IsNullOrEmpty(Markdown)) { <button type="button" class="btn btn-sm btn-outline-primary" @onclick='() => Download("md", Markdown)'>Download Markdown</button> }
+</div>
+@code {
+    [Parameter] public string? Html { get; set; }
+    [Parameter] public string? Markdown { get; set; }
+    [Parameter] public string Name { get; set; } = "report";
+    private Task Download(string format, string content) => JS.InvokeVoidAsync("downloadFile", $"{Name}.{format}", content, format == "html" ? "text/html" : "text/markdown").AsTask();
+}

@@ -7,6 +7,11 @@ namespace WebApp.Models;
 /// </summary>
 public class SavedConfiguration
 {
+    public string? RepositoryUrl { get; set; }
+    public string? ApiKey { get; set; }
+    public string? BearerToken { get; set; }
+    public string? RepositoryBackupRoot { get; set; }
+    public string? BackupSourceRoot { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     
     [Required(ErrorMessage = "Configuration name is required")]
@@ -76,6 +81,11 @@ public class SavedConfiguration
 /// </summary>
 public class ConfigurationOptions
 {
+    public string? RepositoryUrl { get; set; }
+    public string? ApiKey { get; set; }
+    public string? BearerToken { get; set; }
+    public string? RepositoryBackupRoot { get; set; }
+    public string? BackupSourceRoot { get; set; }
     [Required(ErrorMessage = "Configuration name is required")]
     [StringLength(100, ErrorMessage = "Name cannot exceed 100 characters")]
     public string Name { get; set; } = string.Empty;

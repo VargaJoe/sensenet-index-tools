@@ -22,6 +22,7 @@ public class StoredReport
     
     [Required]
     public string Content { get; set; } = string.Empty;
+    public Dictionary<string, string> ExportFiles { get; set; } = new();
     
     public string? FilePath { get; set; } // Optional file path if saved as file
     
@@ -49,7 +50,7 @@ public class StoredReport
     // Helper properties
     public string FormattedDuration => Duration?.ToString(@"mm\:ss") ?? "N/A";
     public string FormattedSize => FileSizeBytes.HasValue ? FormatFileSize(FileSizeBytes.Value) : "N/A";
-    public string FormattedCreatedAt => CreatedAt.ToString("yyyy-MM-dd HH:mm:ss");
+    public string FormattedCreatedAt => CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
     
     private static string FormatFileSize(long bytes)
     {

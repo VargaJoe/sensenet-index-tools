@@ -131,12 +131,16 @@ public class WebTests
         var env = new TestEnvironment(fixture.Root);
         var service = new ConfigurationService(NullLogger<ConfigurationService>.Instance, env, provider);
         const string connection = "Server=example.invalid;Password=synthetic-secret;";
-        Assert.True((await service.CreateConfigurationAsync(new() { Name = "Test", ConnectionString = connection })).Success);
+        Assert.True((await service.CreateConfigurationAsync(new() { Name = "Test", ConnectionString = connection, ApiKey = "synthetic-api-secret", BearerToken = "synthetic-bearer-secret" })).Success);
         var persisted = await File.ReadAllTextAsync(Path.Combine(fixture.Root, "Data", "configurations.json"));
         Assert.DoesNotContain("synthetic-secret", persisted);
+        Assert.DoesNotContain("synthetic-api-secret", persisted);
+        Assert.DoesNotContain("synthetic-bearer-secret", persisted);
         Assert.Contains("protected:v1:", persisted);
         var reopened = new ConfigurationService(NullLogger<ConfigurationService>.Instance, env, provider);
         Assert.Equal(connection, Assert.Single(await reopened.GetAllConfigurationsAsync()).ConnectionString);
+        Assert.Equal("synthetic-api-secret", Assert.Single(await reopened.GetAllConfigurationsAsync()).ApiKey);
+        Assert.Equal("synthetic-bearer-secret", Assert.Single(await reopened.GetAllConfigurationsAsync()).BearerToken);
     }
 
     [Fact]

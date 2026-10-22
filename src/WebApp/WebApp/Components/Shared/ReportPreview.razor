@@ -1,0 +1,13 @@
+@if (Format.Equals("html", StringComparison.OrdinalIgnoreCase))
+{
+    <iframe class="report-preview" title="@Title" sandbox="" referrerpolicy="no-referrer" srcdoc="@Content"></iframe>
+}
+else
+{
+    <pre class="report-source">@Content</pre>
+}
+@code {
+    [Parameter] public string Content { get; set; } = "";
+    [Parameter] public string Format { get; set; } = "html";
+    [Parameter] public string Title { get; set; } = "Report preview";
+}

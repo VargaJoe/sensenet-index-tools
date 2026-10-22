@@ -19,9 +19,14 @@ public class LocalWorkflowIntegrationTests
     {
         var settings = RuntimeSettings.Load();
         // This destructive fixture may only run against the disposable workspace lab.
-        Assert.Equal("repository", new Uri(settings.RepositoryUrl!).Host);
-        Assert.Equal("IndexToolsLab", new SqlConnectionStringBuilder(settings.ConnectionString).InitialCatalog);
-        Assert.Equal("/source/repository/LocalIndex", settings.SourcePath);
+        var host = new Uri(settings.RepositoryUrl!).Host;
+        var expectedDatabase = host switch
+        {
+            "repository" => "IndexToolsLab", "repo-a" => "IndexToolsRepoA", "repo-b" => "IndexToolsRepoB",
+            _ => throw new InvalidOperationException("Native acceptance requires an explicitly supported disposable lab repository.")
+        };
+        Assert.Equal(expectedDatabase, new SqlConnectionStringBuilder(settings.ConnectionString).InitialCatalog);
+        Assert.Equal($"/source/{host}/LocalIndex", settings.SourcePath);
         using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
         var workspace = new IndexWorkspace(settings, http);
         var reports = new OperatorReportService(workspace, new ReportStorageService(NullLogger<ReportStorageService>.Instance, new TestEnvironment("/state")));
@@ -60,7 +65,7 @@ public class LocalWorkflowIntegrationTests
         var unchangedContent = Assert.Single(fresh.Items, i => i.NodeId == repairTarget.NodeId);
         Assert.Equal(repairTarget.TimestampNumeric, unchangedContent.TimestampNumeric);
         Assert.Equal(repairTarget.VersionTimestampNumeric, unchangedContent.VersionTimestampNumeric);
-        File.WriteAllText("/state/reports/local-acceptance.json", JsonSerializer.Serialize(new {
+        File.WriteAllText($"/state/reports/local-acceptance{(host == "repository" ? "" : "-" + host)}.json", JsonSerializer.Serialize(new {
             Success = true, BackupId = backup.Id, WorkingCopyId = working.Id, OriginalReportId = report.Id,
             RebuildNodeId = repairTarget.NodeId, RebuildActivityId = repair.ActivityId, OrphansRemoved = 1,
             FalseOrphanPreserved = true, OriginalBackupPreserved = true, FreshBackupId = freshBackup.Id, FreshRows = fresh.Items.Count

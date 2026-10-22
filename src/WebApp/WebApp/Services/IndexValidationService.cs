@@ -8,11 +8,13 @@ public class IndexValidationService
 {
     private readonly ILogger<IndexValidationService> _logger;
     private readonly ReportStorageService _reportStorage;
+    private readonly ActiveRepositoryContext? _context;
 
-    public IndexValidationService(ILogger<IndexValidationService> logger, ReportStorageService reportStorage)
+    public IndexValidationService(ILogger<IndexValidationService> logger, ReportStorageService reportStorage, ActiveRepositoryContext? context = null)
     {
         _logger = logger;
         _reportStorage = reportStorage;
+        _context = context;
     }
 
     public bool ValidatePath(string path)
@@ -56,8 +58,8 @@ public class IndexValidationService
                 IndexPath = options.IndexPath,
                 StartTime = DateTime.UtcNow,
                 Options = options,
-                ConfigurationId = configurationId,
-                ConfigurationName = configurationName
+                ConfigurationId = configurationId ?? options.ConfigurationId ?? _context?.Selection.ConfigurationId,
+                ConfigurationName = configurationName ?? options.ConfigurationName ?? _context?.Selection.Name
             };
 
             // Create output file path if not specified
@@ -65,7 +67,7 @@ public class IndexValidationService
             if (string.IsNullOrEmpty(outputPath))
             {
                 var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                var fileName = $"validation_report_{timestamp}.{options.Format}";
+                var fileName = $"validation_report_{timestamp}_{Guid.NewGuid():N}.{options.Format}";
                 var outputDirectory = RuntimeSettings.Load().OutputDirectory ?? Path.GetTempPath();
                 Directory.CreateDirectory(outputDirectory);
                 outputPath = Path.Combine(outputDirectory, fileName);
@@ -76,6 +78,11 @@ public class IndexValidationService
             result.ErrorCount = findings.Count(r => r.Severity == ValidationSeverity.Error);
             result.WarningCount = findings.Count(r => r.Severity == ValidationSeverity.Warning);
             result.InfoCount = findings.Count(r => r.Severity == ValidationSeverity.Info);
+            var alternatePath = outputPath + (options.Format == "html" ? ".md" : ".html");
+            if (options.Format == "html") await GenerateMarkdownReportAsync(findings, alternatePath, options.ReportFormat);
+            else await GenerateHtmlReportAsync(findings, alternatePath, options.ReportFormat);
+            result.HtmlContent = await File.ReadAllTextAsync(options.Format == "html" ? outputPath : alternatePath);
+            result.MarkdownContent = await File.ReadAllTextAsync(options.Format == "md" ? outputPath : alternatePath);
 
             // Read the generated report
             if (File.Exists(outputPath))
@@ -304,7 +311,8 @@ public class IndexValidationService
                 }
             };
 
-            await _reportStorage.SaveReportAsync(storedReport);
+            if (_context != null) foreach (var item in _context.Provenance()) storedReport.Parameters[item.Key] = item.Value;
+            await _reportStorage.SaveReportAsync(storedReport, new Dictionary<string, string> { ["html"] = result.HtmlContent ?? "", ["md"] = result.MarkdownContent ?? "" });
             _logger.LogInformation("Saved validation report to storage: {ReportId}", storedReport.Id);
         }
         catch (Exception ex)
@@ -352,6 +360,8 @@ public class ValidationOptions
 
 public class ValidationServiceResult
 {
+    public string? HtmlContent { get; set; }
+    public string? MarkdownContent { get; set; }
     public int ErrorCount { get; set; }
     public int WarningCount { get; set; }
     public int InfoCount { get; set; }

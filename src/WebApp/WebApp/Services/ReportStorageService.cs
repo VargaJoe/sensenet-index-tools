@@ -30,7 +30,7 @@ public class ReportStorageService
         Directory.CreateDirectory(_reportsDataDirectory);
     }
 
-    public async Task<string> SaveReportAsync(StoredReport report)
+    public async Task<string> SaveReportAsync(StoredReport report, IReadOnlyDictionary<string, string>? exports = null)
     {
         await StorageGate.WaitAsync();
         try
@@ -38,6 +38,15 @@ public class ReportStorageService
 
             try
             {
+                if (exports != null)
+                    foreach (var (format, content) in exports)
+                    {
+                        if (format is not ("html" or "md")) throw new ArgumentException("Unsupported report export format.");
+                        if (!Guid.TryParse(report.Id, out _)) throw new ArgumentException("Invalid report identity.");
+                        var exportPath = Path.Combine(_reportsDataDirectory, $"{report.Id}.{format}");
+                        await File.WriteAllTextAsync(exportPath, SecretRedactor.Redact(content));
+                        report.ExportFiles[format] = exportPath;
+                    }
                 // Generate auto name if not provided
                 if (string.IsNullOrWhiteSpace(report.Name))
                 {
@@ -103,10 +112,10 @@ public class ReportStorageService
 
             if (filter != null)
             {
-                reports = ApplyFilter(reports, filter);
+                return ApplyFilter(reports, filter);
             }
 
-            return reports.OrderByDescending(r => r.CreatedAt).ToList();
+            return reports.OrderByDescending(r => r.CreatedAt.ToUniversalTime()).ToList();
         }
         catch (Exception ex)
         {
@@ -175,6 +184,9 @@ public class ReportStorageService
                     _logger.LogInformation("Deleted report file: {FilePath}", report.FilePath);
                 }
 
+                foreach (var export in report.ExportFiles.Values)
+                    if (WorkspacePaths.IsWithin(export, _reportsDataDirectory) && File.Exists(export)) File.Delete(export);
+
                 // Remove from index
                 reports.RemoveAll(r => r.Id == reportId);
                 await SaveReportsAsync(reports);
@@ -222,6 +234,16 @@ public class ReportStorageService
 
         }
         finally { StorageGate.Release(); }
+    }
+
+    public async Task<string?> GetExportAsync(string reportId, string format)
+    {
+        if (format is not ("html" or "md")) return null;
+        var report = (await GetReportsAsync()).SingleOrDefault(r => r.Id == reportId);
+        if (report == null) return null;
+        if (report.ExportFiles.TryGetValue(format, out var file) && WorkspacePaths.IsWithin(file, _reportsDataDirectory) && File.Exists(file))
+            return await File.ReadAllTextAsync(file);
+        return report.Format == format ? (await GetReportAsync(reportId))?.Content : null;
     }
 
     public async Task<Dictionary<string, int>> GetReportStatisticsAsync()
@@ -284,12 +306,12 @@ public class ReportStorageService
 
         if (filter.FromDate.HasValue)
         {
-            query = query.Where(r => r.CreatedAt >= filter.FromDate.Value);
+            query = query.Where(r => r.CreatedAt.ToUniversalTime() >= filter.FromDate.Value.ToUniversalTime());
         }
 
         if (filter.ToDate.HasValue)
         {
-            query = query.Where(r => r.CreatedAt <= filter.ToDate.Value);
+            query = query.Where(r => r.CreatedAt.ToUniversalTime() <= filter.ToDate.Value.ToUniversalTime());
         }
 
         if (filter.Success.HasValue)
@@ -313,7 +335,7 @@ public class ReportStorageService
             "name" => filter.SortDescending ? query.OrderByDescending(r => r.Name) : query.OrderBy(r => r.Name),
             "duration" => filter.SortDescending ? query.OrderByDescending(r => r.Duration) : query.OrderBy(r => r.Duration),
             "size" => filter.SortDescending ? query.OrderByDescending(r => r.FileSizeBytes) : query.OrderBy(r => r.FileSizeBytes),
-            _ => filter.SortDescending ? query.OrderByDescending(r => r.CreatedAt) : query.OrderBy(r => r.CreatedAt)
+            _ => filter.SortDescending ? query.OrderByDescending(r => r.CreatedAt.ToUniversalTime()) : query.OrderBy(r => r.CreatedAt.ToUniversalTime())
         };
 
         return query.ToList();

@@ -1,4 +1,9 @@
 // Modal helper functions for Bootstrap modals
+window.indexToolsSession = {
+    read: () => sessionStorage.getItem('indextools.operator.v1'),
+    write: value => sessionStorage.setItem('indextools.operator.v1', value),
+    clear: () => sessionStorage.removeItem('indextools.operator.v1')
+};
 window.modalHelpers = {
     showModal: function (modalId) {
         const modalElement = document.getElementById(modalId);

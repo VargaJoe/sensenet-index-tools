@@ -1,0 +1,125 @@
+@implements IDisposable
+@inject ActiveRepositoryContext Context
+@inject ConfigurationService Configurations
+@inject NavigationManager Navigation
+@using SenseNetIndexTools
+
+<section class="card context-panel mb-4" aria-label="Active repository">
+    <div class="card-body">
+        <fieldset disabled="@(Context.Busy || !Context.Ready)">
+        <div class="row g-3 align-items-end">
+            <div class="col-lg-4">
+                <label for="active-repository" class="form-label">Repository</label>
+                <select @key="editing" id="active-repository" class="form-select" value="@ProfileValue" @onchange="SelectProfile">
+                    <option value="default">Default repository</option>
+                    @foreach (var profile in profiles) { <option value="@profile.Id">@profile.Name</option> }
+                    <option value="manual">Manual repository</option>
+                </select>
+            </div>
+            <div class="col-lg-6">
+                <label for="operator-source" class="form-label">Index source</label>
+                <select id="operator-source" class="form-select" value="@Context.Selection.SourceId" @onchange="SelectSource">
+                    @if (sources.Count == 0) { <option value="">No index source available</option> }
+                    @foreach (var source in sources) { <option value="@source.Id">@source.Name — @source.Kind</option> }
+                </select>
+            </div>
+            <div class="col-lg-2"><a class="btn btn-outline-secondary w-100" href="@ManageUrl">Manage</a></div>
+        </div>
+        @if (Context.Source is { } selected)
+        {
+            <div class="source-summary mt-3" data-testid="source-info">
+                <span class="badge @(selected.Writable ? "bg-warning text-dark" : "bg-secondary")">@(selected.Writable ? "Writable working copy" : "Read-only source")</span>
+                <code>@selected.Path</code>
+                @if (selected.Kind != IndexSourceKind.Live) { <span class="text-muted small">Captured: @selected.CreatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span> }
+            </div>
+        }
+        <div class="d-flex gap-3 mt-3 flex-wrap">
+            <button type="button" class="btn btn-sm btn-link p-0" @onclick="ToggleEditor">Connection settings</button>
+            <button type="button" class="btn btn-sm btn-link p-0" @onclick="() => prepare = !prepare">Prepare index source</button>
+            <button type="button" class="btn btn-sm btn-link p-0" @onclick="Reload">Refresh sources</button>
+        </div>
+        @if (editing)
+        {
+            <div class="row g-3 mt-1">
+                <div class="col-lg-6"><label class="form-label" for="context-index-path">Live index directory</label><IndexPathInput Id="context-index-path" @bind-Value="draft.IndexPath" /></div>
+                <div class="col-lg-6"><label class="form-label" for="lastactivity-connection-string">Database connection string</label><SecretInput Id="lastactivity-connection-string" @bind-Value="draft.ConnectionString" Placeholder="Enter SQL Server connection string" /></div>
+                <div class="col-lg-6"><label class="form-label" for="context-url">Repository URL</label><input id="context-url" class="form-control" @bind="draft.RepositoryUrl" /></div>
+                <div class="col-lg-6"><label class="form-label" for="context-api-key">API key</label><SecretInput Id="context-api-key" Label="API key" @bind-Value="draft.ApiKey" /></div>
+                <div class="col-lg-6"><label class="form-label" for="context-bearer">Bearer token</label><SecretInput Id="context-bearer" Label="bearer token" @bind-Value="draft.BearerToken" /></div>
+                <div class="col-lg-6"><label class="form-label" for="context-scope">Default subtree</label><input id="context-scope" class="form-control" @bind="draft.RepositoryPath" /></div>
+                <div class="col-lg-6"><label class="form-label" for="context-backup-target">Repository backup root</label><input id="context-backup-target" class="form-control" @bind="draft.RepositoryBackupRoot" /></div>
+                <div class="col-lg-6"><label class="form-label" for="context-backup-source">Tool backup root</label><input id="context-backup-source" class="form-control" @bind="draft.BackupSourceRoot" /></div>
+                <div><button class="btn btn-primary btn-sm" @onclick="ApplyManual">Use for this session</button><button class="btn btn-link btn-sm" @onclick="() => editing = false">Cancel</button></div>
+            </div>
+        }
+        @if (prepare)
+        {
+            <div class="row g-3 mt-1">
+                <div class="col-lg-6">
+                    <label for="backup-folder" class="form-label">New repository backup folder (optional)</label>
+                    <input id="backup-folder" class="form-control mb-2" @bind="backupFolder" />
+                    <button class="btn btn-sm btn-primary me-2" @onclick="Backup" disabled="@(!CanBackup)">Create repository backup</button>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="Recover" disabled="@(!CanBackup)">Discover completed backups</button>
+                </div>
+                <div class="col-lg-6">
+                    @if (Context.Source?.Kind == IndexSourceKind.Live) { <label class="form-check mb-2"><input class="form-check-input" type="checkbox" @bind="offline" />All index writers are stopped</label> }
+                    <button class="btn btn-sm btn-outline-primary" @onclick="Copy" disabled="@(Context.Source == null || Context.Source.Kind == IndexSourceKind.Live && !offline)">Create working copy</button>
+                    <div class="form-text">Original sources stay read-only. File changes use a separate working copy.</div>
+                </div>
+            </div>
+        }
+        </fieldset>
+        @if (Context.Busy) { <div class="small mt-2" role="status">@progress @if (cancellation != null) { <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="Cancel">Cancel</button> }</div> }
+        @if (message != null) { <div class="alert alert-info mt-3 mb-0" role="status">@message</div> }
+        @if (error != null) { <div class="alert alert-danger mt-3 mb-0" role="alert">@error</div> }
+    </div>
+</section>
+
+@code {
+    private List<SavedConfiguration> profiles = [];
+    private List<IndexSource> sources = [];
+    private RepositorySelection draft = new();
+    private bool editing, prepare, offline;
+    private string backupFolder = "", progress = "Working…";
+    private string? message, error;
+    private long revision = -1;
+    private CancellationTokenSource? cancellation;
+    private string ProfileValue => Context.Selection.ConfigurationId ?? (Context.Selection.Name == "Default repository" ? "default" : "manual");
+    private string ManageUrl => "/settings?returnUrl=" + Uri.EscapeDataString("/" + Navigation.ToBaseRelativePath(Navigation.Uri));
+    private bool CanBackup => !string.IsNullOrWhiteSpace(Context.Settings.RepositoryUrl) && !string.IsNullOrWhiteSpace(Context.Settings.RepositoryBackupRoot) && !string.IsNullOrWhiteSpace(Context.Settings.BackupSourceRoot);
+    protected override void OnInitialized() { Context.Changed += Changed; Reload(); }
+    protected override async Task OnParametersSetAsync() { profiles = await Configurations.GetAllConfigurationsAsync(); }
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) { await Context.InitializeAsync(); Reload(); StateHasChanged(); } }
+    private void Changed() { if (revision != Context.Revision) { revision = Context.Revision; offline = false; editing = false; message = error = null; Reload(); } _ = InvokeAsync(StateHasChanged); }
+    private void Reload() { try { sources = Context.Workspace.Sources(); } catch (Exception ex) { sources = []; error = SecretRedactor.Redact(ex.Message); } }
+    private void ToggleEditor() { draft = Context.CopySelection(); editing = !editing; }
+    private async Task SelectProfile(ChangeEventArgs e)
+    {
+        try {
+            var id = e.Value?.ToString();
+            if (id == "manual") { draft = Context.CopySelection(); editing = true; return; }
+            if (id == "default") await Context.UseDefaultAsync();
+            else { var profile = profiles.Single(p => p.Id.ToString() == id); await Context.ApplyAsync(profile); await Configurations.MarkConfigurationUsedAsync(profile.Id); }
+        } catch (Exception ex) { error = SecretRedactor.Redact(ex.Message); }
+    }
+    private async Task ApplyManual() { try { await Context.ApplyManualAsync(draft); } catch (Exception ex) { error = SecretRedactor.Redact(ex.Message); } }
+    private async Task SelectSource(ChangeEventArgs e) { try { await Context.SelectSourceAsync(e.Value?.ToString() ?? ""); } catch (Exception ex) { error = SecretRedactor.Redact(ex.Message); } }
+    private async Task Prepare(Func<CancellationToken, Task<IndexSource?>> action)
+    {
+        using var stop = new CancellationTokenSource();
+        try {
+            cancellation = stop;
+            message = error = null; IndexSource? created;
+            using (Context.BeginOperation()) { created = await action(stop.Token); }
+            if (created != null) await Context.SelectSourceAsync(created.Id);
+            Reload(); message = "Index sources updated.";
+        } catch (OperationCanceledException) { message = "Stopped waiting. An accepted repository backup may still finish; discover completed backups to recover it."; }
+        catch (Exception ex) { error = SecretRedactor.Redact(ex.Message); }
+        finally { cancellation = null; }
+    }
+    private Task Backup() => Prepare(async token => await Context.Workspace.BackupAsync(backupFolder, new Progress<string>(value => { progress = value; _ = InvokeAsync(StateHasChanged); }), token));
+    private Task Recover() => Prepare(async token => { await Context.Workspace.RecoverCompletedBackupsAsync(token); return null; });
+    private Task Copy() => Prepare(async token => await Task.Run(() => Context.Workspace.Copy(Context.Selection.SourceId, offline), token));
+    private void Cancel() => cancellation?.Cancel();
+    public void Dispose() { Context.Changed -= Changed; cancellation?.Cancel(); }
+}

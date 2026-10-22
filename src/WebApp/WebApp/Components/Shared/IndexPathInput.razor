@@ -1,0 +1,13 @@
+<div class="input-group">
+    <input id="@Id" class="form-control" value="@Value" @onchange="Changed" placeholder="Server index directory" />
+    <button type="button" class="btn btn-outline-secondary" @onclick="() => showPicker = true" aria-label="Browse for index folder"><i class="bi bi-folder2-open" aria-hidden="true"></i> Browse</button>
+</div>
+<ServerFolderPicker @bind-Show="showPicker" InitialPath="@(Value ?? "")" OnSelected="Selected" />
+@code {
+    [Parameter] public string Id { get; set; } = "index-path";
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    private bool showPicker;
+    private Task Changed(ChangeEventArgs e) => ValueChanged.InvokeAsync(e.Value?.ToString() ?? "");
+    private async Task Selected(string value) { showPicker = false; await ValueChanged.InvokeAsync(value); }
+}

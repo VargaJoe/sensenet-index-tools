@@ -24,10 +24,12 @@ using WebApp.Models;
 public class LastActivityIdService
 {
     private readonly ILogger<LastActivityIdService> _logger;
+    private readonly ActiveRepositoryContext? _context;
 
-    public LastActivityIdService(ILogger<LastActivityIdService> logger)
+    public LastActivityIdService(ILogger<LastActivityIdService> logger, ActiveRepositoryContext? context = null)
     {
         _logger = logger;
+        _context = context;
     }
 
     public bool ValidatePath(string path)
@@ -138,7 +140,7 @@ public class LastActivityIdService
     public async Task SetLastActivityIdAsync(string indexPath, long id, bool backup = true, string? backupPath = null)
     {
         if (id < 0 || id > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(id));
-        RuntimeSettings.EnsureWritableCopy(indexPath);
+        EnsureWritable(indexPath);
         backupPath ??= RuntimeSettings.Load().BackupDirectory;
         if (backup)
         {
@@ -198,7 +200,7 @@ public class LastActivityIdService
         catch (InvalidOperationException) { /* A readable index without activity metadata needs initialization. */ }
         if (existing != null) throw new InvalidOperationException($"Index already has LastActivityId {existing.LastActivityId}. Use Set to modify it.");
 
-        RuntimeSettings.EnsureWritableCopy(indexPath);
+        EnsureWritable(indexPath);
         backupPath ??= RuntimeSettings.Load().BackupDirectory;
         if (backup)
         {
@@ -332,6 +334,15 @@ public class LastActivityIdService
                 throw new InvalidOperationException("LastActivityId not found in commit user data during verification.");
             }
         });
+    }
+
+    private void EnsureWritable(string indexPath)
+    {
+        if (_context == null) { RuntimeSettings.EnsureWritableCopy(indexPath); return; }
+        var source = _context.Source ?? throw new InvalidOperationException("Select a working copy before modifying LastActivityId.");
+        _context.Workspace.RequireWorkingCopy(source);
+        if (!string.Equals(Path.GetFullPath(indexPath), Path.GetFullPath(source.Path), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            throw new InvalidOperationException("The write target does not match the selected working copy.");
     }
 
     private void CreateBackup(string indexPath, string? backupPath)

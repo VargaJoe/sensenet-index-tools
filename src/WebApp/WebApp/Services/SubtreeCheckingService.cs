@@ -8,11 +8,13 @@ public class SubtreeCheckingService
 {
     private readonly ILogger<SubtreeCheckingService> _logger;
     private readonly ReportStorageService _reportStorage;
+    private readonly ActiveRepositoryContext? _context;
 
-    public SubtreeCheckingService(ILogger<SubtreeCheckingService> logger, ReportStorageService reportStorage)
+    public SubtreeCheckingService(ILogger<SubtreeCheckingService> logger, ReportStorageService reportStorage, ActiveRepositoryContext? context = null)
     {
         _logger = logger;
         _reportStorage = reportStorage;
+        _context = context;
     }
 
     public bool ValidatePaths(string indexPath, string connectionString, string repositoryPath)
@@ -60,6 +62,8 @@ public class SubtreeCheckingService
                 Success = true,
                 Message = "Subtree check completed successfully",
                 ReportContent = result.ReportContent,
+                HtmlContent = result.HtmlContent,
+                MarkdownContent = result.MarkdownContent,
                 ReportPath = result.ReportPath,
                 Options = options,
                 ItemsInDatabase = result.ItemsInDatabase,
@@ -119,6 +123,8 @@ public class SubtreeCheckingService
                 IndexSnapshot.Resolve(options.IndexPath), options.ConnectionString, options.RepositoryPath, options.Recursive, options.Depth));
             var reportContent = checker.GenerateSubtreeReportFromItems(items, options.RepositoryPath,
                 options.Recursive, options.ReportFormat, options.Format);
+            var html = options.Format == "html" ? reportContent : checker.GenerateSubtreeReportFromItems(items, options.RepositoryPath, options.Recursive, options.ReportFormat, "html");
+            var markdown = options.Format == "md" ? reportContent : checker.GenerateSubtreeReportFromItems(items, options.RepositoryPath, options.Recursive, options.ReportFormat, "md");
 
             var itemsInDatabase = items.Count(item => item.InDatabase);
             var itemsInIndex = items.Count(item => item.InIndex);
@@ -143,6 +149,7 @@ public class SubtreeCheckingService
                 ReportContent = reportContent,
                 ReportPath = reportPath,
                 ItemsInDatabase = itemsInDatabase,
+                HtmlContent = html, MarkdownContent = markdown,
                 ItemsInIndex = itemsInIndex,
                 MatchedItems = matchedItems,
                 MismatchedItems = mismatchedItems
@@ -191,7 +198,9 @@ public class SubtreeCheckingService
                 }
             };
 
-            await _reportStorage.SaveReportAsync(storedReport);
+            storedReport.ConfigurationId = options.ConfigurationId; storedReport.ConfigurationName = options.ConfigurationName;
+            if (_context != null) foreach (var item in _context.Provenance()) storedReport.Parameters[item.Key] = item.Value;
+            await _reportStorage.SaveReportAsync(storedReport, new Dictionary<string, string> { ["html"] = result.HtmlContent ?? "", ["md"] = result.MarkdownContent ?? "" });
             _logger.LogInformation("Saved subtree check report to storage: {ReportId}", storedReport.Id);
         }
         catch (Exception ex)
@@ -243,6 +252,8 @@ public class SubtreeCheckOptions
 
 public class SubtreeCheckResult
 {
+    public string? HtmlContent { get; set; }
+    public string? MarkdownContent { get; set; }
     public string IndexPath { get; set; } = string.Empty;
     public string ConnectionString { get; set; } = string.Empty;
     public string RepositoryPath { get; set; } = string.Empty;
@@ -264,6 +275,8 @@ public class SubtreeCheckResult
 
 internal class SubtreeCheckExecutionResult
 {
+    public string? HtmlContent { get; set; }
+    public string? MarkdownContent { get; set; }
     public string? ReportContent { get; set; }
     public string? ReportPath { get; set; }
     public int ItemsInDatabase { get; set; }

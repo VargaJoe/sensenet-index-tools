@@ -58,3 +58,17 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+/* Shared operator context and report containment. */
+.content { max-width: 1800px; margin: 0 auto; padding-top: 1.5rem; }
+.context-panel { border-top: 3px solid #176ab4; }
+.btn { text-decoration: none; }
+main { min-width: 0; }
+.context-panel .form-label { font-size: .875rem; font-weight: 600; }
+.source-summary { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
+.source-summary code { overflow-wrap: anywhere; }
+.report-preview { display: block; width: 100%; height: 640px; border: 0; background: white; }
+.report-source { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 640px; overflow: auto; padding: 1rem; }
+.metric { padding: 1rem; background: #f4f7fa; border-radius: .5rem; }
+.metric span, .metric strong { display: block; }
+.metric strong { font-size: 1.5rem; }
+@media (max-width: 640px) { .report-preview { height: 480px; } .content { padding: 1rem !important; } }

@@ -1,8 +1,9 @@
 @page "/operations"
-@rendermode InteractiveServer
 @using SenseNetIndexTools
-@inject IndexWorkspace Workspace
+@inject ActiveRepositoryContext Context
+@implements IDisposable
 @inject OperatorReportService Reports
+@inject ConfigurationService Configurations
 @inject IndexValidationService Validation
 @inject LastActivityIdService ActivityService
 @inject IJSRuntime JS
@@ -15,49 +16,8 @@
     @if (message != null) { <div class="alert alert-info" role="status">@message</div> }
     @if (busy) { <div class="alert alert-secondary"><span class="spinner-border spinner-border-sm me-2"></span>@progress <button class="btn btn-sm btn-outline-secondary ms-3" @onclick="Cancel">Cancel</button></div> }
 
-    <fieldset disabled="@busy">
-    <div class="card mb-3">
-        <div class="card-header"><h2 class="h5 mb-0">1. Index source</h2></div>
-        <div class="card-body">
-            <label class="form-label" for="operator-source">Selected index</label>
-            <div class="input-group mb-3">
-                <select id="operator-source" class="form-select" value="@selectedId" @onchange="SelectSource">
-                    @foreach (var item in sources) { <option value="@item.Id">@item.Name — @item.Kind</option> }
-                </select>
-                <button class="btn btn-outline-secondary" @onclick="Reload">Refresh sources</button>
-            </div>
-            @if (source != null)
-            {
-                <div class="mb-3" data-testid="source-info">
-                    <span class="badge @(source.Writable ? "bg-warning text-dark" : "bg-success")">@(source.Writable ? "Writable working copy" : "Read-only source")</span>
-                    <code class="ms-2">@source.Path</code>
-                    @if (source.Kind != IndexSourceKind.Live) { <div class="small mt-1">Prepared (UTC): @source.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss") · Captured LastActivityId: @(source.CapturedActivityId?.ToString() ?? "Unavailable — validate metadata")</div> }
-                    @if (source.Kind == IndexSourceKind.Live) { <div class="small mt-2">Live reads do not edit index files. Prepare a repository backup for stable validation and comparison results.</div> }
-                </div>
-            }
-            <div class="row g-3">
-                <div class="col-lg-6">
-                    <h3 class="h6">Running repository</h3>
-                    <p class="small">SenseNet creates a consistent backup while its site stays online. The completed backup becomes the selected source.</p>
-                    <label for="backup-folder" class="form-label">New backup folder name (optional)</label>
-                    <input id="backup-folder" class="form-control mb-2" @bind="backupFolder" placeholder="Automatically generated unique folder" />
-                    <div class="small text-muted mb-2">Repository target root: <code>@runtime.RepositoryBackupRoot</code><br />Tool mount: <code>@runtime.BackupSourceRoot</code></div>
-                    <button class="btn btn-primary" @onclick="Backup" disabled="@(string.IsNullOrWhiteSpace(runtime.BackupSourceRoot) || string.IsNullOrWhiteSpace(runtime.RepositoryBackupRoot))">Create repository backup</button>
-                    <button class="btn btn-outline-secondary ms-2" @onclick="Recover" disabled="@(string.IsNullOrWhiteSpace(runtime.BackupSourceRoot))">Discover completed backups</button>
-                </div>
-                <div class="col-lg-6">
-                    <h3 class="h6">Isolated working copy</h3>
-                    <p class="small">Keep the original backup intact. Index-file repairs are allowed only in a separate managed working copy.</p>
-                    @if (source?.Kind == IndexSourceKind.Live)
-                    {
-                        <label class="form-check mb-2"><input class="form-check-input" type="checkbox" @bind="offlineConfirmed" />All index writers are stopped. This confirmation does not stop the repository.</label>
-                    }
-                    <button class="btn btn-outline-primary" @onclick="Copy" disabled="@(source == null || source.Kind == IndexSourceKind.Live && !offlineConfirmed)">Create working copy</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
+    <fieldset disabled="@(busy || Context.Busy)">
+    <p class="small text-muted">Prepare and select the index source above, then continue below.</p>
     <div class="card mb-3">
         <div class="card-header"><h2 class="h5 mb-0">2. Read and validate</h2></div>
         <div class="card-body">
@@ -144,7 +104,10 @@
 @code {
     [SupplyParameterFromQuery(Name = "source")] public string? SourceQuery { get; set; }
     [SupplyParameterFromQuery(Name = "report")] public string? ReportQuery { get; set; }
-    private RuntimeSettings runtime = RuntimeSettings.Load();
+    private IndexWorkspace Workspace => Context.Workspace;
+    private RuntimeSettings runtime => Context.Settings;
+    private long revision;
+    private string? pendingSource;
     private List<IndexSource> sources = [];
     private IndexSource? source;
     private string selectedId = "live", backupFolder = "", scope = "/Root/Content", listingFilter = "all";
@@ -160,17 +123,37 @@
     private HashSet<int> selectedNodes = [];
     private CancellationTokenSource? cancellation;
 
+    private bool queryPending;
+    private string? appliedQuery;
     protected override void OnInitialized()
     {
         try
         {
-            Reload();
-            if (SourceQuery != null) Choose(SourceQuery);
-            if (ReportQuery != null) { comparison = Workspace.GetComparison(ReportQuery); Choose(comparison.SourceId, false); scope = comparison.Scope; recursive = comparison.Recursive; }
+            Context.Changed += ContextChanged; revision = Context.Revision;
+            selectedId = Context.Selection.SourceId; Reload();
         }
         catch (Exception ex) { error = SecretRedactor.Redact(ex.Message); }
     }
-    private void Reload() { sources = Workspace.Sources(); Choose(sources.Any(s => s.Id == selectedId) ? selectedId : sources.FirstOrDefault()?.Id ?? ""); }
+    protected override void OnParametersSet()
+    {
+        var query = SourceQuery + "|" + ReportQuery;
+        if (query != appliedQuery) { appliedQuery = query; queryPending = true; }
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender) => await ApplyQuery();
+    private async Task ApplyQuery()
+    {
+        if (!Context.Ready || !queryPending) return;
+        queryPending = false;
+        try {
+            if (SourceQuery != null) await Context.SelectSourceAsync(SourceQuery);
+            if (ReportQuery != null) {
+                var loaded = await Reports.OpenComparisonAsync(ReportQuery, Configurations);
+                comparison = loaded; Choose(loaded.SourceId, false); scope = loaded.Scope; recursive = loaded.Recursive;
+            }
+        } catch (Exception ex) { error = SecretRedactor.Redact(ex.Message); }
+        StateHasChanged();
+    }
+    private void Reload() { sources = Workspace.Sources(); Choose(Context.Selection.SourceId); }
     private void Choose(string id, bool clear = true)
     {
         selectedId = id; source = sources.SingleOrDefault(s => s.Id == id); offlineConfirmed = confirmRepair = confirmCleanup = confirmActivity = false;
@@ -178,17 +161,21 @@
         if (clear) { comparison = null; repairResults = []; }
     }
     private void SelectSource(ChangeEventArgs e) => Choose(e.Value?.ToString() ?? "");
-    private void SelectCreated(IndexSource created) { sources = Workspace.Sources(); Choose(created.Id); }
+    private void SelectCreated(IndexSource created) { pendingSource = created.Id; }
     private async Task Run(Func<CancellationToken, Task> action)
     {
         if (busy) return;
         busy = true; error = message = null; progress = "Working...";
         using var operation = new CancellationTokenSource(); cancellation = operation;
-        try { await action(operation.Token); }
+        IDisposable? selectionLock = null;
+        try { selectionLock = Context.BeginOperation(); await action(operation.Token); }
         catch (OperationCanceledException) { error = "Stopped waiting. A repository request already accepted may still finish; no original source was deleted."; }
         catch (Exception ex) { error = SecretRedactor.Redact(ex.Message); }
-        finally { busy = false; cancellation = null; }
+        finally { selectionLock?.Dispose(); busy = false; cancellation = null; }
+        if (pendingSource != null) { var id = pendingSource; pendingSource = null; await Context.SelectSourceAsync(id); Reload(); }
     }
+    private void ContextChanged() { if (revision != Context.Revision) { revision = Context.Revision; selectedId = Context.Selection.SourceId; try { Reload(); } catch (Exception ex) { error = SecretRedactor.Redact(ex.Message); } scope = Context.Selection.RepositoryPath; } _ = InvokeAsync(async () => { await ApplyQuery(); StateHasChanged(); }); }
+    public void Dispose() { Context.Changed -= ContextChanged; cancellation?.Cancel(); }
     private void Cancel() => cancellation?.Cancel();
     private Task Backup() => Run(async token => {
         var status = new Progress<string>(text => { progress = text; _ = InvokeAsync(StateHasChanged); });

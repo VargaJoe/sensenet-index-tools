@@ -1,10 +1,12 @@
 @page "/rebuild-index"
-@rendermode InteractiveServer
+@inject ActiveRepositoryContext Context
+@implements IDisposable
 @inject RebuildIndexService RebuildService
 @inject IJSRuntime JSRuntime
 @inject ILogger<RebuildIndex> Logger
 
 <PageTitle>Rebuild Index - SenseNet Index Tools</PageTitle>
+<fieldset disabled="@(Context.Busy || !Context.Ready)">
 
 <div class="container-fluid">
     <!-- Breadcrumb -->
@@ -15,6 +17,7 @@
         </ol>
     </nav>
 
+    <h1 class="h3 mb-4">Rebuild Index</h1>
     <div class="row">
         <div class="col-lg-8">
             <!-- Configuration Card -->
@@ -28,26 +31,6 @@
                 <div class="card-body">
                     <EditForm Model="rebuildOptions" OnValidSubmit="StartRebuildIndex">
                         <DataAnnotationsValidator />
-
-                        <div class="row">
-                            <!-- Repository URL -->
-                            <div class="col-md-6 mb-3">
-                                <label for="repoUrl" class="form-label">Repository URL <span class="text-danger">*</span></label>
-                                <InputText id="repoUrl" class="form-control" @bind-Value="rebuildOptions.RepoUrl"
-                                          placeholder="https://your-repo.sensenet.cloud" />
-                                <ValidationMessage For="() => rebuildOptions.RepoUrl" />
-                                <div class="form-text">SenseNet repository URL</div>
-                            </div>
-
-                            <!-- API Key -->
-                            <div class="col-md-6 mb-3">
-                                <label for="apiKey" class="form-label">API Key <span class="text-danger">*</span></label>
-                                <InputText id="apiKey" type="password" class="form-control" @bind-Value="rebuildOptions.ApiKey"
-                                          placeholder="Your API key" />
-                                <ValidationMessage For="() => rebuildOptions.ApiKey" />
-                                <div class="form-text">API key for repository authentication</div>
-                            </div>
-                        </div>
 
                         <div class="row">
                             <!-- Content Path -->
@@ -256,6 +239,7 @@
     </div>
 </div>
 
+</fieldset>
 @code {
     private RebuildIndexOptions rebuildOptions = new();
     private RebuildIndexResult? rebuildResult;
@@ -263,9 +247,10 @@
 
     protected override void OnInitialized()
     {
-        var runtime = SenseNetIndexTools.RuntimeSettings.Load();
+        Context.Changed += ContextChanged; revision = Context.Revision;
+        var runtime = Context.Settings;
         rebuildOptions.RepoUrl = runtime.RepositoryUrl ?? "";
-        rebuildOptions.ApiKey = runtime.ApiKey;
+        rebuildOptions.ApiKey = runtime.ApiKey; rebuildOptions.BearerToken = runtime.BearerToken;
         rebuildOptions.RebuildLevel = "IndexOnly"; // Default value
     }
 
@@ -278,6 +263,8 @@
 
         try
         {
+            using var operation = Context.BeginOperation();
+            rebuildOptions.RepoUrl = Context.Settings.RepositoryUrl ?? ""; rebuildOptions.ApiKey = Context.Settings.ApiKey; rebuildOptions.BearerToken = Context.Settings.BearerToken;
             Logger.LogInformation("Starting index rebuild operation");
             rebuildResult = await RebuildService.RebuildIndexAsync(rebuildOptions);
             Logger.LogInformation($"Index rebuild completed. Success: {rebuildResult.Success}, Items: {rebuildResult.ItemsProcessed}");
@@ -299,9 +286,12 @@
         }
     }
 
+    private long revision;
+    private void ContextChanged() { if (revision != Context.Revision) { revision = Context.Revision; ResetForm(); rebuildOptions.RepoUrl = Context.Settings.RepositoryUrl ?? ""; rebuildOptions.ApiKey = Context.Settings.ApiKey; rebuildOptions.BearerToken = Context.Settings.BearerToken; } _ = InvokeAsync(StateHasChanged); }
+    public void Dispose() => Context.Changed -= ContextChanged;
     private void ResetForm()
     {
-        rebuildOptions = new RebuildIndexOptions { RebuildLevel = "IndexOnly" };
+        rebuildOptions = new RebuildIndexOptions { RebuildLevel = "IndexOnly", RepoUrl = Context.Settings.RepositoryUrl ?? "", ApiKey = Context.Settings.ApiKey, BearerToken = Context.Settings.BearerToken };
         rebuildResult = null;
     }
 
