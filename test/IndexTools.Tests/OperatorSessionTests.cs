@@ -115,8 +115,10 @@ public sealed class OperatorSessionTests
         Assert.Equal(expectedId, result.ConfigurationId); Assert.Equal(expectedName, result.ConfigurationName);
     }
 
-    [Fact]
-    public async Task ReopeningComparisonRestoresItsRepositoryOnlyInCurrentBrowser()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReopeningComparisonRestoresItsRepositoryOnlyInCurrentBrowser(bool workingCopy)
     {
         using var lab = new SessionLab();
         var environment = new TestEnvironment(lab.Fixture.Root);
@@ -125,7 +127,7 @@ public sealed class OperatorSessionTests
             ConnectionString = "Server=a.invalid;Database=A", RepositoryUrl = "https://a.invalid" });
         Assert.True(created.Success);
         var context = lab.Context(new()); await context.InitializeAsync(); await context.ApplyAsync(created.Configuration!);
-        var source = context.Workspace.Copy("live", true);
+        var source = workingCopy ? context.Workspace.Copy("live", true) : context.Workspace.GetSource("live");
         var comparison = new IndexComparison { SourceId = source.Id, RepositoryBinding = source.RepositoryBinding, Scope = "/Root" };
         var folder = Path.Combine(RuntimeSettings.Load().DataDirectory!, "workspace", "comparisons");
         Directory.CreateDirectory(folder); File.WriteAllText(Path.Combine(folder, comparison.Id + ".json"), JsonSerializer.Serialize(comparison));
@@ -143,6 +145,11 @@ public sealed class OperatorSessionTests
         await context.ApplyAsync(profileB);
         await Assert.ThrowsAsync<InvalidOperationException>(() => reports.OpenComparisonAsync(comparison.Id, configurations));
         Assert.Equal("B", context.Selection.Name);
+        await context.ApplyManualAsync(new() { IndexPath = lab.Fixture.IndexPath,
+            ConnectionString = created.Configuration.ConnectionString!, RepositoryUrl = created.Configuration.RepositoryUrl! });
+        await reports.OpenComparisonAsync(comparison.Id, configurations);
+        Assert.Equal("Manual repository", context.Selection.Name);
+        Assert.Equal(source.Id, context.Selection.SourceId);
     }
 
     private sealed class SessionLab : IDisposable

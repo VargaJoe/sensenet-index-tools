@@ -13,20 +13,21 @@ public sealed class OperatorReportService
     private IndexWorkspace workspace => context?.Workspace ?? fixedWorkspace!;
     public async Task<IndexComparison> OpenComparisonAsync(string id, ConfigurationService configurations)
     {
+        var comparison = workspace.GetComparison(id);
         if (context != null)
         {
             var saved = (await reports.GetReportsAsync()).SingleOrDefault(report => report.Id == id);
             if (saved?.ConfigurationId is { } profileId && profileId != context.Selection.ConfigurationId)
             {
                 if (!Guid.TryParse(profileId, out var parsed)) throw new InvalidOperationException("The report's repository profile is invalid.");
-                var profile = await configurations.GetConfigurationAsync(parsed)
-                    ?? throw new InvalidOperationException("The report's repository profile no longer exists. Select its repository manually.");
-                await context.ApplyAsync(profile);
+                var profile = await configurations.GetConfigurationAsync(parsed);
+                if (profile != null) await context.ApplyAsync(profile);
+                else if (!workspace.Sources().Any(source => source.Id == comparison.SourceId && source.RepositoryBinding == comparison.RepositoryBinding))
+                    throw new InvalidOperationException("The report's repository profile no longer exists. Select its repository manually.");
             }
             else if (saved?.ConfigurationId == null && saved?.ConfigurationName == "Default repository")
                 await context.UseDefaultAsync();
         }
-        var comparison = workspace.GetComparison(id);
         if (context != null) await context.SelectSourceAsync(comparison.SourceId);
         return comparison;
     }
